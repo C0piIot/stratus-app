@@ -117,9 +117,29 @@ checks for exactly that and prints the one command that fixes it.
 
 **iOS cannot be containerised at all.** Kotlin/Native needs the Xcode toolchain
 to produce Apple binaries, and Xcode is macOS-only and not licensed to run
-elsewhere. No amount of Docker changes this. The iOS half of the build needs a
-Mac or a macOS CI runner, and that is a constraint on the project rather than a
-gap in the setup.
+elsewhere. No amount of Docker changes this.
+
+There is no Mac on this project and there is not going to be one, so **CI is the
+only iOS build host**: GitHub Actions standard macOS runners, which are free on
+a public repository and were confirmed by a real run to be Apple Silicon with a
+current Xcode and iOS SDK. A borrowed phone over TestFlight is the only time the
+app meets real hardware.
+
+What that costs is not money but the loop. There is no run button: every iOS
+change is a push, a CI round trip and a TestFlight upload before anybody sees
+it, and the phone is somebody else's and only occasionally available. **Design
+against that.** Anything that can live in `commonMain` and be proved by a JVM
+test must live there, and the iOS-native layer has to be as thin as it can be
+made.
+
+Note the cruelty in that, because it decides how the upload code is shaped: the
+native layer *is* the background `URLSession` transport, which is precisely the
+part a simulator cannot tell you the truth about and which needs days on a real
+device to trust. So the native side must be a dumb executor -- hand it a file, a
+destination and a callback -- and every decision worth getting wrong, which
+chunk comes next, what to retry, when to give up, when a file counts as done,
+belongs in shared code with tests around it. The rule of thumb: if debugging it
+would need a device, it should not be the thing on the device.
 
 What follows from the second wall, for whoever writes the Gradle build: declaring
 the Apple targets is fine on Linux, and only *compiling* them fails. Keep it that
