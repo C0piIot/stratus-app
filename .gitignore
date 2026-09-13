@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.fleet/
+.kotlin/
+
+# Android
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# Xcode / iOS
+xcuserdata/
+*.xcuserstate
+DerivedData/
+Pods/
+*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# macOS
+.DS_Store
