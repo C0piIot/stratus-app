@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The toolchain image is pinned to linux/amd64 because Google ships no Android
+  # SDK for aarch64. On an ARM development machine that means emulation, and the
+  # image cannot be verified there without it -- so this job is where it is
+  # actually built and run, natively, on every change to how it is built.
+  toolchain:
+    name: toolchain image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Asserts the premise rather than assuming it: on a runner this has to
+      # report a native x86_64 host, and a runner fleet that ever changes
+      # architecture should fail here rather than somewhere confusing.
+      - run: make doctor
+
+      - run: make toolchain
+
+      # End to end, from outside: the image runs as the invoking user, with the
+      # caches mounted, and Gradle starts. Most of what breaks this setup breaks
+      # it here -- a root-owned cache, a missing HOME, an unreadable SDK.
+      - run: make gradle ARGS=--version
+
+  # Not part of the normal run: there is no iOS build yet, and nothing to gain
+  # from paying wall-clock for it on every push. It exists so the question
+  # "can we build iOS for nothing?" has an answer produced by a machine.
+  #
+  # Standard runners are free on public repositories, macOS included. Larger
+  # runners are charged for even here, so this must stay on the standard label.
+  macos:
+    name: macOS runner probe
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - run: |
+          echo "arch:  $(uname -m)"
+          echo "xcode: $(xcodebuild -version | tr '\n' ' ')"
+          echo "sdks:"
+          xcodebuild -showsdks | grep -i ios || true

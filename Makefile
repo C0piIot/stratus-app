@@ -33,7 +33,11 @@ DOCKER_RUN = docker run --rm \
 	-e GRADLE_USER_HOME=/gradle \
 	-e KONAN_DATA_DIR=/konan
 
-GRADLE = $(DOCKER_RUN) $(IMAGE) gradle --no-daemon
+# The wrapper is the source of truth for the Gradle version as soon as it
+# exists; the one baked into the image is only there to create it.
+GRADLE_CMD = $(if $(wildcard gradlew),./gradlew,gradle)
+
+GRADLE = $(DOCKER_RUN) $(IMAGE) $(GRADLE_CMD) --no-daemon
 
 .PHONY: help doctor toolchain gradle shell clean
 
