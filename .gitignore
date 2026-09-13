@@ -24,3 +24,6 @@ Pods/
 
 # macOS
 .DS_Store
+
+# Toolchain caches, bind-mounted into the container
+.cache/

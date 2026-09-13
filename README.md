@@ -50,6 +50,22 @@ Worth knowing before judging the app for it:
 - **Originals are uploaded as they are**, including HEIC and Live Photos. A
   backup that transcodes is not a backup.
 
+## Building
+
+Nothing to build yet, but the toolchain is real and needs no JDK, Gradle or
+Android SDK on your machine — only Docker.
+
+```sh
+make doctor     # can this machine run it?
+make toolchain  # build the toolchain image
+make gradle ARGS="tasks"
+```
+
+Two caveats `make doctor` will tell you about. The Android SDK is published for
+x86_64 only, so on an ARM machine the toolchain image runs under emulation and
+needs binfmt registered once. And iOS cannot be built in a container by anyone:
+Kotlin/Native needs Xcode, which means a Mac or a macOS CI runner.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).

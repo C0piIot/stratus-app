@@ -1,0 +1,73 @@
+# Stratus app.
+#
+# No JDK, no Gradle and no Android SDK on the host: every toolchain command runs
+# in a container, so `docker` is the only hard prerequisite. `make doctor` says
+# whether this machine can actually run it.
+#
+# Precedence for settings: command line > .env > defaults below.
+
+-include .env
+
+IMAGE  ?= stratus-app-toolchain
+UID    ?= $(shell id -u)
+GID    ?= $(shell id -g)
+
+# Caches are bind mounts under .cache/, not named volumes: a fresh named volume
+# is created root-owned and the toolchain runs as the invoking user, which could
+# not then write to it. Same reasoning as the backend's Makefile.
+CACHE_DIR := $(CURDIR)/.cache
+
+# Run as the invoking user, or Gradle leaves build/ owned by root in the working
+# tree, unremovable without sudo.
+#
+# No -t: a TTY injects carriage returns that break $(shell ...) captures.
+#
+# HOME is redirected because the invoking uid has no passwd entry in the image,
+# so anything resolving a home directory would otherwise land in / and fail.
+DOCKER_RUN = docker run --rm \
+	-u $(UID):$(GID) \
+	-v "$(CURDIR)":/src -w /src \
+	-v "$(CACHE_DIR)/gradle":/gradle \
+	-v "$(CACHE_DIR)/konan":/konan \
+	-e HOME=/tmp \
+	-e GRADLE_USER_HOME=/gradle \
+	-e KONAN_DATA_DIR=/konan
+
+GRADLE = $(DOCKER_RUN) $(IMAGE) gradle --no-daemon
+
+.PHONY: help doctor toolchain gradle shell clean
+
+help:
+	@echo "make doctor     check this machine can run the toolchain"
+	@echo "make toolchain  build the toolchain image"
+	@echo "make gradle ARGS='tasks'"
+	@echo "make shell      a shell inside the toolchain"
+	@echo "make clean      drop caches and build output"
+
+# The Android SDK is x86_64-only, so on an ARM host the toolchain image runs
+# under emulation and needs binfmt registered before it will start at all. The
+# failure without it is an exec format error from a container that looked fine,
+# which is worth one target to pre-empt.
+doctor:
+	@docker version --format '{{.Server.Arch}}' | grep -q amd64 \
+	  && echo "host is x86_64: the toolchain runs natively" \
+	  || { echo "host is $$(uname -m): the Android SDK has no build for it, so the"; \
+	       echo "toolchain image is linux/amd64 and needs emulation."; \
+	       docker run --rm --platform linux/amd64 alpine true 2>/dev/null \
+	         && echo "emulation is registered: fine" \
+	         || echo "NOT registered. Install it with:\n  docker run --privileged --rm tonistiigi/binfmt --install amd64"; }
+
+toolchain:
+	docker build -t $(IMAGE) .
+
+$(CACHE_DIR)/gradle $(CACHE_DIR)/konan:
+	@mkdir -p $@
+
+gradle: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
+	$(GRADLE) $(ARGS)
+
+shell: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
+	$(DOCKER_RUN) -it $(IMAGE) bash
+
+clean:
+	rm -rf $(CACHE_DIR) build */build

@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+
+# The development toolchain. Nothing built from this image ships to a phone --
+# it exists so that `docker` is the only thing a machine needs installed to work
+# on this repo, the same bargain the backend's Makefile makes for Go.
+
+ARG JDK_VERSION=21
+ARG CMDLINE_TOOLS=16111833
+ARG ANDROID_PLATFORM=36
+ARG BUILD_TOOLS=36.1.0
+
+# The platform is pinned rather than inherited from the host, and it is not a
+# preference. Google publishes no Android SDK for linux/aarch64: every aarch64
+# archive in repository2-3.xml is macOS, and Google's Maven has aapt2 with
+# `linux`, `osx` and `windows` classifiers and no arm64 among them. On an ARM
+# host this image therefore runs emulated -- see `make doctor` -- and on an
+# x86_64 host it is native. Inheriting the host platform would instead produce
+# an image that builds and then fails at aapt2 with nothing explaining why.
+FROM --platform=linux/amd64 eclipse-temurin:${JDK_VERSION}-jdk-noble
+
+ARG CMDLINE_TOOLS
+ARG ANDROID_PLATFORM
+ARG BUILD_TOOLS
+
+ENV ANDROID_HOME=/opt/android-sdk
+ENV PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl unzip git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    curl -fsSL -o /tmp/tools.zip \
+      "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS}_latest.zip"; \
+    mkdir -p "$ANDROID_HOME/cmdline-tools"; \
+    unzip -q /tmp/tools.zip -d "$ANDROID_HOME/cmdline-tools"; \
+    mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"; \
+    rm /tmp/tools.zip
+
+# Licences are accepted at build time so that no interactive prompt can appear
+# in the middle of somebody's first build.
+RUN yes | sdkmanager --licenses > /dev/null \
+    && sdkmanager --install \
+         "platform-tools" \
+         "platforms;android-${ANDROID_PLATFORM}" \
+         "build-tools;${BUILD_TOOLS}" \
+    && chmod -R a+rwX "$ANDROID_HOME"
+
+# Gradle runs as the invoking user, whose uid does not exist in this image and
+# therefore has no home directory. Everything that would land in one is
+# redirected by the Makefile; this only keeps the SDK writable for the packages
+# a future build may add to it.
+WORKDIR /src

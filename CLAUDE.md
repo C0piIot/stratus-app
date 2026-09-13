@@ -96,6 +96,37 @@ That gives two requirements on how files are named and checked:
   user-mediated photo pickers both platforms push instead cannot express
   "everything, continuously".
 
+## Toolchain: Docker, and where that stops working
+
+**No JDK, no Gradle and no Android SDK on the host.** Every toolchain command
+runs in a container through the `Makefile`, so `docker` is the only hard
+prerequisite -- the same bargain the backend makes for Go, for the same reason:
+a contributor should not have to install a version of anything to be useful, and
+a version installed on one machine and not another is a class of bug nobody
+should be debugging.
+
+Two walls to know about before assuming this covers everything.
+
+**Android has no ARM Linux toolchain.** Google publishes no Android SDK for
+`linux/aarch64`: every aarch64 archive in their `repository2-3.xml` is macOS,
+and their Maven serves aapt2 with `linux`, `osx` and `windows` classifiers and
+nothing for arm64. The toolchain image is therefore pinned to `linux/amd64`, and
+on an ARM host it runs emulated -- which needs binfmt registered first, or the
+container dies with an exec format error that explains nothing. `make doctor`
+checks for exactly that and prints the one command that fixes it.
+
+**iOS cannot be containerised at all.** Kotlin/Native needs the Xcode toolchain
+to produce Apple binaries, and Xcode is macOS-only and not licensed to run
+elsewhere. No amount of Docker changes this. The iOS half of the build needs a
+Mac or a macOS CI runner, and that is a constraint on the project rather than a
+gap in the setup.
+
+What follows from the second wall, for whoever writes the Gradle build: declaring
+the Apple targets is fine on Linux, and only *compiling* them fails. Keep it that
+way. `configure` must succeed everywhere so that shared code, JVM tests and
+linting work on any machine, and let the iOS link step be the only thing that
+demands a Mac.
+
 ## Still open
 
 Decided later, deliberately not guessed at here: the UI toolkit and how much of
