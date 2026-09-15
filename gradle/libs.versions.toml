@@ -1,6 +1,8 @@
 [versions]
 agp = "9.4.0"
 kotlin = "2.4.20"
+# Not 1.12: it requires compiling against API 37, and Google has published no
+# android-37 platform yet -- only build-tools. Raise this when they do.
 compose = "1.11.1"
 ktor = "3.5.2"
 coroutines = "1.11.0"
