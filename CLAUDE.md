@@ -155,6 +155,37 @@ carries the queue, the failures and the reasons. Its absence is the most common
 complaint aimed at every self-hosted photo backup that already exists, and it is
 the surface that decides whether this one gets trusted.
 
+## How this is tested, and what that budget buys
+
+CI runs on **free GitHub Actions standard runners and nothing else**. Larger
+runners are charged for even on a public repository, so a test that needs one is
+a test we do not have. That is a budget, and like any budget it decides the
+design rather than merely constraining it.
+
+What it buys, in descending order of how much of the app it covers:
+
+- **JVM unit tests over shared code, against a mock HTTP engine.** No network, no
+  emulator, no container, milliseconds per test. This is where the WebDAV verbs,
+  the capability negotiation, the upload queue and the dedup rules get proved,
+  and it is the direct payoff of the rule that every decision worth getting wrong
+  lives in `commonMain`. If this layer is thin, the budget has been wasted.
+- **A conformance suite against a real `stratus-backend` container**, started as
+  a service on an ubuntu runner. Docker costs nothing there, and it is the only
+  way to know the client works against the server rather than against our
+  assumptions about it. The backend already asserts its own container from the
+  outside; this is the same habit from the other end. Server limitations get
+  pinned here too -- a test that a non-empty folder rename is refused is what
+  will tell us the day it stops being.
+- **Android instrumented tests on an emulator**, on the ubuntu runner, only where
+  the platform API is the thing under test: media enumeration, permissions, the
+  foreground service surviving what Android does to it.
+- **iOS: compile the framework and run simulator tests** on the macOS runner.
+
+What it does not buy, and no amount of cleverness will: the behaviour of a
+background `URLSession` on a real device over days. That is unverifiable in CI at
+any price, which is the reason the native layer is a dumb executor. Everything it
+decides is decided somewhere a test can reach.
+
 ## Toolchain: Docker, and where that stops working
 
 **No JDK, no Gradle and no Android SDK on the host.** Every toolchain command
