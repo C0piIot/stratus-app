@@ -140,15 +140,20 @@ no notion of a path. The menu entry is the same on both and what it opens cannot
 be, so the shared model has to be a list of **sources** the platform resolves,
 not a list of paths.
 
-**The surface this list is missing is backup status**, and it is recommended
-rather than specified -- the call is Edu's. Nothing in the three screens above
-answers "is my backup working?", and on iOS that question has no other answer:
-the system decides when uploads run, so nothing happening is the normal state and
-is indistinguishable from broken. What it needs to show is what is pending, what
-failed and why, when it last ran, and what it is waiting for -- no wifi, not
-charging, permission withdrawn. This is the screen that decides whether the app
-gets trusted, and its absence is the most common complaint aimed at every
-self-hosted photo backup that already exists.
+**A fourth surface: backup status.** Nothing in the three above answers "is my
+backup working?", and on iOS that question has no other answer -- the system
+decides when uploads run, so nothing happening is the normal state and is
+indistinguishable from broken. It shows what is pending, what failed and why,
+when it last ran, and what it is waiting for: no wifi, not charging, permission
+withdrawn.
+
+It is **a strip at the top of the browser that opens a screen**, not a screen
+alone. The question is asked far more often than it is investigated, and an
+answer that costs a navigation to reach is one nobody checks until they already
+distrust the app. The strip carries the one-line state; the screen behind it
+carries the queue, the failures and the reasons. Its absence is the most common
+complaint aimed at every self-hosted photo backup that already exists, and it is
+the surface that decides whether this one gets trusted.
 
 ## Toolchain: Docker, and where that stops working
 
