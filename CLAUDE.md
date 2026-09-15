@@ -96,6 +96,60 @@ That gives two requirements on how files are named and checked:
   user-mediated photo pickers both platforms push instead cannot express
   "everything, continuously".
 
+## The interface
+
+Three surfaces, and no more than three:
+
+1. **Sign in**, which also takes the server URL. There is no Stratus to default
+   to; every install is somebody's own.
+2. **The file browser**, which is the main screen: walk the tree, open or
+   download a file, rename it, delete it.
+3. **A menu**, holding sign out and the choice of which folders are watched for
+   backup.
+
+What that implies, in the order it will be discovered:
+
+**The URL is a field users get wrong.** Take a base address and find the WebDAV
+path from it rather than demanding somebody know that Stratus serves `/dav/` --
+they are typing what their browser shows them. Plain `http` on a local network
+is the normal case for a self-hosted server and must not be blocked or buzzed
+at. Credentials are proved with a real request before the screen is dismissed, so
+that a typo fails at the keyboard rather than silently four hours later when the
+first upload runs, and they are kept in the Keychain or in Keystore-backed
+storage, never in ordinary preferences.
+
+**The browser is WebDAV verbs, and inherits their limits.** Browse is `PROPFIND`,
+download is `GET`, rename is `MOVE`, delete is `DELETE` -- all standard, all
+working against any server, no exception needed to the rule above. But the limits
+come along: `internal/files` in the backend says plainly that Move "renames a
+file or an empty directory", so **renaming a folder with anything in it fails**,
+and it will keep failing until moving a directory stops meaning rewriting every
+path beneath it. The app should say that, in those words. A generic failure here
+reads as a broken app rather than a server that cannot do it yet. Deleting a full
+folder does work, and there is no trash anywhere in Stratus, so deletion asks
+first -- the same bargain the web UI already makes.
+
+**Open and download are not the same button.** Open hands the file to whatever
+the system uses to view it; download keeps a copy. On Android that copy has an
+obvious home, on iOS it means the share sheet or the Files app, because there is
+no general filesystem to put it in.
+
+**"Which folders" does not survive the crossing to iOS.** Android has folders and
+`DCIM` is one of them. iOS has a photo library with albums, no directories, and
+no notion of a path. The menu entry is the same on both and what it opens cannot
+be, so the shared model has to be a list of **sources** the platform resolves,
+not a list of paths.
+
+**The surface this list is missing is backup status**, and it is recommended
+rather than specified -- the call is Edu's. Nothing in the three screens above
+answers "is my backup working?", and on iOS that question has no other answer:
+the system decides when uploads run, so nothing happening is the normal state and
+is indistinguishable from broken. What it needs to show is what is pending, what
+failed and why, when it last ran, and what it is waiting for -- no wifi, not
+charging, permission withdrawn. This is the screen that decides whether the app
+gets trusted, and its absence is the most common complaint aimed at every
+self-hosted photo backup that already exists.
+
 ## Toolchain: Docker, and where that stops working
 
 **No JDK, no Gradle and no Android SDK on the host.** Every toolchain command
