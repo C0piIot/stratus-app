@@ -1,0 +1,37 @@
+# Generated with XcodeGen rather than committed as a .pbxproj, and the reason is
+# that nobody on this project has a Mac. A hand-maintained project file is worth
+# its UUID soup only when somebody opens Xcode and edits it; here CI is the only
+# consumer, so the source of truth may as well be readable.
+name: Stratus
+options:
+  bundleIdPrefix: dev.stratus
+  deploymentTarget:
+    iOS: "15.0"
+
+targets:
+  Stratus:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Stratus
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    settings:
+      base:
+        # The framework Gradle links, not one Xcode builds. Producing it is
+        # :ui:linkDebugFrameworkIosSimulatorArm64, which CI runs first.
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework
+        # There is no Apple Developer Program yet (see #5), so nothing here can
+        # be signed. A simulator build does not need it.
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+    dependencies:
+      # Static, so it is linked and not embedded: there is no dynamic library to
+      # carry into the bundle.
+      - framework: ../ui/build/bin/iosSimulatorArm64/debugFramework/StratusUI.framework
+        embed: false
