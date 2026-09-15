@@ -1,6 +1,6 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.androidKotlinMultiplatformLibrary)
 }
 
 kotlin {
@@ -10,7 +10,11 @@ kotlin {
     // the protocol layer properly. See CLAUDE.md.
     jvm()
 
-    androidTarget()
+    androidLibrary {
+        namespace = "dev.stratus.core"
+        compileSdk = 36
+        minSdk = 26
+    }
 
     iosArm64()
     iosSimulatorArm64()
@@ -25,19 +29,5 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
         }
-        androidMain.dependencies {
-            implementation(libs.ktor.client.okhttp)
-        }
-        iosMain.dependencies {
-            implementation(libs.ktor.client.darwin)
-        }
-    }
-}
-
-android {
-    namespace = "dev.stratus.core"
-    compileSdk = 36
-    defaultConfig {
-        minSdk = 26
     }
 }

@@ -1,4 +1,4 @@
-package dev.stratus.app
+package dev.stratus.ui
 
 import androidx.compose.ui.window.ComposeUIViewController
 
