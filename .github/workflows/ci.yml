@@ -37,6 +37,11 @@ jobs:
       # it here -- a root-owned cache, a missing HOME, an unreadable SDK.
       - run: make gradle ARGS=--version
 
+      # The project itself. Apple targets are declared but never compiled here:
+      # the point of this step is that declaring them does not break a build on
+      # Linux, which is where the work happens day to day.
+      - run: make gradle ARGS="build --stacktrace"
+
   # Not part of the normal run: there is no iOS build yet, and nothing to gain
   # from paying wall-clock for it on every push. It exists so the question
   # "can we build iOS for nothing?" has an answer produced by a machine.

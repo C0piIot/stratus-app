@@ -43,8 +43,8 @@ RUN set -eu; \
 
 # Licences are accepted at build time so that no interactive prompt can appear
 # in the middle of somebody's first build.
-RUN yes | sdkmanager --licenses > /dev/null \
-    && sdkmanager --install \
+RUN yes | sdkmanager --no-metrics --licenses > /dev/null \
+    && sdkmanager --no-metrics --install \
          "platform-tools" \
          "platforms;android-${ANDROID_PLATFORM}" \
          "build-tools;${BUILD_TOOLS}" \
