@@ -9,10 +9,10 @@ same rule: it talks **standard WebDAV**, so it works against any WebDAV server �
 Stratus, Nextcloud, a box running rclone serve — and it never calls anything
 private to Stratus.
 
-> **Nothing is written yet.** This repository is the decisions and the licence.
-> There is no build to run, no app to install, and the Gradle project is not
-> scaffolded. The sections below describe what it is meant to be; when something
-> starts working, this file says so and this warning gets smaller.
+> **Early.** The project builds and its tests run, but the app does nothing yet:
+> Android launches to an empty screen, and there is no iOS project at all. Nothing
+> is backed up and nothing is browsed. The sections below describe what it is
+> meant to be; this warning shrinks as that stops being aspirational.
 
 ## Why it exists
 
@@ -52,14 +52,18 @@ Worth knowing before judging the app for it:
 
 ## Building
 
-Nothing to build yet, but the toolchain is real and needs no JDK, Gradle or
-Android SDK on your machine — only Docker.
+No JDK, Gradle or Android SDK on your machine — only Docker.
 
 ```sh
 make doctor     # can this machine run it?
 make toolchain  # build the toolchain image
-make gradle ARGS="tasks"
+make gradle ARGS=build
 ```
+
+Three modules: `core` holds the protocol layer and its tests, `ui` holds the
+Compose Multiplatform interface and produces the framework Xcode will embed, and
+`androidApp` is the Android application. The shared tests run on `core`'s JVM
+target, which ships nowhere and exists only so they are fast.
 
 Two caveats `make doctor` will tell you about. The Android SDK is published for
 x86_64 only, so on an ARM machine the toolchain image runs under emulation and

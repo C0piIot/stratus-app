@@ -239,7 +239,15 @@ demands a Mac.
 
 ## Still open
 
-Decided later, deliberately not guessed at here: the UI toolkit and how much of
-the interface is shared, whether the app browses and downloads or only uploads,
-how credentials are stored on each platform, and whether Nextcloud's chunked
-upload convention is worth supporting alongside tus for servers that have it.
+Decided later, deliberately not guessed at here: how credentials are stored on
+each platform, and whether Nextcloud's chunked upload convention is worth
+supporting alongside tus for servers that have it.
+
+The UI toolkit is **Compose Multiplatform**, and the reason is the missing Mac
+rather than any judgement about SwiftUI. Without one you cannot build or preview
+a SwiftUI screen at all, so every visual change would be a CI round trip and a
+TestFlight upload; with Compose the interface is developed against Android at
+full speed and the same code renders on iOS. The price is that iOS will not feel
+entirely native -- scrolling, text fields, system pickers -- and that price is
+worth paying only because of the constraint, so if a Mac ever appears this is
+worth revisiting.
