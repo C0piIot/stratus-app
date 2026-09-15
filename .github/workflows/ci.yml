@@ -14,48 +14,84 @@ permissions:
   contents: read
 
 jobs:
-  # The toolchain image is pinned to linux/amd64 because Google ships no Android
-  # SDK for aarch64. On an ARM development machine that means emulation, and the
-  # image cannot be verified there without it -- so this job is where it is
-  # actually built and run, natively, on every change to how it is built.
-  toolchain:
-    name: toolchain image
+  # The loop everybody lives in, and deliberately the first thing to report.
+  # Needs no Android SDK and therefore no toolchain image, so a broken test is
+  # known in a minute rather than after an image build.
+  test:
+    name: shared tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: .cache/gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - run: make test
+
+  # The Android half, and the only job that needs the emulated-on-ARM toolchain
+  # image. Built here natively on every change to how it is built.
+  android:
+    name: android
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # Asserts the premise rather than assuming it: on a runner this has to
-      # report a native x86_64 host, and a runner fleet that ever changes
-      # architecture should fail here rather than somewhere confusing.
+      # Gives `docker build` a buildx builder with the Actions cache backend
+      # behind it, which is what makes BUILD_CACHE below mean anything.
+      - uses: docker/setup-buildx-action@v4.4.0
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: .cache/gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+          restore-keys: gradle-${{ runner.os }}-
+
       - run: make doctor
 
-      - run: make toolchain
+      - name: Build the toolchain image
+        run: make toolchain BUILD_CACHE="--cache-from type=gha --cache-to type=gha,mode=max --load"
 
-      # End to end, from outside: the image runs as the invoking user, with the
-      # caches mounted, and Gradle starts. Most of what breaks this setup breaks
-      # it here -- a root-owned cache, a missing HOME, an unreadable SDK.
-      - run: make gradle ARGS=--version
+      - run: make gradle ARGS="assemble --stacktrace"
 
-      # The project itself. Apple targets are declared but never compiled here:
-      # the point of this step is that declaring them does not break a build on
-      # Linux, which is where the work happens day to day.
-      - run: make gradle ARGS="build --stacktrace"
-
-  # Not part of the normal run: there is no iOS build yet, and nothing to gain
-  # from paying wall-clock for it on every push. It exists so the question
-  # "can we build iOS for nothing?" has an answer produced by a machine.
+  # iOS, and the reason this job exists before there is any iOS code: nothing
+  # else ever links an Apple binary. A dependency published without an iOS
+  # artifact configures and compiles happily on Linux and only fails here, so
+  # without this the discovery would arrive months late.
   #
-  # Standard runners are free on public repositories, macOS included. Larger
-  # runners are charged for even here, so this must stay on the standard label.
-  macos:
-    name: macOS runner probe
-    if: github.event_name == 'workflow_dispatch'
+  # No Docker: the runner has none, and could not run the Apple toolchain if it
+  # did. This is the one place the everything-through-a-container rule does not
+  # hold, because nothing can make it hold.
+  #
+  # macos-latest is a standard runner and free on a public repository. A larger
+  # label is charged for even here, so this must never grow one.
+  ios:
+    name: ios
     runs-on: macos-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
-      - run: |
-          echo "arch:  $(uname -m)"
-          echo "xcode: $(xcodebuild -version | tr '\n' ' ')"
-          echo "sdks:"
-          xcodebuild -showsdks | grep -i ios || true
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: gradle-macos-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+          restore-keys: gradle-macos-
+
+      - name: Run the shared tests on a simulator
+        run: ./gradlew --no-daemon :core:iosSimulatorArm64Test
+
+      - name: Link the framework Xcode will embed
+        run: ./gradlew --no-daemon :ui:linkDebugFrameworkIosSimulatorArm64

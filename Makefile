@@ -69,8 +69,13 @@ doctor:
 	         && echo "emulation is registered: fine" \
 	         || echo "NOT registered. Install it with:\n  docker run --privileged --rm tonistiigi/binfmt --install amd64"; }
 
+# BUILD_CACHE is empty locally and set by CI to a buildx cache backend. Keeping
+# it a variable rather than a second command is what stops CI and a laptop from
+# building the image two different ways.
+BUILD_CACHE ?=
+
 toolchain:
-	docker build -t $(IMAGE) .
+	docker build $(BUILD_CACHE) -t $(IMAGE) .
 
 $(CACHE_DIR)/gradle $(CACHE_DIR)/konan:
 	@mkdir -p $@
