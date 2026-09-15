@@ -9,6 +9,13 @@
 -include .env
 
 IMAGE  ?= stratus-app-toolchain
+
+# The fast loop runs without the Android SDK, and therefore without emulation.
+# Nothing in :core's JVM tests ever executes an Android binary, and AGP is happy
+# to configure the module without an SDK as long as no Android task runs -- so
+# these go native on any architecture. Measured on the ARM development box: 26
+# seconds here against five minutes through the emulated toolchain image.
+TEST_IMAGE ?= eclipse-temurin:21-jdk-noble
 UID    ?= $(shell id -u)
 GID    ?= $(shell id -g)
 
@@ -39,11 +46,12 @@ GRADLE_CMD = $(if $(wildcard gradlew),./gradlew,gradle)
 
 GRADLE = $(DOCKER_RUN) $(IMAGE) $(GRADLE_CMD) --no-daemon
 
-.PHONY: help doctor toolchain gradle shell clean
+.PHONY: help doctor toolchain gradle test shell clean
 
 help:
 	@echo "make doctor     check this machine can run the toolchain"
 	@echo "make toolchain  build the toolchain image"
+	@echo "make test       shared tests, native and fast, no Android SDK"
 	@echo "make gradle ARGS='tasks'"
 	@echo "make shell      a shell inside the toolchain"
 	@echo "make clean      drop caches and build output"
@@ -69,6 +77,9 @@ $(CACHE_DIR)/gradle $(CACHE_DIR)/konan:
 
 gradle: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(GRADLE) $(ARGS)
+
+test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
+	$(DOCKER_RUN) $(TEST_IMAGE) $(GRADLE_CMD) --no-daemon $(or $(ARGS),:core:jvmTest)
 
 shell: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(DOCKER_RUN) -it $(IMAGE) bash

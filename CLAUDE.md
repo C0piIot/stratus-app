@@ -205,6 +205,14 @@ on an ARM host it runs emulated -- which needs binfmt registered first, or the
 container dies with an exec format error that explains nothing. `make doctor`
 checks for exactly that and prints the one command that fixes it.
 
+None of that touches the loop you actually work in. `make test` runs the shared
+JVM tests in a plain JDK image with **no Android SDK**, because nothing in them
+ever executes an Android binary and AGP will configure the module without one so
+long as no Android task runs. No SDK means no x86_64 dependency, which means no
+emulation: about 25 seconds on the ARM box against five minutes through the full
+toolchain. Only producing an actual Android artifact needs the emulated image,
+and that is rare compared to running tests.
+
 **iOS cannot be containerised at all.** Kotlin/Native needs the Xcode toolchain
 to produce Apple binaries, and Xcode is macOS-only and not licensed to run
 elsewhere. No amount of Docker changes this.

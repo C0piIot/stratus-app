@@ -58,7 +58,13 @@ No JDK, Gradle or Android SDK on your machine — only Docker.
 make doctor     # can this machine run it?
 make toolchain  # build the toolchain image
 make gradle ARGS=build
+make test       # shared tests, native and fast
 ```
+
+`make test` is the loop you live in. It runs `core`'s JVM tests in a plain JDK
+image with no Android SDK, which means no emulation on an ARM machine: about 25
+seconds against five minutes through the full toolchain. Reach for
+`make gradle` when you need an actual Android artifact.
 
 Three modules: `core` holds the protocol layer and its tests, `ui` holds the
 Compose Multiplatform interface and produces the framework Xcode will embed, and
