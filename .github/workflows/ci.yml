@@ -93,5 +93,20 @@ jobs:
       - name: Run the shared tests on a simulator
         run: ./gradlew --no-daemon :core:iosSimulatorArm64Test
 
-      - name: Link the framework Xcode will embed
+      - name: Link the framework Xcode embeds
         run: ./gradlew --no-daemon :ui:linkDebugFrameworkIosSimulatorArm64
+
+      - name: Generate the Xcode project
+        run: brew install xcodegen && xcodegen generate --spec iosApp/project.yml --project iosApp
+
+      # Proves the framework is consumable from Swift, which linking it does
+      # not: search paths, a static framework's symbols and the Kotlin runtime
+      # all fail here rather than at link time.
+      - name: Build the app for a simulator
+        run: |
+          xcodebuild build \
+            -project iosApp/Stratus.xcodeproj \
+            -scheme Stratus \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO | tail -40
