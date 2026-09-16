@@ -1,48 +1,52 @@
 package dev.stratus.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import dev.stratus.core.signin.SignInController
+import androidx.compose.runtime.setValue
+import dev.stratus.core.AppContainer
+import dev.stratus.core.files.BrowserController
 import dev.stratus.core.signin.SignInState
+import dev.stratus.ui.files.BrowserScreen
 import dev.stratus.ui.signin.SignInScreen
 import kotlinx.coroutines.launch
 
 @Composable
-fun App(controller: SignInController) {
-    val state by controller.state.collectAsState()
+fun App(container: AppContainer, back: BackRequests = BackRequests()) {
     val scope = rememberCoroutineScope()
+    val signIn = remember { container.signIn(scope) }
+    val state by signIn.state.collectAsState()
 
-    LaunchedEffect(Unit) { controller.restore() }
+    LaunchedEffect(Unit) { signIn.restore() }
 
     MaterialTheme {
         when (val current = state) {
-            is SignInState.Done -> Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text("Signed in to ${current.session.baseUrl}")
-                Text("as ${current.session.username}")
-                // Temporary. The menu in #22 is where this belongs; until then
-                // there is no way to sign out and try a second server.
-                Button(onClick = { scope.launch { controller.signOut() } }) { Text("Sign out") }
+            is SignInState.Done -> {
+                var browser by remember { mutableStateOf<BrowserController?>(null) }
+                LaunchedEffect(current.session.baseUrl) {
+                    browser = container.browser(scope)?.also { it.start() }
+                }
+
+                val open = browser
+                if (open != null) {
+                    DisposableEffect(open) {
+                        back.onBack = { open.goUp() }
+                        onDispose { back.onBack = null }
+                    }
+                    BrowserScreen(open, onSignOut = { scope.launch { signIn.signOut() } })
+                }
             }
 
             else -> SignInScreen(
                 state = current,
-                onSubmit = controller::submit,
-                onAnswer = controller::answer,
+                onSubmit = signIn::submit,
+                onAnswer = signIn::answer,
             )
         }
     }

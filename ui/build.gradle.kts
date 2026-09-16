@@ -9,7 +9,7 @@ kotlin {
     androidLibrary {
         namespace = "dev.stratus.ui"
         compileSdk = 36
-        minSdk = 26
+        minSdk = 29
     }
 
     // The framework Xcode embeds. Static, so there is one artifact to carry and

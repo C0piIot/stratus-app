@@ -13,7 +13,7 @@ kotlin {
     androidLibrary {
         namespace = "dev.stratus.core"
         compileSdk = 36
-        minSdk = 26
+        minSdk = 29
     }
 
     iosArm64()
@@ -33,6 +33,8 @@ kotlin {
         // never names an engine -- it is handed one.
         androidMain.dependencies {
             implementation(libs.ktor.client.okhttp)
+            // FileProvider: a file:// URI has been refused since Android 7.
+            implementation(libs.androidx.core)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -54,17 +56,12 @@ kotlin {
 // of the ordinary run: `make test` has to stay offline and finish in seconds.
 // Selecting with a property rather than registering a second Test task keeps the
 // two using one configuration, which is what stops them drifting apart.
-private val conformancePackages = listOf(
-    "dev.stratus.core.dav.conformance.*",
-    "dev.stratus.core.signin.conformance.*",
-)
+private val conformancePackage = "*.conformance.*"
 
 tasks.named<Test>("jvmTest") {
     val conformance = providers.gradleProperty("conformance").isPresent
     filter {
-        conformancePackages.forEach {
-            if (conformance) includeTestsMatching(it) else excludeTestsMatching(it)
-        }
+        if (conformance) includeTestsMatching(conformancePackage) else excludeTestsMatching(conformancePackage)
         isFailOnNoMatchingTests = conformance
     }
     if (conformance) {
