@@ -73,3 +73,14 @@ tasks.named<Test>("jvmTest") {
         outputs.upToDateWhen { false }
     }
 }
+
+// Kotlin/Native reports a failed test as a class name and nothing else, which is
+// useless for anything thrown with a message worth reading -- an OSStatus from
+// the Keychain, say. Applies to every test task, JVM included.
+tasks.withType<AbstractTestTask>().configureEach {
+    testLogging {
+        showExceptions = true
+        showStackTraces = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
