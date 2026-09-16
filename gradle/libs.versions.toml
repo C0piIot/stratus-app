@@ -9,7 +9,9 @@ coroutines = "1.11.0"
 xmlutil = "1.0.2"
 activityCompose = "1.13.0"
 lifecycleRuntime = "2.10.0"
-androidxCore = "1.19.0"
+# Not 1.19: it wants compileSdk 37, which Google has published build-tools for
+# and no platform. Same wall as Compose above; raise both when it appears.
+androidxCore = "1.18.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
