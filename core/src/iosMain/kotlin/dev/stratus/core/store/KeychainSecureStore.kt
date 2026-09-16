@@ -59,6 +59,8 @@ import platform.Security.kSecValueData
  * unreadable at exactly the moment the backup runs, and the symptom -- "it never
  * uploads at night" -- gives no hint of the cause.
  */
+class KeychainFailure(val status: Int) : Exception("the keychain refused the item: OSStatus $status")
+
 @OptIn(ExperimentalForeignApi::class)
 class KeychainSecureStore(private val service: String = "dev.stratus.app") : SecureStore {
 
@@ -95,7 +97,8 @@ class KeychainSecureStore(private val service: String = "dev.stratus.app") : Sec
         CFDictionarySetValue(item, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlock)
         CFDictionarySetValue(item, kSecValueData, data)
 
-        if (SecItemAdd(item, null) == errSecDuplicateItem) {
+        val added = SecItemAdd(item, null)
+        val status = if (added == errSecDuplicateItem) {
             // Adding over an item that exists fails rather than replacing it,
             // which is the first thing this gets wrong if nobody says so.
             val changes = CFDictionaryCreateMutable(
@@ -104,7 +107,13 @@ class KeychainSecureStore(private val service: String = "dev.stratus.app") : Sec
             defer { CFRelease(changes) }
             CFDictionarySetValue(changes, kSecValueData, data)
             SecItemUpdate(identifying(key), changes)
+        } else {
+            added
         }
+
+        // Swallowing this would mean signing in, storing nothing, and being
+        // signed out again on the next launch with no explanation anywhere.
+        if (status != errSecSuccess) throw KeychainFailure(status)
         Unit
     }
 
