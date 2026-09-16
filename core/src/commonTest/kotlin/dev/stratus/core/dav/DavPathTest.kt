@@ -1,4 +1,4 @@
-package dev.stratus.core
+package dev.stratus.core.dav
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

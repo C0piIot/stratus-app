@@ -23,6 +23,10 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
+            // An XML parser is not something to hand-roll: namespaces declared in
+            // unhelpful places, numeric entity references and CDATA are exactly
+            // the cases a home-made one gets wrong, and PROPFIND uses all three.
+            implementation(libs.xmlutil.core)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
