@@ -187,7 +187,17 @@ What it buys, in descending order of how much of the app it covers:
 - **Android instrumented tests on an emulator**, on the ubuntu runner, only where
   the platform API is the thing under test: media enumeration, permissions, the
   foreground service surviving what Android does to it.
-- **iOS: compile the framework and run simulator tests** on the macOS runner.
+- **iOS: compile the framework and run the shared tests on a simulator**, on the
+  macOS runner. Everything in `commonTest` runs there as well as on the JVM, for
+  nothing, which is worth remembering when deciding where a piece of logic lives.
+
+  What that does **not** reach is the Keychain. A Kotlin/Native test binary has no
+  app bundle and no entitlements, so `SecItemAdd` answers `errSecNotAvailable`
+  (-25291) and every keychain test fails for a reason that has nothing to do with
+  the code. Running them would need a host application the test runner does not
+  provide. So `KeychainSecureStore` is unverified until the app meets a real
+  device, which is the reason it is kept to the smallest possible piece of
+  platform code behind an interface everything else is faked through.
 
 What it does not buy, and no amount of cleverness will: the behaviour of a
 background `URLSession` on a real device over days. That is unverifiable in CI at
