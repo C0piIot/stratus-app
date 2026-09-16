@@ -187,21 +187,23 @@ class DavConformanceTest {
     }
 
     /**
-     * A `Depth: 1` PROPFIND omits the collection itself (stratus-backend#126),
-     * where RFC 4918 §9.1 says it covers "the resource and its internal
-     * members". `DavClient.list` filters the entry out when a server does send
-     * it, so the app works either way.
+     * A `Depth: 1` PROPFIND covers "the resource and its internal members", per
+     * RFC 4918 §9.1.
      *
-     * **When this test fails, the server has been fixed** and the filtering in
-     * `list` becomes the only thing still needed. Delete the test then.
+     * This began as the opposite assertion: the server omitted the collection
+     * itself (stratus-backend#126, found while writing the client) and the test
+     * pinned that so we would notice it changing. It changed, so the pin becomes
+     * a guarantee instead of being deleted: the entry is what lets one request
+     * answer both "what is in this collection" and "what is this collection",
+     * and a second round trip is the cost of losing it again.
      */
     @Test
-    fun propfindDepthOneStillOmitsTheCollectionItself() = runTest {
+    fun propfindDepthOneIncludesTheCollectionItself() = runTest {
         givenRoot()
         dav.put("$root/one.txt", "x".encodeToByteArray())
 
-        val raw = dav.propfind(root, Depth.One)
-        assertEquals(listOf("$root/one.txt"), raw.map { it.path })
+        val raw = dav.propfind(root, Depth.One).map { it.path }.sorted()
+        assertEquals(listOf(root, "$root/one.txt"), raw)
     }
 
     private fun basic(user: String, password: String): String =

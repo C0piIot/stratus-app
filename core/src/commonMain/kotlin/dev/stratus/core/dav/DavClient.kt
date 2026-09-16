@@ -39,10 +39,11 @@ class DavClient(
     /**
      * The direct members of a collection.
      *
-     * The entry for the collection itself is dropped when it is there. RFC 4918
-     * says a `Depth: 1` covers "the resource and its internal members", and most
-     * servers include it -- Stratus does not (stratus-backend#126). Filtering
-     * rather than assuming either shape is what makes this work against both.
+     * The entry for the collection itself is dropped. RFC 4918 says a `Depth: 1`
+     * covers "the resource and its internal members", so a compliant server
+     * sends it and Stratus now does too (stratus-backend#126). Filtering rather
+     * than assuming it is there still earns its keep: a server that omits it is
+     * out there, and this works against both without asking which it is.
      */
     suspend fun list(path: String): List<DavResource> {
         val self = normalise(path)

@@ -52,8 +52,8 @@ class DavClientTest {
 
     @Test
     fun listsTheSameWhenTheServerOmitsTheCollection() = runTest {
-        // Which is what Stratus does today -- stratus-backend#126. The client
-        // must not care either way.
+        // Stratus used to do this -- stratus-backend#126, since fixed -- and
+        // other servers still might. The client must not care either way.
         val client = clientAnswering(
             HttpStatusCode.MultiStatus,
             multistatus("/dav/Photos/one.txt", "/dav/Photos/two.txt"),
