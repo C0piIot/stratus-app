@@ -8,10 +8,6 @@ agreements it is held to are one level up, in the workspace repo's `CLAUDE.md`.
 Claude Code reads both. What is here is the app's own half, in the repo whose
 code it describes.
 
-**Nothing is written yet.** The Gradle project is not scaffolded. What follows is
-the set of decisions already made, so that whoever writes the first commit does
-not have to relitigate them — not a description of code that exists.
-
 ## Non-negotiable, and the reasons
 
 1. **No private Stratus API, ever.** The app speaks standard WebDAV and nothing
@@ -111,12 +107,24 @@ What that implies, in the order it will be discovered:
 
 **The URL is a field users get wrong.** Take a base address and find the WebDAV
 path from it rather than demanding somebody know that Stratus serves `/dav/` --
-they are typing what their browser shows them. Plain `http` on a local network
-is the normal case for a self-hosted server and must not be blocked or buzzed
-at. Credentials are proved with a real request before the screen is dismissed, so
-that a typo fails at the keyboard rather than silently four hours later when the
-first upload runs, and they are kept in the Keychain or in Keystore-backed
-storage, never in ordinary preferences.
+they are typing what their browser shows them. Credentials are proved with a real
+request before the screen is dismissed, so that a typo fails at the keyboard
+rather than silently four hours later when the first upload runs.
+
+**Plain `http` is consented to, not blocked and not silent.** It is the normal
+case for a self-hosted server on somebody's own network, so refusing it would
+make the app useless where it is most used -- but a password in clear text is
+worth one interaction. With no scheme typed, https is tried first and the offer
+of http comes only after it fails; a typed `http://` is warned about too. The
+answer is **remembered per host**, because the risk belongs to the host rather
+than to this particular sign-in, and a warning shown every time is a warning
+nobody reads.
+
+Two properties hold around that, and both have tests. Nothing carrying a password
+goes out over http before consent -- the probe that precedes it is anonymous, so
+nobody is asked to accept a risk for a host that turns out not to exist. And an
+anonymous `207` is never success: a server allowing anonymous reads would
+otherwise dismiss the screen having proved nothing about the password.
 
 **The browser is WebDAV verbs, and inherits their limits.** Browse is `PROPFIND`,
 download is `GET`, rename is `MOVE`, delete is `DELETE` -- all standard, all
@@ -239,17 +247,43 @@ chunk comes next, what to retry, when to give up, when a file counts as done,
 belongs in shared code with tests around it. The rule of thumb: if debugging it
 would need a device, it should not be the thing on the device.
 
+There is one real qualification to all of that, and it is worth knowing before
+resigning yourself to the CI loop: **the iOS source sets compile on Linux.**
+Kotlin/Native metadata compilation is host-independent, so a missing symbol, a
+wrong cinterop signature or a bad import in `iosMain` fails locally in seconds --
+`make test` runs it. Only *linking* an Apple binary needs Xcode. That is most of
+the mistakes caught in the fast loop rather than four minutes later on the macOS
+runner, and it is why the Keychain code could be written at all without a Mac.
+
 What follows from the second wall, for whoever writes the Gradle build: declaring
-the Apple targets is fine on Linux, and only *compiling* them fails. Keep it that
+the Apple targets is fine on Linux, and only *linking* them fails. Keep it that
 way. `configure` must succeed everywhere so that shared code, JVM tests and
 linting work on any machine, and let the iOS link step be the only thing that
 demands a Mac.
 
+## Where credentials live
+
+**Credentials live in the Keychain on iOS and under an Android Keystore key on
+Android**, behind a `SecureStore` interface narrow enough to fake -- "put this
+string somewhere safe and give it back". Two choices inside that are this app's
+purpose talking rather than defaults: the Keychain item is
+`kSecAttrAccessibleAfterFirstUnlock` and the Keystore key requires no user
+authentication, because uploads run while the phone is locked on a charger
+overnight and the stricter settings would make the credentials unreadable exactly
+then -- a backup that silently stops at night and gives no hint why.
+
+Worth being exact about the Android half, since the shape invites a wrong
+assumption: the Keystore holds *keys*, not arbitrary secrets. There is no
+equivalent of a Keychain generic-password item, so every implementation of this
+-- `androidx.security:security-crypto` included -- is a Keystore key wrapping a
+blob in an ordinary file. "Never in ordinary preferences" is satisfied in
+substance, since the file holds ciphertext undecryptable without a key the app
+cannot export, but not in letter.
+
 ## Still open
 
-Decided later, deliberately not guessed at here: how credentials are stored on
-each platform, and whether Nextcloud's chunked upload convention is worth
-supporting alongside tus for servers that have it.
+Decided later, deliberately not guessed at here: whether Nextcloud's chunked
+upload convention is worth supporting alongside tus for servers that have it.
 
 The UI toolkit is **Compose Multiplatform**, and the reason is the missing Mac
 rather than any judgement about SwiftUI. Without one you cannot build or preview

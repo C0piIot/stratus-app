@@ -9,9 +9,8 @@ same rule: it talks **standard WebDAV**, so it works against any WebDAV server â
 Stratus, Nextcloud, a box running rclone serve â€” and it never calls anything
 private to Stratus.
 
-> **Early.** The project builds and its tests run, but the app does nothing yet:
-> Android launches to an empty screen, and there is no iOS project at all. Nothing
-> is backed up and nothing is browsed. The sections below describe what it is
+> **Early.** You can sign in to a server, and that is all: nothing is backed up
+> and nothing is browsed yet. The sections below describe what it is
 > meant to be; this warning shrinks as that stops being aspirational.
 
 ## Why it exists
