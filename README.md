@@ -59,6 +59,7 @@ make doctor     # can this machine run it?
 make toolchain  # build the toolchain image
 make gradle ARGS=build
 make test       # shared tests, native and fast
+make conformance # the same client against a real stratus-backend
 ```
 
 `make test` is the loop you live in. It runs `core`'s JVM tests in a plain JDK
