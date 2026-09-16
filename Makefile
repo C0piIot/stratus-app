@@ -56,7 +56,7 @@ GRADLE = $(DOCKER_RUN) $(IMAGE) $(GRADLE_CMD) --no-daemon
 help:
 	@echo "make doctor     check this machine can run the toolchain"
 	@echo "make toolchain  build the toolchain image"
-	@echo "make test       shared tests, native and fast, no Android SDK"
+	@echo "make test       shared tests and the iOS sources, native and fast"
 	@echo "make conformance the same client against a real stratus-backend"
 	@echo "make gradle ARGS='tasks'"
 	@echo "make shell      a shell inside the toolchain"
@@ -89,8 +89,14 @@ $(CACHE_DIR)/gradle $(CACHE_DIR)/konan:
 gradle: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(GRADLE) $(ARGS)
 
+# The default also compiles the iOS source sets, which sounds impossible on a
+# machine with no Mac and is not: metadata compilation is host-independent, so a
+# missing symbol or a wrong cinterop signature fails here in seconds instead of
+# four minutes later on the macOS runner. Only linking an Apple binary needs Xcode.
+IOS_SOURCES := :core:compileIosMainKotlinMetadata :ui:compileIosMainKotlinMetadata
+
 test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
-	$(DOCKER_RUN) $(TEST_IMAGE) $(GRADLE_CMD) --no-daemon $(or $(ARGS),:core:jvmTest)
+	$(DOCKER_RUN) $(TEST_IMAGE) $(GRADLE_CMD) --no-daemon $(or $(ARGS),:core:jvmTest $(IOS_SOURCES))
 
 # Starts a real backend, runs the suite against it, and tears it down whatever
 # happens. See scripts/conformance.sh for why the image is pinned by digest.

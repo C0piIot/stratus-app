@@ -28,15 +28,24 @@ kotlin {
             // the cases a home-made one gets wrong, and PROPFIND uses all three.
             implementation(libs.xmlutil.core)
         }
+        // The engines, at last: until now nothing in the app could make a real
+        // request. Each target gets the one that belongs to it, and common code
+        // never names an engine -- it is handed one.
+        androidMain.dependencies {
+            implementation(libs.ktor.client.okhttp)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
+        }
+        // The JVM target ships nowhere, but it needs an engine to run the
+        // conformance suite against a real server.
+        jvmMain.dependencies {
+            implementation(libs.ktor.client.cio)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
-        }
-        // Only the conformance suite talks to a real server, and only from the
-        // JVM, so the engine that can is scoped to there rather than shipped.
-        jvmTest.dependencies {
-            implementation(libs.ktor.client.cio)
         }
     }
 }
@@ -45,17 +54,33 @@ kotlin {
 // of the ordinary run: `make test` has to stay offline and finish in seconds.
 // Selecting with a property rather than registering a second Test task keeps the
 // two using one configuration, which is what stops them drifting apart.
-private val conformancePackage = "dev.stratus.core.dav.conformance.*"
+private val conformancePackages = listOf(
+    "dev.stratus.core.dav.conformance.*",
+    "dev.stratus.core.signin.conformance.*",
+)
 
 tasks.named<Test>("jvmTest") {
     val conformance = providers.gradleProperty("conformance").isPresent
     filter {
-        if (conformance) includeTestsMatching(conformancePackage) else excludeTestsMatching(conformancePackage)
+        conformancePackages.forEach {
+            if (conformance) includeTestsMatching(it) else excludeTestsMatching(it)
+        }
         isFailOnNoMatchingTests = conformance
     }
     if (conformance) {
         // The server it talks to is not an input Gradle can see, so a second run
         // against a different one would otherwise be reported as up to date.
         outputs.upToDateWhen { false }
+    }
+}
+
+// Kotlin/Native reports a failed test as a class name and nothing else, which is
+// useless for anything thrown with a message worth reading -- an OSStatus from
+// the Keychain, say. Applies to every test task, JVM included.
+tasks.withType<AbstractTestTask>().configureEach {
+    testLogging {
+        showExceptions = true
+        showStackTraces = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
 }
