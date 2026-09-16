@@ -23,7 +23,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":core"))
+            // api, not implementation: App() takes a SignInController, so the
+            // application module has to be able to name one.
+            api(project(":core"))
             // api, not implementation: the Android application calls App() and
             // needs the runtime on its own compile classpath to do it.
             api(compose.runtime)

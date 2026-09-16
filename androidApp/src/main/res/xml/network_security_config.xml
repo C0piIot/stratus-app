@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext HTTP is blocked by default from targetSdk 28, and ours is 36. A
+  self-hosted server on somebody's own network is very often plain http, and the
+  app warns about it and asks before a password goes out over one, so the block
+  would only mean the warning never gets the chance to appear.
+
+  There is no per-domain allowlist to write here: the domain is whatever the
+  person signing in types, and it is unknown until they do.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
