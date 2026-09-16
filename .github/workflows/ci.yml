@@ -32,6 +32,25 @@ jobs:
 
       - run: make test
 
+  # The same client against a real server. Unit tests prove it matches our idea
+  # of one; this proves it matches the one it will actually talk to, which is
+  # where a wrong assumption about the protocol shows up. Docker on an ubuntu
+  # runner costs nothing, so this is free in both senses.
+  conformance:
+    name: conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: .cache/gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - run: make conformance
+
   # The Android half, and the only job that needs the emulated-on-ARM toolchain
   # image. Built here natively on every change to how it is built.
   android:

@@ -31,8 +31,13 @@ CACHE_DIR := $(CURDIR)/.cache
 #
 # HOME is redirected because the invoking uid has no passwd entry in the image,
 # so anything resolving a home directory would otherwise land in / and fail.
+# DOCKER_EXTRA is how the conformance run joins the container network the
+# backend is on, without a second copy of every flag below.
+DOCKER_EXTRA ?=
+
 DOCKER_RUN = docker run --rm \
 	-u $(UID):$(GID) \
+	$(DOCKER_EXTRA) \
 	-v "$(CURDIR)":/src -w /src \
 	-v "$(CACHE_DIR)/gradle":/gradle \
 	-v "$(CACHE_DIR)/konan":/konan \
@@ -46,12 +51,13 @@ GRADLE_CMD = $(if $(wildcard gradlew),./gradlew,gradle)
 
 GRADLE = $(DOCKER_RUN) $(IMAGE) $(GRADLE_CMD) --no-daemon
 
-.PHONY: help doctor toolchain gradle test shell clean
+.PHONY: help doctor toolchain gradle test conformance shell clean
 
 help:
 	@echo "make doctor     check this machine can run the toolchain"
 	@echo "make toolchain  build the toolchain image"
 	@echo "make test       shared tests, native and fast, no Android SDK"
+	@echo "make conformance the same client against a real stratus-backend"
 	@echo "make gradle ARGS='tasks'"
 	@echo "make shell      a shell inside the toolchain"
 	@echo "make clean      drop caches and build output"
@@ -85,6 +91,11 @@ gradle: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 
 test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(DOCKER_RUN) $(TEST_IMAGE) $(GRADLE_CMD) --no-daemon $(or $(ARGS),:core:jvmTest)
+
+# Starts a real backend, runs the suite against it, and tears it down whatever
+# happens. See scripts/conformance.sh for why the image is pinned by digest.
+conformance: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
+	TEST_IMAGE=$(TEST_IMAGE) scripts/conformance.sh
 
 shell: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(DOCKER_RUN) -it $(IMAGE) bash
