@@ -6,6 +6,7 @@ kotlin = "2.4.20"
 compose = "1.11.1"
 ktor = "3.5.2"
 coroutines = "1.11.0"
+xmlutil = "1.0.2"
 activityCompose = "1.13.0"
 
 [libraries]
@@ -15,6 +16,7 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+xmlutil-core = { module = "io.github.pdvrieze.xmlutil:core", version.ref = "xmlutil" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 
 [plugins]
