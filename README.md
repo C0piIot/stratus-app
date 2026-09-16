@@ -9,8 +9,9 @@ same rule: it talks **standard WebDAV**, so it works against any WebDAV server �
 Stratus, Nextcloud, a box running rclone serve — and it never calls anything
 private to Stratus.
 
-> **Early.** You can sign in to a server, and that is all: nothing is backed up
-> and nothing is browsed yet. The sections below describe what it is
+> **Early.** You can sign in to a server and walk its files — open one, download
+> it, rename it, delete it. Nothing is backed up yet, which is the point of the
+> whole thing and the next piece of work. The sections below describe what it is
 > meant to be; this warning shrinks as that stops being aspirational.
 
 ## Why it exists
