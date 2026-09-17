@@ -14,7 +14,13 @@
   "features": {
     // Every toolchain command in the Makefile is a `docker run`, so the one
     // thing this machine genuinely needs is a docker daemon of its own.
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+
+    // Without this `gh codespace ssh` refuses to connect: the base image ships
+    // no ssh server, and the browser editor hides that by not needing one. The
+    // work here happens in a terminal, so being able to reach it from one is
+    // not a nicety.
+    "ghcr.io/devcontainers/features/sshd:1": {}
   },
 
   // The floor rather than a preference. The build asks for a three gigabyte
