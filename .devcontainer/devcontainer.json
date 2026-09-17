@@ -1,0 +1,33 @@
+{
+  // A development machine defined in the repository rather than described in a
+  // README, which is the same bargain the Makefile already makes: nothing to
+  // install by hand, and no version that exists on one machine and not another.
+  //
+  // It exists because of two things this project cannot do on an ARM host.
+  // Kotlin/Native does not support linux-aarch64 at all, so the iOS sources go
+  // uncompiled until CI sees them; and Google publishes no Android SDK for
+  // aarch64, so the toolchain image only runs under emulation. A Codespace is
+  // x86_64, which is all it takes for both to stop being true.
+  "name": "stratus-app",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    // Every toolchain command in the Makefile is a `docker run`, so the one
+    // thing this machine genuinely needs is a docker daemon of its own.
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  // The floor rather than a preference. The build asks for a three gigabyte
+  // heap in gradle.properties, so anything smaller fails before it starts --
+  // and the smallest Codespace, two cores and eight gigabytes, is both enough
+  // and the size the free allowance is counted in.
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
+  // The first thing anybody sees is whether this machine can do the work,
+  // rather than finding out four minutes into a build that it cannot.
+  "postCreateCommand": "make doctor"
+}
