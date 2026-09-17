@@ -64,11 +64,31 @@ and none of those should cause the whole camera roll to upload again.
 
 That gives two requirements on how files are named and checked:
 
-- **A deterministic remote path**, derived from the asset's capture time and a
-  stable identifier, so that "is this already uploaded?" is a question the server
-  can answer about a path rather than one that needs local memory. Beware the
-  obvious trap: filenames like `IMG_0001.JPG` collide across devices and across
-  years.
+- **A deterministic remote path**, so that "is this already uploaded?" is a
+  question the server can answer about a path rather than one that needs local
+  memory.
+
+  This was written as "derived from capture time and a stable identifier", and
+  the trouble is that **neither platform has one**: MediaStore ids change on a
+  rescan and `PHAsset` identifiers do not survive restoring onto a new phone --
+  which is precisely the moment the path must not move. So identity comes from
+  the photograph rather than from the device: **capture time, original filename
+  and byte count**, all three intrinsic and all three unchanged by a restore.
+  `localId` exists only to ask the platform for the bytes again.
+
+  The name that falls out is `2026-09-17_143022_IMG_0001.fe038252.heic` under
+  `/<root>/2026/09/`, the eight characters being a digest of those three fields.
+  Two photographs land on one path only when their second, their name and their
+  size all match -- at which point they are almost certainly the same picture
+  imported twice, and storing it once is the right answer rather than a collision
+  to design around. `RemoteLayoutTest` pins that exact string on purpose:
+  changing how a path is derived orphans every library already uploaded, and it
+  should cost a failing test and a deliberate answer rather than a tidy-up.
+
+  The time is the **wall clock the device reports, never converted to UTC**.
+  Converting moves an evening photograph into the previous day's folder for
+  anybody east of Greenwich, and makes the answer depend on where the phone was
+  when it was asked.
 - **Integrity from the ETag**, not from the file size. Stratus's ETag is a
   SHA-256 of the bytes it actually stored, which is a real verification and
   better than most servers give — but the app must treat a weak or absent ETag as

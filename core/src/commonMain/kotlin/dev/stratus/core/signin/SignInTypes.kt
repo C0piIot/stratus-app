@@ -9,8 +9,18 @@ import dev.stratus.core.net.ServerAddress
 
 data class SignInForm(val address: String, val username: String, val password: String)
 
-/** What the app connected to, and everything after sign-in needs. */
-data class Session(val baseUrl: String, val username: String)
+/**
+ * What the app connected to, and everything after sign-in needs.
+ *
+ * [backupRoot] is stored rather than hardcoded even though nothing sets it yet:
+ * moving it later relocates somebody's whole library, so it should never be a
+ * constant that somebody tidies up.
+ */
+data class Session(
+    val baseUrl: String,
+    val username: String,
+    val backupRoot: String = "Photos",
+)
 
 /** Something only the person at the keyboard can decide. */
 sealed interface Question {
