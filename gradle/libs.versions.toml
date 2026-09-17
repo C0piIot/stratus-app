@@ -7,6 +7,7 @@ compose = "1.11.1"
 ktor = "3.5.2"
 coroutines = "1.11.0"
 xmlutil = "1.0.2"
+sqlite = "2.7.1"
 activityCompose = "1.13.0"
 lifecycleRuntime = "2.10.0"
 # Not 1.19: it wants compileSdk 37, which Google has published build-tools for
@@ -21,6 +22,7 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 xmlutil-core = { module = "io.github.pdvrieze.xmlutil:core", version.ref = "xmlutil" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-core = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }

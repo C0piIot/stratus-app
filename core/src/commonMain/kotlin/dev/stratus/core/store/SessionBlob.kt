@@ -16,10 +16,10 @@ import dev.stratus.core.signin.Session
  * without the old value being mistaken for the new one.
  */
 internal object SessionBlob {
-    private const val VERSION = "1"
+    private const val VERSION = "2"
 
     fun encode(session: Session, credentials: Credentials): String =
-        listOf(VERSION, session.baseUrl, credentials.username, credentials.password)
+        listOf(VERSION, session.baseUrl, credentials.username, credentials.password, session.backupRoot)
             .joinToString("") { "${it.length}:$it" }
 
     /** Null rather than an exception: an unreadable blob means "signed out". */
@@ -37,7 +37,14 @@ internal object SessionBlob {
             fields += text.substring(start, end)
             at = end
         }
-        if (fields.size != 4 || fields[0] != VERSION) return null
-        return Session(fields[1], fields[2]) to Credentials(fields[2], fields[3])
+        // The version field earning its keep for the first time: a blob written
+        // before the backup root existed still reads, with the default.
+        return when {
+            fields.size == 5 && fields[0] == "2" ->
+                Session(fields[1], fields[2], fields[4]) to Credentials(fields[2], fields[3])
+            fields.size == 4 && fields[0] == "1" ->
+                Session(fields[1], fields[2]) to Credentials(fields[2], fields[3])
+            else -> null
+        }
     }
 }

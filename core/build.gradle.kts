@@ -27,6 +27,10 @@ kotlin {
             // unhelpful places, numeric entity references and CDATA are exactly
             // the cases a home-made one gets wrong, and PROPFIND uses all three.
             implementation(libs.xmlutil.core)
+            // SQLite with the engine bundled, so every target -- the JVM one
+            // included -- runs the same database. That is what lets the schema
+            // and the queries be covered by the fast loop rather than by a fake.
+            implementation(libs.androidx.sqlite.bundled)
         }
         // The engines, at last: until now nothing in the app could make a real
         // request. Each target gets the one that belongs to it, and common code

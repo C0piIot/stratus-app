@@ -64,11 +64,31 @@ and none of those should cause the whole camera roll to upload again.
 
 That gives two requirements on how files are named and checked:
 
-- **A deterministic remote path**, derived from the asset's capture time and a
-  stable identifier, so that "is this already uploaded?" is a question the server
-  can answer about a path rather than one that needs local memory. Beware the
-  obvious trap: filenames like `IMG_0001.JPG` collide across devices and across
-  years.
+- **A deterministic remote path**, so that "is this already uploaded?" is a
+  question the server can answer about a path rather than one that needs local
+  memory.
+
+  This was written as "derived from capture time and a stable identifier", and
+  the trouble is that **neither platform has one**: MediaStore ids change on a
+  rescan and `PHAsset` identifiers do not survive restoring onto a new phone --
+  which is precisely the moment the path must not move. So identity comes from
+  the photograph rather than from the device: **capture time, original filename
+  and byte count**, all three intrinsic and all three unchanged by a restore.
+  `localId` exists only to ask the platform for the bytes again.
+
+  The name that falls out is `2026-09-17_143022_IMG_0001.fe038252.heic` under
+  `/<root>/2026/09/`, the eight characters being a digest of those three fields.
+  Two photographs land on one path only when their second, their name and their
+  size all match -- at which point they are almost certainly the same picture
+  imported twice, and storing it once is the right answer rather than a collision
+  to design around. `RemoteLayoutTest` pins that exact string on purpose:
+  changing how a path is derived orphans every library already uploaded, and it
+  should cost a failing test and a deliberate answer rather than a tidy-up.
+
+  The time is the **wall clock the device reports, never converted to UTC**.
+  Converting moves an evening photograph into the previous day's folder for
+  anybody east of Greenwich, and makes the answer depend on where the phone was
+  when it was asked.
 - **Integrity from the ETag**, not from the file size. Stratus's ETag is a
   SHA-256 of the bytes it actually stored, which is a real verification and
   better than most servers give — but the app must treat a weak or absent ETag as
@@ -257,13 +277,20 @@ chunk comes next, what to retry, when to give up, when a file counts as done,
 belongs in shared code with tests around it. The rule of thumb: if debugging it
 would need a device, it should not be the thing on the device.
 
-There is one real qualification to all of that, and it is worth knowing before
-resigning yourself to the CI loop: **the iOS source sets compile on Linux.**
-Kotlin/Native metadata compilation is host-independent, so a missing symbol, a
-wrong cinterop signature or a bad import in `iosMain` fails locally in seconds --
-`make test` runs it. Only *linking* an Apple binary needs Xcode. That is most of
-the mistakes caught in the fast loop rather than four minutes later on the macOS
-runner, and it is why the Keychain code could be written at all without a Mac.
+There is one qualification to all of that, with a sting in it: **the iOS source
+sets compile on Linux -- but only on x86_64.** Kotlin/Native does not support
+`linux-aarch64` as a host at all, so on the ARM development box every Apple
+compilation is skipped with a warning and `make test` checks nothing about iOS.
+On an x86_64 machine the same command catches a missing symbol or a wrong
+cinterop signature in seconds; here it does not, and the first thing that knows
+is CI.
+
+This was learned the hard way, by reading a `BUILD SUCCESSFUL` from a task that
+had been skipped and believing it. `make doctor` now says which side of that line
+the machine is on, because a warning in the middle of Gradle output is not a
+thing anybody reads. It is also the second time the ARM host has cost something
+concrete -- the Android SDK was the first -- which is worth weighing the next
+time moving the work to an x86_64 machine comes up.
 
 What follows from the second wall, for whoever writes the Gradle build: declaring
 the Apple targets is fine on Linux, and only *linking* them fails. Keep it that

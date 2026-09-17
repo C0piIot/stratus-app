@@ -15,5 +15,6 @@ fun appContainer(context: Context): AppContainer {
         engine = { OkHttp.create() },
         secure = AndroidSecureStore(application),
         handoff = AndroidFileHandoff(application),
+        databasePath = application.filesDir.resolve("backup.db").absolutePath,
     )
 }

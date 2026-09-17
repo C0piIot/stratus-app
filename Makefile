@@ -74,6 +74,9 @@ doctor:
 	       docker run --rm --platform linux/amd64 alpine true 2>/dev/null \
 	         && echo "emulation is registered: fine" \
 	         || echo "NOT registered. Install it with:\n  docker run --privileged --rm tonistiigi/binfmt --install amd64"; }
+	@uname -m | grep -q x86_64 \
+	  && echo "Kotlin/Native compiles the iOS sources here" \
+	  || echo "Kotlin/Native does NOT support this host, so 'make test' skips the iOS\nsources and only CI compiles them. Nothing to install: it is the architecture."
 
 # BUILD_CACHE is empty locally and set by CI to a buildx cache backend. Keeping
 # it a variable rather than a second command is what stops CI and a laptop from
@@ -89,10 +92,11 @@ $(CACHE_DIR)/gradle $(CACHE_DIR)/konan:
 gradle: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(GRADLE) $(ARGS)
 
-# The default also compiles the iOS source sets, which sounds impossible on a
-# machine with no Mac and is not: metadata compilation is host-independent, so a
-# missing symbol or a wrong cinterop signature fails here in seconds instead of
-# four minutes later on the macOS runner. Only linking an Apple binary needs Xcode.
+# The default also compiles the iOS source sets, which is possible without a Mac
+# -- but only on an x86_64 host. Kotlin/Native does not support linux-aarch64 as
+# a host at all, so on an ARM machine these are skipped with a warning and iOS
+# goes unchecked until CI. `make doctor` says so, rather than leaving it to a
+# line of build output nobody reads.
 IOS_SOURCES := :core:compileIosMainKotlinMetadata :ui:compileIosMainKotlinMetadata
 
 test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
