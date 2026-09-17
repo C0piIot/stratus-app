@@ -72,10 +72,20 @@ Compose Multiplatform interface and produces the framework Xcode will embed, and
 `androidApp` is the Android application. The shared tests run on `core`'s JVM
 target, which ships nowhere and exists only so they are fast.
 
-Two caveats `make doctor` will tell you about. The Android SDK is published for
-x86_64 only, so on an ARM machine the toolchain image runs under emulation and
-needs binfmt registered once. And iOS cannot be built in a container by anyone:
-Kotlin/Native needs Xcode, which means a Mac or a macOS CI runner.
+Two caveats `make doctor` will tell you about, and both are about the
+architecture rather than about anything you can install.
+
+The **Android SDK is published for x86_64 only**, so on an ARM machine the
+toolchain image runs under emulation and needs binfmt registered once. And
+**Kotlin/Native does not support `linux-aarch64` as a host at all**, so there the
+iOS source sets are skipped rather than compiled and nothing checks them until
+CI. On an x86_64 Linux machine both stop being true, and `make test` covers the
+iOS sources too. Only *linking* an Apple binary needs macOS, which is why CI has
+a job on a macOS runner.
+
+If your machine is ARM, `.devcontainer/` describes a GitHub Codespace that is
+not: opening one gives an x86_64 box with Docker, where both caveats disappear
+and `make doctor` says so on first login.
 
 ## Licence
 
