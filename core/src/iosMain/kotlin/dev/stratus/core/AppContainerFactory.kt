@@ -3,6 +3,7 @@ package dev.stratus.core
 import dev.stratus.core.files.IosFileHandoff
 import dev.stratus.core.store.KeychainSecureStore
 import io.ktor.client.engine.darwin.Darwin
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
@@ -20,6 +21,7 @@ fun appContainer(): AppContainer = AppContainer(
  * rebuildable, but having the system delete it under a phone that is mid-backup
  * would mean walking the whole server again for no reason.
  */
+@OptIn(ExperimentalForeignApi::class)
 private fun databasePath(): String {
     val manager = NSFileManager.defaultManager
     val directory = manager.URLsForDirectory(NSApplicationSupportDirectory, NSUserDomainMask)

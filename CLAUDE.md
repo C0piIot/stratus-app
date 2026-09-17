@@ -277,13 +277,20 @@ chunk comes next, what to retry, when to give up, when a file counts as done,
 belongs in shared code with tests around it. The rule of thumb: if debugging it
 would need a device, it should not be the thing on the device.
 
-There is one real qualification to all of that, and it is worth knowing before
-resigning yourself to the CI loop: **the iOS source sets compile on Linux.**
-Kotlin/Native metadata compilation is host-independent, so a missing symbol, a
-wrong cinterop signature or a bad import in `iosMain` fails locally in seconds --
-`make test` runs it. Only *linking* an Apple binary needs Xcode. That is most of
-the mistakes caught in the fast loop rather than four minutes later on the macOS
-runner, and it is why the Keychain code could be written at all without a Mac.
+There is one qualification to all of that, with a sting in it: **the iOS source
+sets compile on Linux -- but only on x86_64.** Kotlin/Native does not support
+`linux-aarch64` as a host at all, so on the ARM development box every Apple
+compilation is skipped with a warning and `make test` checks nothing about iOS.
+On an x86_64 machine the same command catches a missing symbol or a wrong
+cinterop signature in seconds; here it does not, and the first thing that knows
+is CI.
+
+This was learned the hard way, by reading a `BUILD SUCCESSFUL` from a task that
+had been skipped and believing it. `make doctor` now says which side of that line
+the machine is on, because a warning in the middle of Gradle output is not a
+thing anybody reads. It is also the second time the ARM host has cost something
+concrete -- the Android SDK was the first -- which is worth weighing the next
+time moving the work to an x86_64 machine comes up.
 
 What follows from the second wall, for whoever writes the Gradle build: declaring
 the Apple targets is fine on Linux, and only *linking* them fails. Keep it that
