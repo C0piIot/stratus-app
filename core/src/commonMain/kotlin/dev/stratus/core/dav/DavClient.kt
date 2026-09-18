@@ -14,7 +14,12 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.Url
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.http.content.OutgoingContent
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.writeFully
+import kotlinx.io.RawSource
+import kotlinx.io.buffered
 
 /**
  * A WebDAV client over standard verbs and nothing else.
@@ -98,6 +103,37 @@ class DavClient(
     }
 
     /**
+     * Writes a file from a stream, which is the one that matters.
+     *
+     * The [ByteArray] overload is for things small enough to hold; this is for
+     * the videos the app exists to back up, where holding the body in memory to
+     * send it is the difference between working and being killed for it.
+     */
+    suspend fun put(path: String, size: Long, body: RawSource, contentType: String? = null): String? {
+        val response = http.request(url(path)) {
+            method = HttpMethod.Put
+            if (contentType != null) header(HttpHeaders.ContentType, contentType)
+            setBody(
+                object : OutgoingContent.WriteChannelContent() {
+                    override val contentLength: Long = size
+                    override suspend fun writeTo(channel: ByteWriteChannel) {
+                        val source = body.buffered()
+                        val chunk = ByteArray(CHUNK_BYTES)
+                        while (true) {
+                            val read = source.readAtMostTo(chunk, 0, chunk.size)
+                            if (read <= 0) break
+                            channel.writeFully(chunk, 0, read)
+                        }
+                        channel.flush()
+                    }
+                },
+            )
+        }
+        if (!response.status.isSuccess()) throw response.toError(path)
+        return response.headers[HttpHeaders.ETag]?.removePrefix("W/")?.trim('"')?.ifEmpty { null }
+    }
+
+    /**
      * Renames or moves. [overwrite] false asks the server to refuse rather than
      * replace, which comes back as [DavError.PreconditionFailed].
      *
@@ -157,6 +193,8 @@ class DavClient(
 
         // allprop rather than a named list: a server may know properties we do
         // not ask about yet, and asking for everything costs the same round trip.
+        const val CHUNK_BYTES = 64 * 1024
+
         const val ALLPROP = """<?xml version="1.0" encoding="utf-8"?>
 <propfind xmlns="DAV:"><allprop/></propfind>"""
     }

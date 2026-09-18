@@ -28,6 +28,8 @@ class BackupDatabase(
 ) {
     fun cacheFor(instanceId: String): BackupCache = BackupCache(connection, instanceId, io)
 
+    fun pendingFor(instanceId: String): PendingStore = PendingStore(connection, instanceId, io)
+
     /**
      * Brings the file up to the current schema.
      *
@@ -57,15 +59,42 @@ class BackupDatabase(
             )
             connection.execSQL("PRAGMA user_version = 1")
         }
+        if (version() < 2) {
+            // Work that has not finished. It lives in the file rather than in
+            // memory because on iOS the system kills the app between transfers
+            // and relaunches it to report the result -- a queue that only exists
+            // while the app runs is a queue that does not exist.
+            connection.execSQL(
+                """
+                CREATE TABLE pending (
+                    instance     TEXT    NOT NULL,
+                    path         TEXT    NOT NULL,
+                    local_id     TEXT    NOT NULL,
+                    part         TEXT    NOT NULL,
+                    size         INTEGER NOT NULL,
+                    content_type TEXT,
+                    taken_at     TEXT    NOT NULL,
+                    offset_at    INTEGER NOT NULL DEFAULT 0,
+                    handle       TEXT,
+                    attempts     INTEGER NOT NULL DEFAULT 0,
+                    next_at      INTEGER NOT NULL DEFAULT 0,
+                    last_error   TEXT,
+                    PRIMARY KEY (instance, path)
+                )
+                """.trimIndent(),
+            )
+            connection.execSQL("PRAGMA user_version = 2")
+        }
     }
 
     /** Drops everything an instance knew, for when it is forgotten. */
     suspend fun forget(instanceId: String) = withContext(io) {
-        connection.prepare("DELETE FROM uploaded WHERE instance = ?").use { statement ->
-            statement.bindText(1, instanceId)
-            statement.step()
+        for (table in listOf("uploaded", "pending")) {
+            connection.prepare("DELETE FROM $table WHERE instance = ?").use { statement ->
+                statement.bindText(1, instanceId)
+                statement.step()
+            }
         }
-        Unit
     }
 
     private fun version(): Int =

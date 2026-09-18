@@ -324,6 +324,34 @@ its own rows. Plaintext consent is the deliberate exception: it is keyed by
 **host**, because the risk belongs to the machine at the other end and two
 instances on the same host share the answer with good reason.
 
+## What the queue decides
+
+The transport is the part that will be a background `URLSession`, running where
+no test can watch it. So it decides nothing, and all of this lives in
+`UploadQueue` with a fake transport around it:
+
+- **Newest photograph first.** The picture somebody just took is the one they
+  check for; a first backup that starts in 2014 looks broken for days.
+- **One upload at a time.** On a phone, several at once drains the battery and
+  saturates the uplink without finishing any sooner.
+- **Waiting helps or it does not, and that is not a retry count.** Rejected
+  credentials do not improve by being asked again, and asking again is another
+  failed login on a server that counts them; a timeout does improve. A permanent
+  failure stays in the list so somebody can be told and is never picked up again.
+- **Resuming asks the server, never the local offset alone.** Stratus answers a
+  tus `PATCH` at the wrong offset with a 409 precisely because a client can
+  believe it is somewhere the server does not agree with.
+- **The queue is in the database, not in memory.** On iOS the system kills the
+  app between transfers and relaunches it to report the result, so a queue that
+  only exists while the app runs is a queue that does not exist.
+- **A second look at the camera roll must not restart a large video**, which is
+  why enqueuing ignores what is already queued rather than replacing it.
+
+The transport interface is shaped around "ask where you got to and continue"
+even though `PUT` -- the only implementation today -- cannot do it. Writing it
+around `PUT` would mean rewriting the queue the day tus arrives rather than
+adding to it.
+
 ## Where credentials live
 
 **Credentials live in the Keychain on iOS and under an Android Keystore key on
