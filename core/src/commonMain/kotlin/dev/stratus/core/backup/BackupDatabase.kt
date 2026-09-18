@@ -2,18 +2,11 @@ package dev.stratus.core.backup
 
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
+import dev.stratus.core.sql.use
 import androidx.sqlite.execSQL
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-/** Closes the statement whatever happens, which SQLite needs and nothing enforces. */
-private inline fun <T> SQLiteStatement.use(block: (SQLiteStatement) -> T): T =
-    try {
-        block(this)
-    } finally {
-        close()
-    }
 
 /**
  * The one database file, and the schema in it.

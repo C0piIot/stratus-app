@@ -2,17 +2,10 @@ package dev.stratus.core.backup
 
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
+import dev.stratus.core.sql.use
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-/** Closes the statement whatever happens, which SQLite needs and nothing enforces. */
-private inline fun <T> SQLiteStatement.use(block: (SQLiteStatement) -> T): T =
-    try {
-        block(this)
-    } finally {
-        close()
-    }
 
 /** Everything outstanding, counted in one query rather than by reading it all. */
 data class PendingSummary(
@@ -22,6 +15,8 @@ data class PendingSummary(
     val bytesLeft: Long,
     /** When the earliest waiting item becomes runnable, or null if one already is. */
     val nextAttemptAt: Long?,
+    /** What the server said about something given up on, for a screen to quote. */
+    val givenUpDetail: String? = null,
 )
 
 /** One outstanding piece of work: one part of one asset, for one instance. */
@@ -159,21 +154,48 @@ class PendingStore(
             SELECT COUNT(*),
                    SUM(CASE WHEN next_at >= ? THEN 1 ELSE 0 END),
                    COALESCE(SUM(size - offset_at), 0),
-                   MIN(CASE WHEN next_at < ? THEN next_at ELSE NULL END)
+                   MIN(CASE WHEN next_at < ? THEN next_at ELSE NULL END),
+                   MAX(CASE WHEN next_at >= ? THEN last_error ELSE NULL END)
             FROM pending WHERE instance = ?
             """.trimIndent(),
         ).use { statement ->
             statement.bindLong(1, NEVER)
             statement.bindLong(2, NEVER)
-            statement.bindText(3, instanceId)
+            statement.bindLong(3, NEVER)
+            statement.bindText(4, instanceId)
             if (!statement.step()) return@withContext PendingSummary(0, 0, 0, null)
             PendingSummary(
                 total = statement.getInt(0),
                 givenUp = statement.getInt(1),
                 bytesLeft = statement.getLong(2),
                 nextAttemptAt = if (statement.isNull(3)) null else statement.getLong(3).takeIf { it > now },
+                givenUpDetail = if (statement.isNull(4)) null else statement.getText(4),
             )
         }
+    }
+
+    /**
+     * What has been given up on, bounded.
+     *
+     * A screen shows a handful and a count; reading forty thousand rows to
+     * display twenty of them is how a status display becomes the slow part of
+     * an app whose whole job is elsewhere.
+     */
+    suspend fun failures(limit: Int): List<PendingUpload> = withContext(io) {
+        val found = mutableListOf<PendingUpload>()
+        connection.prepare(
+            """
+            SELECT path, local_id, part, size, content_type, taken_at, offset_at, handle, attempts, last_error
+            FROM pending WHERE instance = ? AND next_at >= ?
+            ORDER BY taken_at DESC LIMIT ?
+            """.trimIndent(),
+        ).use { statement ->
+            statement.bindText(1, instanceId)
+            statement.bindLong(2, NEVER)
+            statement.bindLong(3, limit.toLong())
+            while (statement.step()) found += read(statement)
+        }
+        found
     }
 
     suspend fun size(): Long = withContext(io) {

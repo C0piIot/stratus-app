@@ -115,8 +115,11 @@ class UploadQueue(
         }
     }
 
-    /** Everything outstanding, for the screen that has to say what is going on. */
+    /** Everything outstanding. Unbounded, so not for anything asked repeatedly. */
     suspend fun outstanding(): List<PendingUpload> = pending.all()
+
+    /** How much is left, counted rather than read. */
+    suspend fun left(): Int = pending.summary(now()).total
 
     private suspend fun failure(upload: PendingUpload, kind: FailureKind, detail: String): QueueStep =
         if (kind == FailureKind.Permanent) {

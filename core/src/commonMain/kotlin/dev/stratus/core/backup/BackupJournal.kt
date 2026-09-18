@@ -2,17 +2,10 @@ package dev.stratus.core.backup
 
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
+import dev.stratus.core.sql.use
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-/** Closes the statement whatever happens, which SQLite needs and nothing enforces. */
-private inline fun <T> SQLiteStatement.use(block: (SQLiteStatement) -> T): T =
-    try {
-        block(this)
-    } finally {
-        close()
-    }
 
 /** What the last pass did, and whether one is happening now. */
 data class JournalEntry(
