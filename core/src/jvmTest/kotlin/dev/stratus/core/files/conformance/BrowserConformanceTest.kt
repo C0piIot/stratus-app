@@ -2,7 +2,6 @@ package dev.stratus.core.files.conformance
 
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.files.BrowserController
-import dev.stratus.core.files.BrowserFailure
 import dev.stratus.core.files.BrowserState
 import dev.stratus.core.files.Confirmation
 import dev.stratus.core.files.FileHandoff
@@ -15,7 +14,7 @@ import kotlinx.io.Sink
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 /** Browsing a real server, started by `make conformance`. */
 class BrowserConformanceTest {
@@ -74,9 +73,10 @@ class BrowserConformanceTest {
     }
 
     @Test
-    fun saysWhyAFolderWithThingsInItWillNotRename() = runTest {
-        // The same limitation the DAV suite pins, seen from the screen that has
-        // to explain it. When this fails the server has learned to do it.
+    fun renamesAFolderWithThingsInIt() = runTest {
+        // Pinned as a refusal until the server learned to rewrite every path
+        // under a directory. The app needed no change for it: it only ever
+        // reported what came back.
         dav.makeCollection(root)
         dav.makeCollection("$root/full")
         dav.put("$root/full/inside.txt", "x".encodeToByteArray())
@@ -86,10 +86,10 @@ class BrowserConformanceTest {
         val listed = browser.settled()
 
         browser.ask(Confirmation.Rename(listed.entries.single { it.isDirectory }))
-        browser.confirmRename("empty")
+        browser.confirmRename("renamed")
 
-        val failure = browser.settled().failure
-        assertTrue(failure is BrowserFailure.RenameNeedsAnEmptyFolder, "was $failure")
-        assertEquals("full", failure.name)
+        val after = browser.settled()
+        assertNull(after.failure, "was ${after.failure}")
+        assertEquals(listOf("renamed"), after.entries.map { it.name })
     }
 }

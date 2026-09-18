@@ -9,6 +9,8 @@ import dev.stratus.core.backup.BackupStatus
 import dev.stratus.core.backup.PendingUpload
 import dev.stratus.core.backup.DavDirectoryMaker
 import dev.stratus.core.backup.PutTransport
+import dev.stratus.core.backup.TusTransport
+import dev.stratus.core.backup.negotiateTus
 import dev.stratus.core.backup.UploadQueue
 import dev.stratus.core.backup.RemoteLayout
 import dev.stratus.core.dav.DavClient
@@ -150,15 +152,30 @@ class AppContainer(
      */
     suspend fun backupQueue(instanceId: String): UploadQueue? {
         val instance = instances.instance(instanceId) ?: return null
-        val dav = davFor(instance) ?: return null
+        val credentials = instances.credentials(instance.id) ?: return null
+        val client = stratusHttpClient(engine(), credentials)
+        val dav = DavClient(client, instance.baseUrl)
         database.migrate()
+
+        // Asked every pass rather than remembered: a server that gains tus
+        // tomorrow should be used tomorrow, and there is nothing to invalidate.
+        // A server without it still works, only slower to recover from a drop.
+        val transport = negotiateTus(client, instance.baseUrl)
+            ?.let { endpoint ->
+                TusTransport(client, endpoint) { path ->
+                    // tus reports no ETag, and the ETag is what makes a later
+                    // check a real check. One request per file buys it back.
+                    runCatching { dav.stat(path).etag }.getOrNull()
+                }
+            }
+            ?: PutTransport(dav)
+
         return UploadQueue(
             layout = RemoteLayout(instance.backupRoot),
             pending = database.pendingFor(instance.id),
             cache = database.cacheFor(instance.id),
             source = assets,
-            // Plain PUT until tus is negotiated in #18.
-            transport = PutTransport(dav),
+            transport = transport,
             directories = DavDirectoryMaker(dav),
         )
     }

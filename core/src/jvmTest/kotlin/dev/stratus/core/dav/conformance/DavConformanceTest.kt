@@ -24,9 +24,10 @@ import kotlin.test.assertTrue
  *
  * Everything else in this module tests the client against our idea of a server.
  * This tests it against the server, which is where a wrong assumption about the
- * protocol actually surfaces. Two of these assert limitations rather than
- * features, and are meant to fail the day the backend loses them -- that is how
- * we find out.
+ * protocol actually surfaces. Two of these started life asserting a limitation
+ * rather than a feature, so as to fail the day the backend lost it. Both have
+ * since failed and been rewritten as guarantees, which is the whole argument for
+ * pinning a limitation instead of leaving it undescribed.
  */
 class DavConformanceTest {
 
@@ -167,23 +168,30 @@ class DavConformanceTest {
         assertTrue(thrown is DavError.Conflict, "was $thrown")
     }
 
-    // ---- Limitations, pinned so that losing them is noticed -----------------
+    // ---- Pins that have since flipped into guarantees ----------------------
 
     /**
-     * Renaming a directory with anything in it is refused (stratus-backend#101).
+     * A directory with anything in it renames, and everything under it follows.
      *
-     * **When this test fails, the server has learned to do it** and the app can
-     * drop the special message it shows for this case. Delete the test then.
+     * This began as the opposite assertion: the server refused it
+     * (stratus-backend#101) and the test pinned the refusal so that losing it
+     * would be noticed. It was lost, so the pin becomes a guarantee. The app
+     * keeps the message it shows when a server refuses, because plenty of WebDAV
+     * servers still do -- Stratus is simply no longer one of them.
      */
     @Test
-    fun renamingANonEmptyDirectoryIsStillRefused() = runTest {
+    fun renamesADirectoryWithThingsInIt() = runTest {
         givenRoot()
         dav.makeCollection("$root/full")
         dav.put("$root/full/inside.txt", "x".encodeToByteArray())
 
-        val thrown = runCatching { dav.move("$root/full", "$root/renamed") }.exceptionOrNull()
-        assertTrue(thrown is DavError.Conflict, "was $thrown")
-        assertContains(thrown.detail, "not empty")
+        dav.move("$root/full", "$root/renamed")
+
+        // Read a child at its new path rather than the collection: rewriting
+        // every path underneath is the whole of the work, and a PROPFIND on the
+        // directory would pass without any of it having happened.
+        val moved = dav.read("$root/renamed/inside.txt") { it.readRemaining().readByteArray() }
+        assertEquals("x", moved.decodeToString())
     }
 
     /**

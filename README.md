@@ -24,7 +24,7 @@ WebDAV target and does the job. The real gap is iOS, where there is nothing free
 worth recommending — and iOS is also where the operating system fights hardest,
 which is most of the work here.
 
-## How it will upload
+## How it uploads
 
 Plain WebDAV `PUT` has no way to resume. A four-gigabyte video on a flaky mobile
 connection restarts from zero, forever, and no amount of retry logic fixes it.
@@ -35,8 +35,10 @@ So the app negotiates rather than assuming:
 | Any WebDAV server | `PUT` | photos and small videos, restart on failure |
 | One that advertises [tus](https://tus.io) | `POST` + `PATCH` at an offset | large videos survive a dropped connection |
 
-Baseline first, upgrade when offered. That keeps "works with any WebDAV server"
-true without giving up resumable uploads where the server can do them.
+Baseline first, upgrade when offered: one `OPTIONS` at the start of each backup
+pass decides which of the two runs, and a server that answers it with anything
+else gets `PUT`. That keeps "works with any WebDAV server" true without giving up
+resumable uploads where the server can do them.
 
 ## Platform reality
 
