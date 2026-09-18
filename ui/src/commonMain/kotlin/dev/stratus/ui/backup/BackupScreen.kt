@@ -12,12 +12,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.backup.AttentionReason
@@ -37,7 +35,6 @@ data class InstanceStatus(
 @Composable
 fun BackupScreen(
     statuses: List<InstanceStatus>,
-    onEnable: (String, Boolean) -> Unit,
     onBackUpNow: (() -> Unit)?,
     onClose: () -> Unit,
 ) {
@@ -60,17 +57,10 @@ fun BackupScreen(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(statuses, key = { it.instance.id }) { status ->
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(status.instance.baseUrl)
-                            Switch(
-                                checked = status.instance.backupEnabled,
-                                onCheckedChange = { onEnable(status.instance.id, it) },
-                            )
-                        }
+                        // No switch here. This screen answers "is it working";
+                        // what it should be doing is the servers screen, and one
+                        // question per surface is what keeps either readable.
+                        Text(status.instance.baseUrl)
                         Text(oneLine(status.state))
                         Text(explain(status.state))
 

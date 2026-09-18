@@ -114,6 +114,23 @@ class AndroidAssetSourceTest {
     }
 
     @Test
+    fun anEmptyChoiceMeansEveryFolder() = runTest {
+        // Stored, an empty set has exactly one meaning: every source. The other
+        // reading -- "chosen: none" -- is what the settings screen refuses to
+        // create, because a value meaning two opposite things is eventually read
+        // the wrong way and a camera roll silently stops being backed up.
+        val bucket = source.sources().single { it.label == folder }.id
+        val everywhere = source.assets(emptySet())
+        val justMine = source.assets(setOf(bucket))
+
+        assertTrue(everywhere.size >= justMine.size, "${everywhere.size} < ${justMine.size}")
+        assertTrue(
+            everywhere.map { it.localId }.containsAll(justMine.map { it.localId }),
+            "a narrowed choice returned something the unnarrowed one did not",
+        )
+    }
+
+    @Test
     fun handsBackTheBytesItWasGiven() = runTest {
         val bucket = source.sources().single { it.label == folder }.id
         val asset = source.assets(setOf(bucket)).first()
