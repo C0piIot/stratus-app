@@ -2,7 +2,7 @@ package dev.stratus.core.backup.conformance
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import dev.stratus.core.backup.Asset
-import dev.stratus.core.backup.BackupCache
+import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.BackupIndex
 import dev.stratus.core.backup.CaptureTime
 import dev.stratus.core.backup.MotionPart
@@ -42,7 +42,7 @@ class RebuildConformanceTest {
 
     private suspend fun emptyIndex() = BackupIndex(
         layout,
-        BackupCache(BundledSQLiteDriver().open(":memory:")).also { it.migrate() },
+        BackupDatabase(BundledSQLiteDriver().open(":memory:")).also { it.migrate() }.cacheFor("one"),
         dav,
     )
 

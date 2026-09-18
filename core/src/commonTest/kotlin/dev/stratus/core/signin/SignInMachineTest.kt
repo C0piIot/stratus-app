@@ -37,7 +37,7 @@ class SignInMachineTest {
     fun signsInAndAsksForTheSessionToBeStored() {
         val first = submit()
         val done = first.then(ProbeOutcome.IsWebDav(first.attempt))
-        assertEquals("https://host/dav/", (done.state as SignInState.Done).session.baseUrl)
+        assertEquals("https://host/dav/", (done.state as SignInState.Done).baseUrl)
         assertTrue(done.effects.any { it is SignInEffect.Store })
     }
 

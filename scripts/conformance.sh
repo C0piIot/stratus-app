@@ -22,12 +22,14 @@ PORT="${PORT:-18099}"
 SUFFIX="$$"
 NET="stratus-conformance-$SUFFIX"
 NAME="stratus-conformance-$SUFFIX"
+SECOND="stratus-conformance-two-$SUFFIX"
 DATA="$(mktemp -d)"
+DATA2="$(mktemp -d)"
 
 cleanup() {
-    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    docker rm -f "$NAME" "$SECOND" >/dev/null 2>&1 || true
     docker network rm "$NET" >/dev/null 2>&1 || true
-    rm -rf "$DATA"
+    rm -rf "$DATA" "$DATA2"
 }
 trap cleanup EXIT
 
@@ -43,6 +45,17 @@ docker run -d --name "$NAME" --network "$NET" \
     -e STRATUS_USERNAME="$DAV_USER" \
     -e STRATUS_PASSWORD="$DAV_PASS" \
     -v "$DATA:/data" \
+    "$IMAGE" >/dev/null
+
+# A second one, because the app holds several instances and the only honest way
+# to show that one's cache does not answer for the other is two real servers.
+docker run -d --name "$SECOND" --network "$NET" \
+    --user "$(id -u):$(id -g)" \
+    -e STRATUS_ADDR=:8080 \
+    -e STRATUS_DATA_DIR=/data \
+    -e STRATUS_USERNAME="$DAV_USER" \
+    -e STRATUS_PASSWORD="$DAV_PASS" \
+    -v "$DATA2:/data" \
     "$IMAGE" >/dev/null
 
 # Waiting for the port to answer rather than sleeping a fixed amount: a constant
@@ -68,5 +81,6 @@ make gradle \
     ARGS=":core:jvmTest -Pconformance" \
     DOCKER_EXTRA="--network $NET \
         -e STRATUS_TEST_URL=http://$NAME:8080/dav/ \
+        -e STRATUS_TEST_URL_2=http://$SECOND:8080/dav/ \
         -e STRATUS_TEST_USER=$DAV_USER \
         -e STRATUS_TEST_PASS=$DAV_PASS"
