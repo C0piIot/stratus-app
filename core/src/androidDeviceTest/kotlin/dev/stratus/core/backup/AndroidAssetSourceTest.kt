@@ -38,15 +38,29 @@ class AndroidAssetSourceTest {
     private val folder = "StratusTest${Random.nextInt(100_000)}"
     private val inserted = mutableListOf<android.net.Uri>()
 
+    /**
+     * Puts one file in the library with a capture time that survives.
+     *
+     * The dance with IS_PENDING is not ceremony: writing DATE_TAKEN on the
+     * insert loses it, because the media scanner runs afterwards, finds no EXIF
+     * in these bytes and writes its own answer over the top. Setting it once the
+     * file is no longer pending is what makes it stick.
+     */
     private fun seed(name: String, takenMillis: Long, bytes: Int = 16) {
-        val values = ContentValues().apply {
+        val pending = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
             put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/$folder")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val uri = requireNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, pending))
+        resolver.openOutputStream(uri)!!.use { it.write(ByteArray(bytes) { 7 }) }
+
+        val settled = ContentValues().apply {
+            put(MediaStore.Images.Media.IS_PENDING, 0)
             put(MediaStore.Images.Media.DATE_TAKEN, takenMillis)
         }
-        val uri = requireNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
-        resolver.openOutputStream(uri)!!.use { it.write(ByteArray(bytes) { 7 }) }
+        resolver.update(uri, settled, null, null)
         inserted += uri
     }
 
