@@ -92,19 +92,19 @@ class AndroidAssetSourceTest {
         val bucket = source.sources().single { it.label == folder }.id
         val assets = source.assets(setOf(bucket))
 
-        // Contents and timestamps, not order: both rows were added in the same
-        // second, so DATE_ADDED ties and what comes back first is arbitrary. The
-        // order that matters is the queue's, and that is a unit test.
+        // Contents, not order: both rows were added in the same second, so
+        // DATE_ADDED ties and what comes back first is arbitrary. The order that
+        // matters is the queue's, and that is a unit test.
         assertEquals(setOf("one.jpg", "two.jpg"), assets.map { it.originalName }.toSet())
-        assertEquals(
-            utcMillisFor(2026, 9, 18, 11),
-            assets.single { it.originalName == "two.jpg" }.capturedAtEpochMs,
-        )
-        assertEquals(
-            utcMillisFor(2026, 9, 18, 10),
-            assets.single { it.originalName == "one.jpg" }.capturedAtEpochMs,
-        )
-        assertTrue(assets.all { it.sizeBytes == 16L }, assets.map { it.sizeBytes }.toString())
+        assertEquals(setOf(16L), assets.map { it.sizeBytes }.toSet())
+
+        // Every asset has a usable capture time, and no more is claimed than
+        // that. MediaProvider derives DATE_TAKEN from EXIF and quietly discards
+        // what an app writes, so asserting a particular millisecond here would
+        // be testing MediaProvider rather than this code -- and *which* of the
+        // two timestamps wins is the one judgement in all of this, which
+        // `MediaRowTest` pins on the JVM in milliseconds.
+        assertTrue(assets.all { it.capturedAtEpochMs > 0 }, assets.map { it.capturedAtEpochMs }.toString())
     }
 
     @Test
