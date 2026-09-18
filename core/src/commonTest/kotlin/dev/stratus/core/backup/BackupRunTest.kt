@@ -46,16 +46,20 @@ class BackupRunTest {
         outcome: UploadOutcome = UploadOutcome.Done("etag"),
     ): BackupRun {
         database.migrate()
-        return BackupRun(roll) { forInstance ->
-            UploadQueue(
-                layout = RemoteLayout(forInstance.backupRoot),
-                pending = database.pendingFor(forInstance.id),
-                cache = database.cacheFor(forInstance.id),
-                source = roll,
-                transport = Always(outcome),
-                directories = { },
-            )
-        }
+        return BackupRun(
+            source = roll,
+            queueFor = { forInstance ->
+                UploadQueue(
+                    layout = RemoteLayout(forInstance.backupRoot),
+                    pending = database.pendingFor(forInstance.id),
+                    cache = database.cacheFor(forInstance.id),
+                    source = roll,
+                    transport = Always(outcome),
+                    directories = { },
+                )
+            },
+            journalFor = { database.journalFor(it.id) },
+        )
     }
 
     @Test

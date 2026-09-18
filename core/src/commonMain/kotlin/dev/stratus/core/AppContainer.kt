@@ -4,6 +4,9 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import dev.stratus.core.backup.AssetSource
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.BackupIndex
+import dev.stratus.core.backup.BackupRun
+import dev.stratus.core.backup.BackupStatus
+import dev.stratus.core.backup.PendingUpload
 import dev.stratus.core.backup.DavDirectoryMaker
 import dev.stratus.core.backup.PutTransport
 import dev.stratus.core.backup.UploadQueue
@@ -51,6 +54,41 @@ class AppContainer(
     )
 
     suspend fun instances(): List<Instance> = instances.all()
+
+    /**
+     * A pass over the camera roll, assembled.
+     *
+     * Built here rather than by each platform's scheduler, so that what a pass
+     * is made of is decided once: the platforms contribute only when it runs.
+     */
+    suspend fun backupRun(): BackupRun {
+        database.migrate()
+        return BackupRun(
+            source = assets,
+            queueFor = { backupQueue(it.id) },
+            journalFor = { database.journalFor(it.id) },
+        )
+    }
+
+    /** What has gone wrong, with what the server said about each. */
+    suspend fun backupFailures(instanceId: String): List<PendingUpload> {
+        database.migrate()
+        return database.pendingFor(instanceId).all().filter { it.lastError != null }
+    }
+
+    /** What to say about the backup, assembled from what the queue actually holds. */
+    val backupStatus: BackupStatus by lazy { BackupStatus(database, assets) }
+
+    /**
+     * Turns backup on or off for one instance.
+     *
+     * Separate from being signed in, because an instance can be worth browsing
+     * without being worth sending a camera roll to.
+     */
+    suspend fun setBackupEnabled(id: String, enabled: Boolean) {
+        val instance = instances.instance(id) ?: return
+        instances.update(instance.copy(backupEnabled = enabled))
+    }
 
     suspend fun current(): Instance? = instances.current()
 
