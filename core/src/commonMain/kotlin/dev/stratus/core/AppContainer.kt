@@ -70,10 +70,10 @@ class AppContainer(
         )
     }
 
-    /** What has gone wrong, with what the server said about each. */
-    suspend fun backupFailures(instanceId: String): List<PendingUpload> {
+    /** What has gone wrong, with what the server said about each, bounded. */
+    suspend fun backupFailures(instanceId: String, limit: Int = 20): List<PendingUpload> {
         database.migrate()
-        return database.pendingFor(instanceId).all().filter { it.lastError != null }
+        return database.pendingFor(instanceId).failures(limit)
     }
 
     /** What to say about the backup, assembled from what the queue actually holds. */

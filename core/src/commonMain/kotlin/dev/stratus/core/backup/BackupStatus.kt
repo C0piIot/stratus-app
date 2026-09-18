@@ -36,8 +36,11 @@ class BackupStatus(
         // Something given up on outranks anything still moving: the rest of the
         // queue draining is no comfort to the photographs that will not go.
         if (summary.givenUp > 0) {
+            // The reason comes out of the same query as the counts. It used to
+            // come from reading every outstanding row for one string, which on a
+            // real camera roll was forty thousand of them every second (#48).
             return BackupState.NeedsYou(
-                AttentionReason.SomethingWillNotSend(pending.all().firstOrNull { it.lastError != null }?.lastError),
+                AttentionReason.SomethingWillNotSend(summary.givenUpDetail),
                 summary.givenUp,
             )
         }

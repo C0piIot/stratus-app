@@ -93,5 +93,5 @@ class BackupRun(
      * "finished" over it would be lying.
      */
     private suspend fun stoppedFrom(queue: UploadQueue): StoppedBecause =
-        if (queue.outstanding().isEmpty()) StoppedBecause.NothingLeft else StoppedBecause.WaitingToRetry
+        if (queue.left() == 0) StoppedBecause.NothingLeft else StoppedBecause.WaitingToRetry
 }
