@@ -109,6 +109,24 @@ jobs:
 
       - run: make device-test
 
+      # Gradle reports a failed instrumented test as a path to an HTML file
+      # inside a container nobody can open. The XML beside it has the reason.
+      - name: What the device tests said
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          for path in glob.glob("core/build/outputs/**/*.xml", recursive=True):
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception:
+                  continue
+              for case in root.iter("testcase"):
+                  for problem in list(case.iter("failure")) + list(case.iter("error")):
+                      print(f"== {case.get('classname')}.{case.get('name')}")
+                      print((problem.text or problem.get("message") or "")[:1200])
+          PY
+
   # iOS, and the reason this job exists before there is any iOS code: nothing
   # else ever links an Apple binary. A dependency published without an iOS
   # artifact configures and compiles happily on Linux and only fails here, so
