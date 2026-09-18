@@ -14,6 +14,25 @@ kotlin {
         namespace = "dev.stratus.core"
         compileSdk = 36
         minSdk = 29
+
+        // The Android halves were compiled and never run. This is the only way
+        // to find out whether a cursor reads what was seeded and whether a
+        // permission state is reported as one.
+        withDeviceTest {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+            // Declared in the build rather than in the CI workflow, so the same
+            // command works on a laptop: AGP downloads the image and runs it.
+            // An atd image because it boots faster and carries nothing a test
+            // of MediaStore needs to see.
+            managedDevices {
+                localDevices.create("emulator") {
+                    device = "Pixel 6"
+                    apiLevel = 34
+                    systemImageSource = "aosp-atd"
+                }
+            }
+        }
     }
 
     iosArm64()
@@ -45,6 +64,15 @@ kotlin {
         }
         // The JVM target ships nowhere, but it needs an engine to run the
         // conformance suite against a real server.
+        // No typed accessor for this one: the device-test source set is created
+        // by withDeviceTest above, after the accessors are generated.
+        getByName("androidDeviceTest").dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.test.rules)
+            implementation(libs.androidx.test.junit)
+        }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
         }

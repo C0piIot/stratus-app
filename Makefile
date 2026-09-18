@@ -51,13 +51,14 @@ GRADLE_CMD = $(if $(wildcard gradlew),./gradlew,gradle)
 
 GRADLE = $(DOCKER_RUN) $(IMAGE) $(GRADLE_CMD) --no-daemon
 
-.PHONY: help doctor toolchain gradle test conformance shell clean
+.PHONY: help doctor toolchain gradle test conformance device-test shell clean
 
 help:
 	@echo "make doctor     check this machine can run the toolchain"
 	@echo "make toolchain  build the toolchain image"
 	@echo "make test       shared tests and the iOS sources, native and fast"
 	@echo "make conformance the same client against a real stratus-backend"
+	@echo "make device-test the Android halves on an emulator AGP downloads"
 	@echo "make gradle ARGS='tasks'"
 	@echo "make shell      a shell inside the toolchain"
 	@echo "make clean      drop caches and build output"
@@ -106,6 +107,12 @@ test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 # happens. See scripts/conformance.sh for why the image is pinned by digest.
 conformance: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	TEST_IMAGE=$(TEST_IMAGE) scripts/conformance.sh
+
+# The one thing that actually runs the Android code rather than compiling it.
+# The emulator wants the host's KVM, and the system image lands in the Gradle
+# cache that is already mounted, so it is downloaded once.
+device-test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
+	$(DOCKER_RUN) --device /dev/kvm $(IMAGE) $(GRADLE_CMD) --no-daemon :core:emulatorAndroidDeviceTest
 
 shell: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(DOCKER_RUN) -it $(IMAGE) bash

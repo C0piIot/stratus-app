@@ -13,6 +13,8 @@ lifecycleRuntime = "2.10.0"
 # Not 1.19: it wants compileSdk 37, which Google has published build-tools for
 # and no platform. Same wall as Compose above; raise both when it appears.
 androidxCore = "1.18.0"
+androidxTest = "1.7.0"
+androidxTestJunit = "1.3.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -26,6 +28,9 @@ androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.r
 xmlutil-core = { module = "io.github.pdvrieze.xmlutil:core", version.ref = "xmlutil" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-core = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTest" }
+androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidxTest" }
+androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestJunit" }
 androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycleRuntime" }
 
 [plugins]
