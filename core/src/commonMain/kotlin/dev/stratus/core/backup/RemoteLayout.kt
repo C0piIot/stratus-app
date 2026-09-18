@@ -19,8 +19,10 @@ class RemoteLayout(root: String = DEFAULT_ROOT) {
     private val root: String = "/" + root.trim('/') + "/"
 
     /** The directory an asset belongs in. Grouped so a listing stays a sane size. */
-    fun directoryFor(asset: Asset): String =
-        "$root${asset.capturedAt.year}/${two(asset.capturedAt.month)}/"
+    fun directoryFor(asset: Asset): String {
+        val at = utcPartsOf(asset.capturedAtEpochMs)
+        return "$root${at.year}/${two(at.month)}/"
+    }
 
     fun pathFor(asset: Asset): String = directoryFor(asset) + nameFor(asset, asset.originalName)
 
@@ -40,7 +42,7 @@ class RemoteLayout(root: String = DEFAULT_ROOT) {
         assets.map(::directoryFor).distinct().sorted()
 
     private fun nameFor(asset: Asset, fileName: String): String {
-        val at = asset.capturedAt
+        val at = utcPartsOf(asset.capturedAtEpochMs)
         val stamp = "${at.year}-${two(at.month)}-${two(at.day)}_" +
             "${two(at.hour)}${two(at.minute)}${two(at.second)}"
         val base = fileName.substringBeforeLast('.', fileName).ifEmpty { "photo" }
@@ -59,9 +61,7 @@ class RemoteLayout(root: String = DEFAULT_ROOT) {
      * is the right answer rather than a collision to be avoided.
      */
     private fun digestOf(asset: Asset): String {
-        val at = asset.capturedAt
-        val material = "${at.year}-${at.month}-${at.day}T${at.hour}:${at.minute}:${at.second}" +
-            "|${asset.originalName}|${asset.sizeBytes}"
+        val material = "${asset.capturedAtEpochMs}|${asset.originalName}|${asset.sizeBytes}"
         var hash = FNV_OFFSET
         for (byte in material.encodeToByteArray()) {
             hash = hash xor (byte.toLong() and 0xFF)

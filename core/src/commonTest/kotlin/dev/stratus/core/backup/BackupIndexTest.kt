@@ -16,7 +16,7 @@ class BackupIndexTest {
     private val layout = RemoteLayout()
 
     private fun asset(
-        at: CaptureTime = CaptureTime(2026, 9, 17, 14, 30, 22),
+        at: Long = utcMillis(2026, 9, 17, 14, 30, 22),
         name: String = "IMG_0001.HEIC",
         size: Long = 4_012_345,
         motion: MotionPart? = null,
@@ -70,8 +70,8 @@ class BackupIndexTest {
 
     @Test
     fun asksOncePerMonthAndNotOncePerPhotograph() = runTest {
-        val september = List(20) { asset(at = CaptureTime(2026, 9, it + 1, 0, 0, 0), name = "IMG_$it.HEIC") }
-        val august = List(20) { asset(at = CaptureTime(2026, 8, it + 1, 0, 0, 0), name = "IMG_$it.HEIC") }
+        val september = List(20) { asset(at = utcMillis(2026, 9, it + 1, 0, 0, 0), name = "IMG_$it.HEIC") }
+        val august = List(20) { asset(at = utcMillis(2026, 8, it + 1, 0, 0, 0), name = "IMG_$it.HEIC") }
         val engine = serverHolding()
         val (index, _) = indexOver(engine)
 

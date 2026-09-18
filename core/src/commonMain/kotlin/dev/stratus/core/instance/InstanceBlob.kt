@@ -12,7 +12,7 @@ import dev.stratus.core.net.Credentials
  * `substring` both use, so a character outside the basic plane survives.
  */
 internal object InstanceBlob {
-    private const val VERSION = "3"
+    private const val VERSION = "4"
 
     fun encode(instance: Instance, credentials: Credentials): String =
         listOf(
@@ -23,6 +23,8 @@ internal object InstanceBlob {
             credentials.password,
             instance.backupRoot,
             if (instance.backupEnabled) "1" else "0",
+            // Newline-joined: a bucket id and an album identifier have none.
+            instance.sources.joinToString("\n"),
         ).joinToString("") { "${it.length}:$it" }
 
     /** Null rather than an exception: an unreadable blob means "sign in again". */
@@ -40,13 +42,14 @@ internal object InstanceBlob {
             fields += text.substring(start, end)
             at = end
         }
-        if (fields.size != 7 || fields[0] != VERSION) return null
+        if (fields.size != 8 || fields[0] != VERSION) return null
         return Instance(
             id = fields[1],
             baseUrl = fields[2],
             username = fields[3],
             backupRoot = fields[5],
             backupEnabled = fields[6] == "1",
+            sources = fields[7].split("\n").filter { it.isNotBlank() }.toSet(),
         ) to Credentials(fields[3], fields[4])
     }
 }

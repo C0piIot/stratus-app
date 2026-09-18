@@ -3,24 +3,6 @@ package dev.stratus.core.backup
 import kotlinx.io.RawSource
 
 /**
- * When a photograph was taken, as the device reports it.
- *
- * Wall-clock with no zone, deliberately. The alternative is converting to UTC,
- * which moves a picture into the previous evening's folder for anybody who
- * shoots after dark east of Greenwich, and changes the answer for the same photo
- * depending on where the phone was when it was asked. What somebody means by
- * "September the 17th" is what the clock said.
- */
-data class CaptureTime(
-    val year: Int,
-    val month: Int,
-    val day: Int,
-    val hour: Int,
-    val minute: Int,
-    val second: Int,
-)
-
-/**
  * One thing in the camera roll.
  *
  * [localId] is whatever the platform calls it and is **never** part of its
@@ -30,7 +12,11 @@ data class CaptureTime(
  */
 data class Asset(
     val localId: String,
-    val capturedAt: CaptureTime,
+    /**
+     * When it was taken, as both platforms report it: milliseconds since the
+     * epoch. Split into a date in UTC by [utcPartsOf], never by a local calendar.
+     */
+    val capturedAtEpochMs: Long,
     val originalName: String,
     val sizeBytes: Long,
     /** The movie half of a Live Photo. Only a Live Photo with it, so they travel together. */
@@ -42,10 +28,40 @@ data class MotionPart(val originalName: String, val sizeBytes: Long)
 /** Which half of an asset. A Live Photo has both; everything else has a still. */
 enum class AssetPart { Still, Motion }
 
+/**
+ * A place photographs come from: a folder on Android, an album on iOS.
+ *
+ * A list of sources rather than a list of paths, because an album has no path
+ * and never will -- that difference is the whole reason this type exists.
+ */
+data class MediaSource(val id: String, val label: String, val count: Int)
+
+/**
+ * How much of the library the platform will let us see.
+ *
+ * [Partial] is real and not a corner: Android 13 and up lets somebody grant a
+ * selection rather than everything, and iOS has done the same for years. Told as
+ * an exception it becomes a backup that reports itself working over a camera
+ * roll it cannot read; told as a state, the screen can say so.
+ */
+enum class MediaAccess { Full, Partial, None }
+
 /** Where the camera roll comes from. Implemented per platform in #19 and #20. */
 interface AssetSource {
-    /** Everything in the sources somebody chose to back up. */
-    suspend fun assets(): List<Asset>
+    suspend fun access(): MediaAccess
+
+    /** What there is to choose from, with how much is in each. */
+    suspend fun sources(): List<MediaSource>
+
+    /**
+     * Everything in the chosen sources.
+     *
+     * [addedAfterEpochMs] is an optimisation and not a rule: it skips re-reading
+     * rows that were already seen, while the cache remains the only authority on
+     * what has actually been uploaded. Getting it wrong costs a slow pass, never
+     * a lost photograph.
+     */
+    suspend fun assets(from: Set<String>, addedAfterEpochMs: Long = 0): List<Asset>
 
     /**
      * The bytes of one part, skipping the first [from] of them.

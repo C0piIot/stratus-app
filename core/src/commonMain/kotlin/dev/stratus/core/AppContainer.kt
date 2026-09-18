@@ -1,6 +1,7 @@
 package dev.stratus.core
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import dev.stratus.core.backup.AssetSource
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.BackupIndex
 import dev.stratus.core.backup.RemoteLayout
@@ -28,6 +29,8 @@ class AppContainer(
     private val secure: SecureStore,
     private val handoff: FileHandoff,
     databasePath: String,
+    /** Where photographs come from on this platform. */
+    val assets: AssetSource,
 ) {
     private val instances = InstanceStore(secure)
 
