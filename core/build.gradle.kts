@@ -58,6 +58,9 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             // FileProvider: a file:// URI has been refused since Android 7.
             implementation(libs.androidx.core)
+            // Scheduling that survives a reboot, and the foreground service that
+            // keeps a transfer alive while it runs.
+            implementation(libs.androidx.work)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -72,6 +75,7 @@ kotlin {
             implementation(libs.androidx.test.runner)
             implementation(libs.androidx.test.rules)
             implementation(libs.androidx.test.junit)
+            implementation(libs.androidx.work.testing)
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

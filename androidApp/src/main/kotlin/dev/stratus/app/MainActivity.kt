@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import dev.stratus.core.appContainer
+import dev.stratus.core.backup.BackupWorker
 import dev.stratus.ui.App
 import dev.stratus.ui.BackRequests
 
@@ -24,6 +25,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        setContent { App(container, back) }
+        // Asks Android to come back every few hours. Idempotent, so doing it on
+        // every launch is how it survives a reinstall or a cleared app.
+        BackupWorker.schedule(applicationContext)
+
+        setContent {
+            App(container, back, onBackUpNow = { BackupWorker.now(applicationContext) })
+        }
     }
 }
