@@ -78,8 +78,18 @@ class AndroidAssetSourceTest {
         val bucket = source.sources().single { it.label == folder }.id
         val assets = source.assets(setOf(bucket))
 
-        assertEquals(listOf("two.jpg", "one.jpg"), assets.map { it.originalName })
-        assertEquals(utcMillisFor(2026, 9, 18, 11), assets.first().capturedAtEpochMs)
+        // Contents and timestamps, not order: both rows were added in the same
+        // second, so DATE_ADDED ties and what comes back first is arbitrary. The
+        // order that matters is the queue's, and that is a unit test.
+        assertEquals(setOf("one.jpg", "two.jpg"), assets.map { it.originalName }.toSet())
+        assertEquals(
+            utcMillisFor(2026, 9, 18, 11),
+            assets.single { it.originalName == "two.jpg" }.capturedAtEpochMs,
+        )
+        assertEquals(
+            utcMillisFor(2026, 9, 18, 10),
+            assets.single { it.originalName == "one.jpg" }.capturedAtEpochMs,
+        )
         assertTrue(assets.all { it.sizeBytes == 16L }, assets.map { it.sizeBytes }.toString())
     }
 
