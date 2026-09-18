@@ -149,11 +149,12 @@ otherwise dismiss the screen having proved nothing about the password.
 **The browser is WebDAV verbs, and inherits their limits.** Browse is `PROPFIND`,
 download is `GET`, rename is `MOVE`, delete is `DELETE` -- all standard, all
 working against any server, no exception needed to the rule above. But the limits
-come along: `internal/files` in the backend says plainly that Move "renames a
-file or an empty directory", so **renaming a folder with anything in it fails**,
-and it will keep failing until moving a directory stops meaning rewriting every
-path beneath it. The app should say that, in those words. A generic failure here
-reads as a broken app rather than a server that cannot do it yet. Deleting a full
+come along, and one of them is worth keeping even after it stopped applying here:
+**a server that refuses to rename a folder with anything in it must be explained
+in those words**, because a generic failure reads as a broken app rather than a
+server that cannot do it. Stratus refused exactly that until it learned to
+rewrite every path beneath a directory; plenty of WebDAV servers still refuse, so
+the message stays and the conformance suite now pins the rename working. Deleting a full
 folder does work, and there is no trash anywhere in Stratus, so deletion asks
 first -- the same bargain the web UI already makes.
 
@@ -202,8 +203,10 @@ What it buys, in descending order of how much of the app it covers:
   way to know the client works against the server rather than against our
   assumptions about it. The backend already asserts its own container from the
   outside; this is the same habit from the other end. Server limitations get
-  pinned here too -- a test that a non-empty folder rename is refused is what
-  will tell us the day it stops being.
+  pinned here too, as tests that assert the limitation and are meant to fail the
+  day it lifts. Two have: a `Depth: 1` PROPFIND omitting the collection itself,
+  and a non-empty folder rename being refused. Both pins became guarantees, which
+  is the argument for writing them rather than leaving a limitation undescribed.
 - **Android instrumented tests on an emulator**, on the ubuntu runner, only where
   the platform API is the thing under test: media enumeration, permissions, the
   foreground service surviving what Android does to it.
@@ -347,10 +350,16 @@ no test can watch it. So it decides nothing, and all of this lives in
 - **A second look at the camera roll must not restart a large video**, which is
   why enqueuing ignores what is already queued rather than replacing it.
 
-The transport interface is shaped around "ask where you got to and continue"
-even though `PUT` -- the only implementation today -- cannot do it. Writing it
-around `PUT` would mean rewriting the queue the day tus arrives rather than
-adding to it.
+The transport interface is shaped around "ask where you got to and continue",
+which `PUT` cannot do and tus can. It was written that way while `PUT` was the
+only implementation, and tus arrived as a second `Transport` plus a negotiation
+-- no change to the queue, which is what that shape was for.
+
+**Negotiation is per pass, not per install.** `OPTIONS` on the origin's `/tus/`
+once per backup run, and `Tus-Resumable` in the reply is the whole test; anything
+else means `PUT`. Remembering the answer would mean a server that gained or lost
+tus keeps being addressed the old way until something clears a cache, and one
+request per pass is not worth that.
 
 ## Where credentials live
 
