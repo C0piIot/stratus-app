@@ -9,10 +9,10 @@ same rule: it talks **standard WebDAV**, so it works against any WebDAV server �
 Stratus, Nextcloud, a box running rclone serve — and it never calls anything
 private to Stratus.
 
-> **Early.** You can sign in to a server, walk its files, and on Android a
-> backup runs in the background. There is no screen yet that tells you whether it
-> is working, and nothing to choose *what* gets backed up — both are next. On iOS
-> the photo library is not wired up at all. The sections below describe what it is
+> **Early.** You can sign in to a server, walk its files, turn backup on for it,
+> and see what the backup is doing. On Android it runs in the background; on iOS
+> the photo library is not wired up at all, so there is nothing to send. Choosing
+> *which* folders is next — until then an enabled server gets the whole roll. The sections below describe what it is
 > meant to be; this warning shrinks as that stops being aspirational.
 
 ## Why it exists

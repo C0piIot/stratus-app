@@ -14,6 +14,16 @@ private inline fun <T> SQLiteStatement.use(block: (SQLiteStatement) -> T): T =
         close()
     }
 
+/** Everything outstanding, counted in one query rather than by reading it all. */
+data class PendingSummary(
+    val total: Int,
+    /** Given up on: a permanent failure, which will never be picked up again. */
+    val givenUp: Int,
+    val bytesLeft: Long,
+    /** When the earliest waiting item becomes runnable, or null if one already is. */
+    val nextAttemptAt: Long?,
+)
+
 /** One outstanding piece of work: one part of one asset, for one instance. */
 data class PendingUpload(
     val path: String,
@@ -136,6 +146,36 @@ class PendingStore(
         found
     }
 
+    /**
+     * The whole outstanding picture in one query.
+     *
+     * Counted here rather than by reading every row, because the status strip
+     * asks this every second while somebody is looking at it and there may be
+     * forty thousand rows behind the answer.
+     */
+    suspend fun summary(now: Long): PendingSummary = withContext(io) {
+        connection.prepare(
+            """
+            SELECT COUNT(*),
+                   SUM(CASE WHEN next_at >= ? THEN 1 ELSE 0 END),
+                   COALESCE(SUM(size - offset_at), 0),
+                   MIN(CASE WHEN next_at < ? THEN next_at ELSE NULL END)
+            FROM pending WHERE instance = ?
+            """.trimIndent(),
+        ).use { statement ->
+            statement.bindLong(1, NEVER)
+            statement.bindLong(2, NEVER)
+            statement.bindText(3, instanceId)
+            if (!statement.step()) return@withContext PendingSummary(0, 0, 0, null)
+            PendingSummary(
+                total = statement.getInt(0),
+                givenUp = statement.getInt(1),
+                bytesLeft = statement.getLong(2),
+                nextAttemptAt = if (statement.isNull(3)) null else statement.getLong(3).takeIf { it > now },
+            )
+        }
+    }
+
     suspend fun size(): Long = withContext(io) {
         connection.prepare("SELECT COUNT(*) FROM pending WHERE instance = ?").use { statement ->
             statement.bindText(1, instanceId)
@@ -155,4 +195,9 @@ class PendingStore(
         attempts = statement.getInt(8),
         lastError = if (statement.isNull(9)) null else statement.getText(9),
     )
+
+    private companion object {
+        /** The marker the queue writes for work it will not try again. */
+        const val NEVER = Long.MAX_VALUE
+    }
 }

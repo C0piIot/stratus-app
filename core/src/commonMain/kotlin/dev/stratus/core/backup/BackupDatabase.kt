@@ -30,6 +30,8 @@ class BackupDatabase(
 
     fun pendingFor(instanceId: String): PendingStore = PendingStore(connection, instanceId, io)
 
+    fun journalFor(instanceId: String): BackupJournal = BackupJournal(connection, instanceId, io)
+
     /**
      * Brings the file up to the current schema.
      *
@@ -85,11 +87,31 @@ class BackupDatabase(
             )
             connection.execSQL("PRAGMA user_version = 2")
         }
+        if (version() < 3) {
+            // What a pass did, so a screen can tell "stopped" from "broken".
+            // Nothing here is a source of truth about work outstanding -- that
+            // is `pending`, and a second count would eventually disagree with it.
+            connection.execSQL(
+                """
+                CREATE TABLE journal (
+                    instance     TEXT PRIMARY KEY,
+                    running      INTEGER NOT NULL DEFAULT 0,
+                    started_at   INTEGER NOT NULL DEFAULT 0,
+                    finished_at  INTEGER NOT NULL DEFAULT 0,
+                    outcome      TEXT,
+                    uploaded     INTEGER NOT NULL DEFAULT 0,
+                    failed       INTEGER NOT NULL DEFAULT 0,
+                    current_path TEXT
+                )
+                """.trimIndent(),
+            )
+            connection.execSQL("PRAGMA user_version = 3")
+        }
     }
 
     /** Drops everything an instance knew, for when it is forgotten. */
     suspend fun forget(instanceId: String) = withContext(io) {
-        for (table in listOf("uploaded", "pending")) {
+        for (table in listOf("uploaded", "pending", "journal")) {
             connection.prepare("DELETE FROM $table WHERE instance = ?").use { statement ->
                 statement.bindText(1, instanceId)
                 statement.step()
