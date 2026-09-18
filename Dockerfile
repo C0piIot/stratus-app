@@ -33,6 +33,17 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl unzip git \
     && rm -rf /var/lib/apt/lists/*
 
+# What the emulator needs to start. It is a desktop application even headless,
+# and a missing library here does not produce an error -- it produces
+# "Unable to start Android emulator ... Error message from emulator process = []",
+# which is an afternoon if nobody wrote this down.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpulse0 libnss3 libnspr4 libasound2t64 \
+        libx11-6 libxcomposite1 libxcursor1 libxdamage1 libxi6 libxtst6 libxrandr2 \
+        libgl1 libglu1-mesa libdbus-1-3 libatk1.0-0t64 libxkbcommon0 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN set -eu; \
     curl -fsSL -o /tmp/tools.zip \
       "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS}_latest.zip"; \

@@ -77,6 +77,38 @@ jobs:
 
       - run: make gradle ARGS="assemble --stacktrace"
 
+  # The Android code, actually running. Until this existed CI compiled it and
+  # nothing more, which for a cursor over MediaStore and a permission state is
+  # the same as not testing it at all.
+  device:
+    name: android device tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: docker/setup-buildx-action@v4.4.0
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: .cache/gradle
+          key: gradle-device-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+          restore-keys: gradle-device-
+
+      # The runner has KVM but not permission to use it, and an emulator without
+      # it is too slow to finish inside any sensible timeout.
+      - name: Let the emulator reach KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build the toolchain image
+        run: make toolchain BUILD_CACHE="--cache-from type=gha --cache-to type=gha,mode=max --load"
+
+      - run: make device-test
+
   # iOS, and the reason this job exists before there is any iOS code: nothing
   # else ever links an Apple binary. A dependency published without an iOS
   # artifact configures and compiles happily on Linux and only fails here, so
