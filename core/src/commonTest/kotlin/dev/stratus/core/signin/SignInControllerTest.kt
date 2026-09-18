@@ -4,8 +4,8 @@ import dev.stratus.core.net.Candidate
 import dev.stratus.core.net.Credentials
 import dev.stratus.core.net.ProbeOutcome
 import dev.stratus.core.net.Prober
+import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.store.ConsentStore
-import dev.stratus.core.store.CredentialStore
 import dev.stratus.core.store.SecureStore
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -37,7 +37,7 @@ class SignInControllerTest {
         scope: TestScope,
         store: MemoryStore = MemoryStore(),
         prober: ScriptedProber,
-    ) = SignInController(prober, CredentialStore(store), ConsentStore(store), scope) to store
+    ) = SignInController(prober, InstanceStore(store), ConsentStore(store), scope, mintId = { "fixed-id" }) to store
 
     @Test
     fun storesTheSessionOnceItIsProved() = runTest {
@@ -48,9 +48,9 @@ class SignInControllerTest {
         testScheduler.advanceUntilIdle()
 
         assertTrue(signIn.state.value is SignInState.Done)
-        assertTrue(store.values.containsKey("session"), "nothing was stored")
+        assertTrue(store.values.keys.any { it.startsWith("instance/") }, "nothing was stored")
         // Stored, but never in a form that reads as a password at a glance.
-        assertTrue(store.values.getValue("session").contains("secret"))
+        assertTrue(store.values.getValue("instance/fixed-id").contains("secret"))
     }
 
     @Test
@@ -67,7 +67,7 @@ class SignInControllerTest {
         testScheduler.advanceUntilIdle()
 
         assertEquals(listOf("/dav/", "/"), prober.asked.map { it.first.path })
-        assertEquals("https://host/", (signIn.state.value as SignInState.Done).session.baseUrl)
+        assertEquals("https://host/", (signIn.state.value as SignInState.Done).baseUrl)
     }
 
     @Test
@@ -97,15 +97,23 @@ class SignInControllerTest {
     }
 
     @Test
-    fun signingOutLeavesNothingBehind() = runTest {
-        val prober = ScriptedProber(mutableListOf({ ProbeOutcome.IsWebDav(it) }))
-        val (signIn, store) = controller(this, prober = prober)
-        signIn.submit(form)
+    fun addsAnInstanceRatherThanReplacingTheOneThereIs() = runTest {
+        val store = MemoryStore()
+        var minted = 0
+        val prober = ScriptedProber(mutableListOf({ ProbeOutcome.IsWebDav(it) }, { ProbeOutcome.IsWebDav(it) }))
+        val instances = InstanceStore(store)
+        val signIn = SignInController(
+            prober, instances, ConsentStore(store), this, mintId = { "id-" + minted++ },
+        )
+
+        signIn.submit(form.copy(address = "https://one"))
+        testScheduler.advanceUntilIdle()
+        signIn.submit(form.copy(address = "https://two"))
         testScheduler.advanceUntilIdle()
 
-        signIn.signOut()
-        assertEquals(SignInState.Idle, signIn.state.value)
-        assertNull(store.values["session"])
+        // Both kept, and the second is the one being looked at.
+        assertEquals(listOf("id-0", "id-1"), instances.ids())
+        assertEquals("id-1", instances.currentId())
     }
 
     @Test

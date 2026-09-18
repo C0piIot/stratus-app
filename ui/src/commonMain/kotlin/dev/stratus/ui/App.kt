@@ -29,7 +29,7 @@ fun App(container: AppContainer, back: BackRequests = BackRequests()) {
         when (val current = state) {
             is SignInState.Done -> {
                 var browser by remember { mutableStateOf<BrowserController?>(null) }
-                LaunchedEffect(current.session.baseUrl) {
+                LaunchedEffect(current.baseUrl) {
                     browser = container.browser(scope)?.also { it.start() }
                 }
 
@@ -39,7 +39,18 @@ fun App(container: AppContainer, back: BackRequests = BackRequests()) {
                         back.onBack = { open.goUp() }
                         onDispose { back.onBack = null }
                     }
-                    BrowserScreen(open, onSignOut = { scope.launch { signIn.signOut() } })
+                    BrowserScreen(
+                        open,
+                        // Forgetting an instance is two things -- the record and
+                        // its cached rows -- and the container owns both. The
+                        // controller then reads back whatever is left.
+                        onSignOut = {
+                            scope.launch {
+                                container.current()?.let { container.forget(it.id) }
+                                signIn.restore()
+                            }
+                        },
+                    )
                 }
             }
 

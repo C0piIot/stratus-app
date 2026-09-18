@@ -7,8 +7,8 @@ import dev.stratus.core.signin.SignInController
 import dev.stratus.core.signin.SignInFailure
 import dev.stratus.core.signin.SignInForm
 import dev.stratus.core.signin.SignInState
+import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.store.ConsentStore
-import dev.stratus.core.store.CredentialStore
 import dev.stratus.core.store.InMemorySecureStore
 import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.CoroutineScope
@@ -41,7 +41,7 @@ class SignInConformanceTest {
         val secure = InMemorySecureStore()
         return SignInController(
             prober = DavProber { credentials -> stratusHttpClient(CIO.create(), credentials) },
-            credentials = CredentialStore(secure),
+            instances = InstanceStore(secure),
             consent = ConsentStore(secure),
             scope = scope,
         )
@@ -67,7 +67,7 @@ class SignInConformanceTest {
 
         val done = signIn.awaitOutcome()
         assertTrue(done is SignInState.Done, "was $done")
-        assertEquals("http://$hostAndPort/dav/", done.session.baseUrl)
+        assertEquals("http://$hostAndPort/dav/", done.baseUrl)
     }
 
     @Test

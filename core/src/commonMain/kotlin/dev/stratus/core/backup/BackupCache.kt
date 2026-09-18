@@ -28,30 +28,22 @@ data class RemoteEntry(val path: String, val etag: String?, val size: Long?)
  */
 class BackupCache(
     private val connection: SQLiteConnection,
+    private val instanceId: String,
     private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
-    suspend fun migrate() = withContext(io) {
-        connection.execSQL(
-            """
-            CREATE TABLE IF NOT EXISTS uploaded (
-                path    TEXT PRIMARY KEY,
-                etag    TEXT,
-                size    INTEGER
-            )
-            """.trimIndent(),
-        )
-    }
 
     suspend fun has(path: String): Boolean = withContext(io) {
-        connection.prepare("SELECT 1 FROM uploaded WHERE path = ?").use { statement ->
-            statement.bindText(1, path)
+        connection.prepare("SELECT 1 FROM uploaded WHERE instance = ? AND path = ?").use { statement ->
+            statement.bindText(1, instanceId)
+            statement.bindText(2, path)
             statement.step()
         }
     }
 
     suspend fun entry(path: String): RemoteEntry? = withContext(io) {
-        connection.prepare("SELECT path, etag, size FROM uploaded WHERE path = ?").use { statement ->
-            statement.bindText(1, path)
+        connection.prepare("SELECT path, etag, size FROM uploaded WHERE instance = ? AND path = ?").use { statement ->
+            statement.bindText(1, instanceId)
+            statement.bindText(2, path)
             if (!statement.step()) return@withContext null
             RemoteEntry(
                 path = statement.getText(0),
@@ -61,20 +53,12 @@ class BackupCache(
         }
     }
 
-    suspend fun record(entry: RemoteEntry) = withContext(io) {
-        connection.prepare("INSERT OR REPLACE INTO uploaded (path, etag, size) VALUES (?, ?, ?)")
-            .use { statement ->
-                statement.bindText(1, entry.path)
-                if (entry.etag == null) statement.bindNull(2) else statement.bindText(2, entry.etag)
-                if (entry.size == null) statement.bindNull(3) else statement.bindLong(3, entry.size)
-                statement.step()
-            }
-        Unit
-    }
+    suspend fun record(entry: RemoteEntry) = withContext(io) { recordIn(entry) }
 
     suspend fun forget(path: String) = withContext(io) {
-        connection.prepare("DELETE FROM uploaded WHERE path = ?").use { statement ->
-            statement.bindText(1, path)
+        connection.prepare("DELETE FROM uploaded WHERE instance = ? AND path = ?").use { statement ->
+            statement.bindText(1, instanceId)
+            statement.bindText(2, path)
             statement.step()
         }
         Unit
@@ -90,7 +74,7 @@ class BackupCache(
     suspend fun replaceAll(entries: List<RemoteEntry>) = withContext(io) {
         connection.execSQL("BEGIN")
         try {
-            connection.execSQL("DELETE FROM uploaded")
+            deleteEverythingForThisInstance()
             for (entry in entries) recordIn(entry)
             connection.execSQL("COMMIT")
         } catch (e: Throwable) {
@@ -107,25 +91,35 @@ class BackupCache(
      */
     suspend fun paths(): Set<String> = withContext(io) {
         val found = mutableSetOf<String>()
-        connection.prepare("SELECT path FROM uploaded").use { statement ->
+        connection.prepare("SELECT path FROM uploaded WHERE instance = ?").use { statement ->
+            statement.bindText(1, instanceId)
             while (statement.step()) found += statement.getText(0)
         }
         found
     }
 
     suspend fun size(): Long = withContext(io) {
-        connection.prepare("SELECT COUNT(*) FROM uploaded").use { statement ->
+        connection.prepare("SELECT COUNT(*) FROM uploaded WHERE instance = ?").use { statement ->
+            statement.bindText(1, instanceId)
             if (statement.step()) statement.getLong(0) else 0L
         }
     }
 
     private fun recordIn(entry: RemoteEntry) {
-        connection.prepare("INSERT OR REPLACE INTO uploaded (path, etag, size) VALUES (?, ?, ?)")
+        connection.prepare("INSERT OR REPLACE INTO uploaded (instance, path, etag, size) VALUES (?, ?, ?, ?)")
             .use { statement ->
-                statement.bindText(1, entry.path)
-                if (entry.etag == null) statement.bindNull(2) else statement.bindText(2, entry.etag)
-                if (entry.size == null) statement.bindNull(3) else statement.bindLong(3, entry.size)
+                statement.bindText(1, instanceId)
+                statement.bindText(2, entry.path)
+                if (entry.etag == null) statement.bindNull(3) else statement.bindText(3, entry.etag)
+                if (entry.size == null) statement.bindNull(4) else statement.bindLong(4, entry.size)
                 statement.step()
             }
+    }
+
+    private fun deleteEverythingForThisInstance() {
+        connection.prepare("DELETE FROM uploaded WHERE instance = ?").use { statement ->
+            statement.bindText(1, instanceId)
+            statement.step()
+        }
     }
 }

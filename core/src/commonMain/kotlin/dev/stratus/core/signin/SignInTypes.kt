@@ -9,19 +9,6 @@ import dev.stratus.core.net.ServerAddress
 
 data class SignInForm(val address: String, val username: String, val password: String)
 
-/**
- * What the app connected to, and everything after sign-in needs.
- *
- * [backupRoot] is stored rather than hardcoded even though nothing sets it yet:
- * moving it later relocates somebody's whole library, so it should never be a
- * constant that somebody tidies up.
- */
-data class Session(
-    val baseUrl: String,
-    val username: String,
-    val backupRoot: String = "Photos",
-)
-
 /** Something only the person at the keyboard can decide. */
 sealed interface Question {
     /**
@@ -79,7 +66,8 @@ sealed interface SignInState {
     ) : SignInState
 
     data class Failed(val reason: SignInFailure) : SignInState
-    data class Done(val session: Session) : SignInState
+    /** Signed in. The record of it is the controller's to make and to keep. */
+    data class Done(val baseUrl: String) : SignInState
 }
 
 sealed interface SignInEvent {
@@ -93,7 +81,7 @@ sealed interface SignInEvent {
 sealed interface SignInEffect {
     data class Probe(val attempt: Candidate, val credentials: Credentials?) : SignInEffect
     data class RememberConsent(val host: String) : SignInEffect
-    data class Store(val session: Session, val credentials: Credentials) : SignInEffect
+    data class Store(val baseUrl: String, val credentials: Credentials) : SignInEffect
 }
 
 data class Step(val state: SignInState, val effects: List<SignInEffect> = emptyList())

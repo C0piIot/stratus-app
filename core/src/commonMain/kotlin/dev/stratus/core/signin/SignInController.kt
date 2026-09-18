@@ -1,8 +1,10 @@
 package dev.stratus.core.signin
 
+import dev.stratus.core.instance.Instance
+import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.instance.newInstanceId
 import dev.stratus.core.net.Prober
 import dev.stratus.core.store.ConsentStore
-import dev.stratus.core.store.CredentialStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,25 +16,34 @@ import kotlinx.coroutines.launch
  * Drives [SignInMachine] and performs what it asks for.
  *
  * A plain class rather than an androidx `ViewModel`: it needs no lifecycle
- * dependency, and it lives in `:core` where the JVM target can test it. A
- * `ViewModel` in `:ui` would be neither.
+ * dependency, and it lives in `:core` where the JVM target can test it.
+ *
+ * Signing in **adds** an instance rather than replacing the one there, which is
+ * the whole difference between one server and several.
  */
 class SignInController(
     private val prober: Prober,
-    private val credentials: CredentialStore,
+    private val instances: InstanceStore,
     private val consent: ConsentStore,
     private val scope: CoroutineScope,
+    // Injected so a test can assert on a whole stored record. Minting it here
+    // rather than in the machine is what keeps the machine a pure function.
+    private val mintId: () -> String = ::newInstanceId,
 ) {
     private val mutable = MutableStateFlow<SignInState>(SignInState.Idle)
     val state: StateFlow<SignInState> = mutable.asStateFlow()
 
     private var running: Job? = null
 
-    /** Picks up a session from a previous run, if there is one. */
-    suspend fun restore(): Session? {
-        val stored = credentials.load() ?: return null
-        mutable.value = SignInState.Done(stored.first)
-        return stored.first
+    /**
+     * Reads the state back out of storage: which instance is being looked at, or
+     * none. Called at startup and after anything that adds or forgets one, so
+     * there is a single way for the screen to learn what is true.
+     */
+    suspend fun restore(): Instance? {
+        val instance = instances.current()
+        mutable.value = instance?.let { SignInState.Done(it.baseUrl) } ?: SignInState.Idle
+        return instance
     }
 
     fun submit(form: SignInForm) {
@@ -52,12 +63,6 @@ class SignInController(
         mutable.value = SignInMachine.next(mutable.value, SignInEvent.Cancelled).state
     }
 
-    suspend fun signOut() {
-        running?.cancel()
-        credentials.clear()
-        mutable.value = SignInState.Idle
-    }
-
     private suspend fun advance(event: SignInEvent) {
         val step = SignInMachine.next(mutable.value, event)
         mutable.value = step.state
@@ -66,13 +71,19 @@ class SignInController(
 
     private suspend fun perform(effect: SignInEffect) {
         when (effect) {
-            // The result comes straight back in as the next event, so the machine
-            // decides what a probe meant and this only carries messages.
             is SignInEffect.Probe ->
                 advance(SignInEvent.Attempted(prober.probe(effect.attempt, effect.credentials)))
 
             is SignInEffect.RememberConsent -> consent.remember(effect.host)
-            is SignInEffect.Store -> credentials.save(effect.session, effect.credentials)
+
+            is SignInEffect.Store -> instances.put(
+                Instance(
+                    id = mintId(),
+                    baseUrl = effect.baseUrl,
+                    username = effect.credentials.username,
+                ),
+                effect.credentials,
+            )
         }
     }
 }

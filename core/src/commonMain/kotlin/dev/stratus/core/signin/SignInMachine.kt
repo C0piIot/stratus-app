@@ -100,8 +100,10 @@ object SignInMachine {
 
         return when (outcome) {
             is ProbeOutcome.IsWebDav -> {
-                val session = Session(attempt.baseUrl, plan.credentials.username)
-                Step(SignInState.Done(session), listOf(SignInEffect.Store(session, plan.credentials)))
+                Step(
+                    SignInState.Done(attempt.baseUrl),
+                    listOf(SignInEffect.Store(attempt.baseUrl, plan.credentials)),
+                )
             }
 
             // Wrong credentials are wrong at every path, so the rest of the queue

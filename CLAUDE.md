@@ -298,11 +298,39 @@ way. `configure` must succeed everywhere so that shared code, JVM tests and
 linting work on any machine, and let the iOS link step be the only thing that
 demands a Mac.
 
+## More than one Stratus
+
+The app holds **several instances** and somebody switches between them, and the
+backup reaches every instance they mark rather than only the one they are looking
+at -- a camera roll that ends up on the NAS at home *and* on the VPS, which is
+the only redundancy a self-hosted backup can offer.
+
+Two consequences that decide code rather than merely describing it.
+
+**An instance is identified by a generated opaque id, never by its address.**
+Somebody who moves their server to a new domain still has the same instance and
+its backup history has to follow them there. Identity by URL is free today and a
+migration with real photographs behind it later.
+
+**The unit of backup work is a (photograph, instance) pair, not a photograph.**
+One asset with two destinations is two pieces of work that succeed and fail
+independently: an instance that is down must not hold up the other. The bytes are
+read once per destination, because two servers cannot share one upload stream and
+keeping a four-gigabyte video in a temporary file to avoid a second read from the
+photo library is the worse trade on a phone.
+
+Everything cached about the server is keyed by that id, and a rebuild stops at
+its own rows. Plaintext consent is the deliberate exception: it is keyed by
+**host**, because the risk belongs to the machine at the other end and two
+instances on the same host share the answer with good reason.
+
 ## Where credentials live
 
 **Credentials live in the Keychain on iOS and under an Android Keystore key on
 Android**, behind a `SecureStore` interface narrow enough to fake -- "put this
-string somewhere safe and give it back". Two choices inside that are this app's
+string somewhere safe and give it back". One record per instance over that same
+interface, which is why holding several cost no platform code at all: the two
+halves that CI cannot test did not have to change. Two choices inside that are this app's
 purpose talking rather than defaults: the Keychain item is
 `kSecAttrAccessibleAfterFirstUnlock` and the Keystore key requires no user
 authentication, because uploads run while the phone is locked on a charger
