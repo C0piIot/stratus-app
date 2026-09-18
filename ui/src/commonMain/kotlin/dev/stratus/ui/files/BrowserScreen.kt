@@ -34,7 +34,7 @@ import dev.stratus.core.files.Confirmation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BrowserScreen(controller: BrowserController, onSignOut: () -> Unit) {
+fun BrowserScreen(controller: BrowserController, onOpenServers: () -> Unit) {
     val state by controller.state.collectAsState()
 
     Scaffold(
@@ -44,8 +44,7 @@ fun BrowserScreen(controller: BrowserController, onSignOut: () -> Unit) {
                 navigationIcon = {
                     if (state.path != "/") TextButton(onClick = { controller.goUp() }) { Text("Up") }
                 },
-                // Temporary: the menu in #22 is where signing out belongs.
-                actions = { TextButton(onClick = onSignOut) { Text("Sign out") } },
+                actions = { TextButton(onClick = onOpenServers) { Text("Servers") } },
             )
         },
     ) { padding ->

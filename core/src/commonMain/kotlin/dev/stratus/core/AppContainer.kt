@@ -90,6 +90,25 @@ class AppContainer(
         instances.update(instance.copy(backupEnabled = enabled))
     }
 
+    /**
+     * Which sources feed this instance.
+     *
+     * **Empty means every source**, and that is the only meaning it has: to back
+     * up nothing, turn backup off. The screen offering the choice is what keeps
+     * the other reading -- "chosen: none" -- from being representable at all,
+     * because a set that meant both would be a rule somebody eventually breaks.
+     */
+    suspend fun setSources(id: String, sources: Set<String>) {
+        val instance = instances.instance(id) ?: return
+        instances.update(instance.copy(sources = sources))
+    }
+
+    /** What there is to choose from on this platform, with how much is in each. */
+    suspend fun availableSources() = assets.sources()
+
+    /** Whether the photo library can be read at all, which decides what to say. */
+    suspend fun libraryAccess() = assets.access()
+
     suspend fun current(): Instance? = instances.current()
 
     suspend fun switchTo(id: String) = instances.switchTo(id)
