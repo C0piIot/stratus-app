@@ -12,7 +12,7 @@ class RemoteLayoutTest {
 
     private fun asset(
         localId: String = "local-1",
-        at: CaptureTime = CaptureTime(2026, 9, 17, 14, 30, 22),
+        at: Long = utcMillis(2026, 9, 17, 14, 30, 22),
         name: String = "IMG_0001.HEIC",
         size: Long = 4_012_345,
         motion: MotionPart? = null,
@@ -25,7 +25,7 @@ class RemoteLayoutTest {
         // as the whole camera roll going up a second time. It should take a
         // failing test and a deliberate answer, never a tidy-up.
         assertEquals(
-            "/Photos/2026/09/2026-09-17_143022_IMG_0001.fe038252.heic",
+            "/Photos/2026/09/2026-09-17_143022_IMG_0001.474bfe2d.heic",
             layout.pathFor(asset()),
         )
     }
@@ -57,8 +57,8 @@ class RemoteLayoutTest {
 
     @Test
     fun separatesTheSameNameTakenInDifferentSeconds() {
-        val morning = asset(at = CaptureTime(2026, 9, 17, 9, 0, 1))
-        val evening = asset(at = CaptureTime(2026, 9, 17, 21, 0, 1))
+        val morning = asset(at = utcMillis(2026, 9, 17, 9, 0, 1))
+        val evening = asset(at = utcMillis(2026, 9, 17, 21, 0, 1))
         assertNotEquals(layout.pathFor(morning), layout.pathFor(evening))
         assertEquals(layout.directoryFor(morning), layout.directoryFor(evening))
     }
@@ -72,7 +72,7 @@ class RemoteLayoutTest {
 
     @Test
     fun padsTheDateSoFoldersAndNamesSort() {
-        val january = asset(at = CaptureTime(2026, 1, 2, 3, 4, 5))
+        val january = asset(at = utcMillis(2026, 1, 2, 3, 4, 5))
         assertTrue(layout.directoryFor(january).endsWith("/2026/01/"), layout.directoryFor(january))
         assertTrue(layout.pathFor(january).contains("2026-01-02_030405_"), layout.pathFor(january))
     }
@@ -110,9 +110,9 @@ class RemoteLayoutTest {
     @Test
     fun namesEveryFolderARebuildHasToWalk() {
         val assets = listOf(
-            asset(at = CaptureTime(2026, 9, 1, 0, 0, 0)),
-            asset(at = CaptureTime(2026, 9, 30, 0, 0, 0)),
-            asset(at = CaptureTime(2025, 12, 25, 0, 0, 0)),
+            asset(at = utcMillis(2026, 9, 1, 0, 0, 0)),
+            asset(at = utcMillis(2026, 9, 30, 0, 0, 0)),
+            asset(at = utcMillis(2025, 12, 25, 0, 0, 0)),
         )
         // One request per month rather than one per photograph: ten years of
         // pictures is a hundred and twenty listings, paid once on a reinstall.

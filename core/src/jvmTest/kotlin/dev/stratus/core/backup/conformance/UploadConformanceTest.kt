@@ -5,7 +5,9 @@ import dev.stratus.core.backup.Asset
 import dev.stratus.core.backup.AssetPart
 import dev.stratus.core.backup.AssetSource
 import dev.stratus.core.backup.BackupDatabase
-import dev.stratus.core.backup.CaptureTime
+import dev.stratus.core.backup.MediaAccess
+import dev.stratus.core.backup.MediaSource
+import dev.stratus.core.backup.utcMillis
 import dev.stratus.core.backup.DavDirectoryMaker
 import dev.stratus.core.backup.PutTransport
 import dev.stratus.core.backup.QueueStep
@@ -55,10 +57,12 @@ class UploadConformanceTest {
     // A megabyte, so the body goes out in chunks rather than in one write.
     private val bytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
 
-    private val asset = Asset("local-1", CaptureTime(2026, 9, 18, 9, 30, 0), "IMG_1.HEIC", bytes.size.toLong())
+    private val asset = Asset("local-1", utcMillis(2026, 9, 18, 9, 30, 0), "IMG_1.HEIC", bytes.size.toLong())
 
     private val source = object : AssetSource {
-        override suspend fun assets() = listOf(asset)
+        override suspend fun access() = MediaAccess.Full
+        override suspend fun sources() = emptyList<MediaSource>()
+        override suspend fun assets(from: Set<String>, addedAfterEpochMs: Long) = listOf(asset)
         override suspend fun open(localId: String, part: AssetPart, from: Long): RawSource =
             Buffer().apply { write(bytes, from.toInt(), bytes.size) }
     }

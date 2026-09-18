@@ -1,5 +1,6 @@
 package dev.stratus.core
 
+import dev.stratus.core.backup.IosAssetSource
 import dev.stratus.core.files.IosFileHandoff
 import dev.stratus.core.store.KeychainSecureStore
 import io.ktor.client.engine.darwin.Darwin
@@ -14,6 +15,7 @@ fun appContainer(): AppContainer = AppContainer(
     secure = KeychainSecureStore(),
     handoff = IosFileHandoff(),
     databasePath = databasePath(),
+    assets = IosAssetSource(),
 )
 
 /**

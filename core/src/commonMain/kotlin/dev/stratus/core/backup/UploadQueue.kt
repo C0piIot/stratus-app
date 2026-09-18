@@ -139,11 +139,7 @@ class UploadQueue(
     }
 
     /** Sortable, so "newest first" is an index scan rather than a decode. */
-    private fun stampOf(asset: Asset): String {
-        val at = asset.capturedAt
-        fun two(v: Int) = v.toString().padStart(2, '0')
-        return "${at.year}-${two(at.month)}-${two(at.day)}T${two(at.hour)}${two(at.minute)}${two(at.second)}"
-    }
+    private fun stampOf(asset: Asset): String = asset.capturedAtEpochMs.toString().padStart(14, '0')
 
     private companion object {
         const val FIRST_WAIT = 30_000L

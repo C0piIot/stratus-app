@@ -10,7 +10,9 @@ import kotlin.test.assertTrue
 
 private class FakeAssets(private val bytes: ByteArray = ByteArray(100)) : AssetSource {
     val openedFrom = mutableListOf<Long>()
-    override suspend fun assets(): List<Asset> = emptyList()
+    override suspend fun access() = MediaAccess.Full
+    override suspend fun sources(): List<MediaSource> = emptyList()
+    override suspend fun assets(from: Set<String>, addedAfterEpochMs: Long): List<Asset> = emptyList()
     override suspend fun open(localId: String, part: AssetPart, from: Long): RawSource {
         openedFrom += from
         return Buffer().apply { write(bytes, from.toInt(), bytes.size) }
@@ -62,7 +64,7 @@ class UploadQueueTest {
     }
 
     private fun asset(day: Int, name: String = "IMG_$day.HEIC", motion: MotionPart? = null) =
-        Asset("local-$day", CaptureTime(2026, 9, day, 12, 0, 0), name, 100, motion)
+        Asset("local-$day", utcMillis(2026, 9, day, 12, 0, 0), name, 100, motion)
 
     @Test
     fun queuesOnlyWhatTheServerHasNotGot() = runTest {

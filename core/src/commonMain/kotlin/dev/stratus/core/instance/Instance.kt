@@ -21,6 +21,8 @@ data class Instance(
     val username: String,
     val backupRoot: String = DEFAULT_BACKUP_ROOT,
     val backupEnabled: Boolean = false,
+    /** Which sources feed this instance. Empty means nothing has been chosen yet. */
+    val sources: Set<String> = emptySet(),
 ) {
     companion object {
         const val DEFAULT_BACKUP_ROOT = "Photos"

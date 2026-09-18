@@ -1,6 +1,7 @@
 package dev.stratus.core
 
 import android.content.Context
+import dev.stratus.core.backup.AndroidAssetSource
 import dev.stratus.core.files.AndroidFileHandoff
 import dev.stratus.core.store.AndroidSecureStore
 import io.ktor.client.engine.okhttp.OkHttp
@@ -16,5 +17,6 @@ fun appContainer(context: Context): AppContainer {
         secure = AndroidSecureStore(application),
         handoff = AndroidFileHandoff(application),
         databasePath = application.filesDir.resolve("backup.db").absolutePath,
+        assets = AndroidAssetSource(application),
     )
 }

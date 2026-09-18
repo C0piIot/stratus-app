@@ -4,7 +4,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import dev.stratus.core.backup.Asset
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.BackupIndex
-import dev.stratus.core.backup.CaptureTime
+import dev.stratus.core.backup.utcMillis
 import dev.stratus.core.backup.RemoteLayout
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
@@ -43,7 +43,7 @@ class TwoInstancesConformanceTest {
     private val layout = RemoteLayout("two-${Random.nextLong().toULong().toString(16)}")
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
 
-    private val asset = Asset("local", CaptureTime(2026, 9, 18, 10, 0, 0), "IMG_1.HEIC", 28)
+    private val asset = Asset("local", utcMillis(2026, 9, 18, 10, 0, 0), "IMG_1.HEIC", 28)
 
     private suspend fun indexFor(id: String, dav: DavClient): BackupIndex {
         database.migrate()

@@ -4,7 +4,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import dev.stratus.core.backup.Asset
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.BackupIndex
-import dev.stratus.core.backup.CaptureTime
+import dev.stratus.core.backup.utcMillis
 import dev.stratus.core.backup.MotionPart
 import dev.stratus.core.backup.RemoteLayout
 import dev.stratus.core.dav.DavClient
@@ -63,7 +63,7 @@ class RebuildConformanceTest {
     }
 
     private fun asset(day: Int, month: Int = 9, name: String = "IMG_$day.HEIC", motion: MotionPart? = null) =
-        Asset("local-$day-$month", CaptureTime(2026, month, day, 12, 0, day), name, 28, motion)
+        Asset("local-$day-$month", utcMillis(2026, month, day, 12, 0, day), name, 28, motion)
 
     @Test
     fun findsOutWhatItAlreadyUploadedWithNoLocalStateAtAll() = runTest {
