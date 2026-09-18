@@ -40,7 +40,7 @@ class BackupWorker(
 
         setForeground(getForegroundInfo())
 
-        val run = BackupRun(container.assets) { container.backupQueue(it.id) }
+        val run = container.backupRun()
         var waiting = false
         for (instance in instances) {
             if (isStopped) break
