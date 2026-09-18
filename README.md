@@ -9,9 +9,10 @@ same rule: it talks **standard WebDAV**, so it works against any WebDAV server �
 Stratus, Nextcloud, a box running rclone serve — and it never calls anything
 private to Stratus.
 
-> **Early.** You can sign in to a server and walk its files — open one, download
-> it, rename it, delete it. Nothing is backed up yet, which is the point of the
-> whole thing and the next piece of work. The sections below describe what it is
+> **Early.** You can sign in to a server, walk its files, and on Android a
+> backup runs in the background. There is no screen yet that tells you whether it
+> is working, and nothing to choose *what* gets backed up — both are next. On iOS
+> the photo library is not wired up at all. The sections below describe what it is
 > meant to be; this warning shrinks as that stops being aspirational.
 
 ## Why it exists
@@ -86,6 +87,21 @@ a job on a macOS runner.
 If your machine is ARM, `.devcontainer/` describes a GitHub Codespace that is
 not: opening one gives an x86_64 box with Docker, where both caveats disappear
 and `make doctor` says so on first login.
+
+## What cannot be promised on Android
+
+Background work that is not in the foreground is killed by the battery managers
+some manufacturers ship, however correct it is. Xiaomi, Huawei, Oppo and Samsung
+each do it differently, none of them ask, and no amount of care in the app
+prevents it — a transfer runs as a foreground service with a notification, which
+is the strongest thing an app is allowed to do, and on those phones it can still
+be stopped.
+
+Where that happens the honest answer is to say so rather than to look as though
+the backup is running, and the app being the only thing in a position to notice
+is why that matters. If a backup stops overnight on one of those phones, the
+setting to look for is the one their launcher calls autostart or battery
+optimisation.
 
 ## Licence
 

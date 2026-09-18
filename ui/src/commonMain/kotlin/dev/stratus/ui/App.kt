@@ -18,7 +18,11 @@ import dev.stratus.ui.signin.SignInScreen
 import kotlinx.coroutines.launch
 
 @Composable
-fun App(container: AppContainer, back: BackRequests = BackRequests()) {
+fun App(
+    container: AppContainer,
+    back: BackRequests = BackRequests(),
+    onBackUpNow: (() -> Unit)? = null,
+) {
     val scope = rememberCoroutineScope()
     val signIn = remember { container.signIn(scope) }
     val state by signIn.state.collectAsState()
@@ -50,6 +54,7 @@ fun App(container: AppContainer, back: BackRequests = BackRequests()) {
                                 signIn.restore()
                             }
                         },
+                        onBackUpNow = onBackUpNow,
                     )
                 }
             }

@@ -1,0 +1,82 @@
+package dev.stratus.core.backup
+
+import dev.stratus.core.instance.Instance
+
+/** What a pass over the camera roll did, for whoever has to report it. */
+data class BackupReport(
+    val instanceId: String,
+    val queued: Int = 0,
+    val uploaded: Int = 0,
+    val failed: Int = 0,
+    val stopped: StoppedBecause = StoppedBecause.NothingLeft,
+)
+
+/** Why a pass ended, which is the difference between finished and interrupted. */
+enum class StoppedBecause {
+    NothingLeft,
+
+    /** Everything outstanding is waiting out a backoff. Not a failure. */
+    WaitingToRetry,
+
+    /** Whoever was driving asked it to stop -- the system reclaiming the app, usually. */
+    AskedTo,
+
+    /** The library is not readable, so there is nothing to look at. */
+    NoAccessToTheLibrary,
+}
+
+/**
+ * One pass: look at the camera roll, queue what is missing, send what is queued.
+ *
+ * Lives here rather than in a platform's scheduler because it is the part that
+ * can be tested. What Android and iOS contribute is *when* this runs and how to
+ * stay alive while it does -- neither of which is a decision about backing up.
+ */
+class BackupRun(
+    private val source: AssetSource,
+    private val queueFor: suspend (Instance) -> UploadQueue?,
+) {
+    /**
+     * Runs one pass for [instance].
+     *
+     * [keepGoing] is asked before every upload so the caller can stop at a clean
+     * point: on a phone the answer becomes false when the system wants the app
+     * back, and stopping between files loses nothing because the queue is in the
+     * database.
+     */
+    suspend fun once(
+        instance: Instance,
+        keepGoing: () -> Boolean = { true },
+        onStep: (QueueStep) -> Unit = {},
+    ): BackupReport {
+        if (source.access() == MediaAccess.None) {
+            return BackupReport(instance.id, stopped = StoppedBecause.NoAccessToTheLibrary)
+        }
+        val queue = queueFor(instance) ?: return BackupReport(instance.id)
+
+        val assets = source.assets(instance.sources)
+        var report = BackupReport(instance.id, queued = queue.enqueue(assets))
+
+        while (keepGoing()) {
+            val step = queue.runNext()
+            onStep(step)
+            report = when (step) {
+                is QueueStep.Idle -> return report.copy(stopped = stoppedFrom(queue))
+                is QueueStep.Uploaded -> report.copy(uploaded = report.uploaded + 1)
+                is QueueStep.GaveUp -> report.copy(failed = report.failed + 1)
+                // A retry or a partial upload is neither done nor lost: the row
+                // stays, and this pass simply moves on to whatever is next.
+                is QueueStep.Retrying, is QueueStep.Progressed -> report
+            }
+        }
+        return report.copy(stopped = StoppedBecause.AskedTo)
+    }
+
+    /**
+     * Idle means nothing is *runnable*, which is not the same as nothing being
+     * left: work waiting out a backoff is still work, and a screen that said
+     * "finished" over it would be lying.
+     */
+    private suspend fun stoppedFrom(queue: UploadQueue): StoppedBecause =
+        if (queue.outstanding().isEmpty()) StoppedBecause.NothingLeft else StoppedBecause.WaitingToRetry
+}

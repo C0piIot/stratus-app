@@ -4,6 +4,9 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import dev.stratus.core.backup.AssetSource
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.BackupIndex
+import dev.stratus.core.backup.DavDirectoryMaker
+import dev.stratus.core.backup.PutTransport
+import dev.stratus.core.backup.UploadQueue
 import dev.stratus.core.backup.RemoteLayout
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.files.BrowserController
@@ -78,6 +81,28 @@ class AppContainer(
             layout = RemoteLayout(instance.backupRoot),
             cache = database.cacheFor(instance.id),
             dav = davFor(instance) ?: return null,
+        )
+    }
+
+    /**
+     * The queue for one instance, assembled from its own settings.
+     *
+     * A queue per instance and never a shared one: a photograph owed to two
+     * servers is two pieces of work, and an instance that is down must not hold
+     * up the other.
+     */
+    suspend fun backupQueue(instanceId: String): UploadQueue? {
+        val instance = instances.instance(instanceId) ?: return null
+        val dav = davFor(instance) ?: return null
+        database.migrate()
+        return UploadQueue(
+            layout = RemoteLayout(instance.backupRoot),
+            pending = database.pendingFor(instance.id),
+            cache = database.cacheFor(instance.id),
+            source = assets,
+            // Plain PUT until tus is negotiated in #18.
+            transport = PutTransport(dav),
+            directories = DavDirectoryMaker(dav),
         )
     }
 
