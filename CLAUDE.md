@@ -62,6 +62,13 @@ cache of that, and it must be rebuildable by walking the server — because a
 reinstall, a restore to a new phone or a cleared app storage will all destroy it,
 and none of those should cause the whole camera roll to upload again.
 
+A path is therefore a key, and a key has to have one form. **The trailing slash
+on a collection's href is normalised away where the multistatus is parsed**, and
+that is the only place it can be done once: most servers end a collection's href
+with a slash -- Apache, sabre/dav, Nextcloud, RFC 4918's own examples -- ours did
+not until it changed libraries, and the cache, the self entry a `Depth: 1`
+listing has to drop, and a signed link would each have decided it separately.
+
 That gives two requirements on how files are named and checked:
 
 - **A deterministic remote path**, so that "is this already uploaded?" is a
