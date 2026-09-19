@@ -50,9 +50,11 @@ class ShareLinkTest {
     }
 
     @Test
-    fun theUrlLeavesDavBehindAndEncodesWhatAPathCannotCarry() {
+    fun theUrlIsTheWebDavOneAndEncodesWhatAPathCannotCarry() {
+        // The mount rather than the web UI: this app already holds this address,
+        // and a mount is not the surface that changes shape.
         val url = links.link("/álbum/a b&c.jpg", false, ShareLife.Forever, 0)
-        assertTrue(url.startsWith("https://host/files/"), "was $url")
+        assertTrue(url.startsWith("https://host/dav/"), "was $url")
         // Signed raw, sent encoded: the server unescapes before it verifies.
         assertTrue("%C3%A1lbum" in url && "a%20b" in url, "was $url")
         assertEquals("álbum/a b&c.jpg", signedPathOf(url))
@@ -61,7 +63,7 @@ class ShareLinkTest {
     @Test
     fun aPortThatIsNotTheDefaultSurvives() {
         val other = ShareLinks("http://192.168.1.10:8080/dav/", Credentials("edu", "secret"))
-        assertTrue(other.link("/a", false, ShareLife.Forever, 0).startsWith("http://192.168.1.10:8080/files/a?"))
+        assertTrue(other.link("/a", false, ShareLife.Forever, 0).startsWith("http://192.168.1.10:8080/dav/a?"))
     }
 
     @Test
@@ -72,6 +74,19 @@ class ShareLinkTest {
         assertTrue(
             tokenOf(links.link("/a", false, ShareLife.Forever, 0)) !=
                 tokenOf(moved.link("/a", false, ShareLife.Forever, 0)),
+        )
+    }
+
+    @Test
+    fun aThumbnailIsTheOneThingStillOffTheOrigin() {
+        // There is no thumbnail in WebDAV, so it has nowhere else to live -- and
+        // it takes the same signature, over the same path.
+        val url = links.thumbnail("/album/IMG_1.HEIC", 1200, ShareLife.ADay, 0)
+        assertTrue(url.startsWith("https://host/thumb/album/IMG_1.HEIC?"), "was $url")
+        assertTrue("size=1200" in url)
+        assertEquals(
+            tokenOf(links.link("/album/IMG_1.HEIC", false, ShareLife.ADay, 0)),
+            url.substringAfter("&k="),
         )
     }
 }

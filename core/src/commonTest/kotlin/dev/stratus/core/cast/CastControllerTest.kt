@@ -58,7 +58,7 @@ class CastControllerTest {
     @Test
     fun aVideoGoesAsItself() = runTest {
         val item = chosenFor(this, "clip.mp4", "video/mp4")
-        assertTrue(item.url.contains("/files/album/clip.mp4"), "was ${item.url}")
+        assertTrue(item.url.contains("/dav/album/clip.mp4"), "was ${item.url}")
         assertEquals("video/mp4", item.contentType)
     }
 

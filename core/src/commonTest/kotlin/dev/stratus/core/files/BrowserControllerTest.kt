@@ -254,7 +254,7 @@ class BrowserControllerTest {
         browser.confirmShare(ShareLife.ADay)
 
         val link = requireNotNull(sheet.links.first { it != null })
-        assertTrue(link.startsWith("http://host/files/photos/a.txt?k="), "was $link")
+        assertTrue(link.startsWith("http://host/dav/photos/a.txt?k="), "was $link")
         assertEquals("a.txt", sheet.label)
         // A link is arithmetic over the password: the first the server hears of
         // it is when somebody opens it.
