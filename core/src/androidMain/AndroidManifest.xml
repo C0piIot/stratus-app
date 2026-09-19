@@ -30,6 +30,15 @@
 
     <application>
         <!--
+          Where the Cast SDK looks for its configuration, by name, at startup.
+          It names the default media receiver, which needs no registration and
+          no fee: what is cast is an ordinary URL a television can fetch.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="dev.stratus.core.cast.StratusCastOptions" />
+
+        <!--
           WorkManager owns the service; what is added here is the type, which
           Android 14 requires and which Play reviews. Merged rather than
           declared, because the class is theirs.

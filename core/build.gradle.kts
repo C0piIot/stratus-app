@@ -76,6 +76,11 @@ kotlin {
             // Scheduling that survives a reboot, and the foreground service that
             // keeps a transfer alive while it runs.
             implementation(libs.androidx.work)
+            // The Cast sender. Present on every build and useless on a phone
+            // without Play Services, which is exactly how it is meant to be:
+            // the app installs and runs there, and the button never appears.
+            implementation(libs.play.services.cast)
+            implementation(libs.androidx.mediarouter)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

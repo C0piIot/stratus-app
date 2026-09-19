@@ -6,6 +6,8 @@ import dev.stratus.core.backup.Backup
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.Connection
 import dev.stratus.core.backup.Connections
+import dev.stratus.core.cast.CastController
+import dev.stratus.core.cast.Caster
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.files.BrowserController
 import dev.stratus.core.files.FileHandoff
@@ -23,6 +25,7 @@ import dev.stratus.core.store.ConsentStore
 import dev.stratus.core.store.SecureStore
 import dev.stratus.core.store.TrustStore
 import io.ktor.client.engine.HttpClientEngine
+import io.ktor.http.Url
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -40,6 +43,7 @@ class AppContainer(
     private val secure: SecureStore,
     private val handoff: FileHandoff,
     private val sharing: LinkSharing,
+    private val caster: Caster,
     databasePath: String,
     /** Where photographs come from on this platform. */
     val assets: AssetSource,
@@ -87,6 +91,25 @@ class AppContainer(
     suspend fun forget(id: String) {
         instances.remove(id)
         database.forget(id)
+    }
+
+    /**
+     * Casting for whichever instance is being looked at, or null when there is
+     * none. Built here because only the composition root knows both the
+     * certificate this instance was trusted by and the sender this phone has.
+     */
+    suspend fun cast(scope: CoroutineScope): CastController? {
+        val instance = instances.current() ?: return null
+        val credentials = instances.credentials(instance.id) ?: return null
+        return CastController(
+            caster = caster,
+            links = ShareLinks(instance.baseUrl, credentials),
+            // A television has nobody to ask about a certificate, so a server
+            // vouched for by this device alone is one it cannot fetch from.
+            certificateIsPinned = Url(instance.baseUrl).protocol.name == "https" &&
+                hostPortOf(instance.baseUrl) in trust.pins(),
+            scope = scope,
+        )
     }
 
     /** Null when nobody is signed in, which is the only state it can be built from. */

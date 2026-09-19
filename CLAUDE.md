@@ -222,6 +222,33 @@ single link -- changing the password withdraws every link and signs every
 browser out -- and renaming a shared file breaks its link, since a signature
 names a path and not a file.
 
+**Casting is a signed link and Google's own receiver, which is why it costs
+nothing.** A Chromecast fetches the media itself and cannot send credentials, so
+the choice used to be between a receiver of our own -- a five-dollar
+registration, a Google account, an HTTPS page to host -- and a proxy running on
+the phone for the length of a film. A link that needs no credentials removes
+both: the default receiver loads an ordinary URL.
+
+What is sent is decided in `commonMain` and is the interesting half. **A
+photograph goes as the server's JPEG, not as itself**, because no Chromecast
+reads HEIC and HEIC is what an iPhone records and what this app uploads
+untouched; `/thumb/` already renders one, and the conformance suite proves a
+HEIC comes back as a JPEG to a request with no account behind it. Video goes as
+it is and an older Chromecast will not play HEVC -- refusing it here would also
+refuse everything that does work, so the television reports its own failure.
+
+**The one failure worth predicting is the certificate.** A server trusted only
+because somebody pinned it on this phone is one a television has nobody to ask
+about: it fetches nothing and says nothing, which reads as the app being broken.
+So the app warns first -- and warns rather than refuses, because a pin is
+consulted only when system validation fails, so a server given a real
+certificate since would be blocked for nothing.
+
+The Cast SDK lives inside Google Play Services, so a phone without them gets the
+whole app minus the button: one availability check in the entry point, behind
+the `Caster` interface, and the emulator CI already runs -- an `aosp-atd` image
+with no Play Services -- is that phone on every run.
+
 **Open and download are not the same button.** Open hands the file to whatever
 the system uses to view it; download keeps a copy. On Android that copy has an
 obvious home, on iOS it means the share sheet or the Files app, because there is

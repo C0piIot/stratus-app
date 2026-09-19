@@ -2,6 +2,7 @@ package dev.stratus.core
 
 import dev.stratus.core.backup.IosAssetSource
 import dev.stratus.core.files.IosFileHandoff
+import dev.stratus.core.cast.NoCaster
 import dev.stratus.core.share.IosLinkSharing
 import dev.stratus.core.store.KeychainSecureStore
 import io.ktor.client.engine.darwin.Darwin
@@ -23,6 +24,11 @@ fun appContainer(): AppContainer = AppContainer(
     secure = KeychainSecureStore(),
     handoff = IosFileHandoff(),
     sharing = IosLinkSharing(),
+    // No Cast sender here: Google's iOS SDK is a proprietary binary framework
+    // needing a Mac to link and the local-network permission to find anything.
+    // The same answer a phone without Play Services gets, and the app is whole
+    // without it.
+    caster = NoCaster(),
     databasePath = databasePath(),
     assets = IosAssetSource(),
 )

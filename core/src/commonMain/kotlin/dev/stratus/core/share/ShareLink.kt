@@ -59,6 +59,24 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
     }
 
     /**
+     * The URL of the server's own rendering of a picture, signed the same way.
+     *
+     * The same token as [link] -- the signature is over the path, and the
+     * thumbnail lives behind the same gate as the file -- so this is the file
+     * link with another prefix and a size on it. It is what makes a HEIC
+     * something a television or a gallery can show without decoding it here.
+     */
+    fun thumbnail(path: String, width: Int, life: ShareLife, nowEpochSeconds: Long): String {
+        val target = path.trim('/')
+        val deadline = life.seconds?.let { nowEpochSeconds + it } ?: 0L
+        return URLBuilder(originOf(baseUrl)).apply {
+            appendPathSegments(listOf(THUMBNAILS) + target.split('/'))
+            parameters.append(SIZE, width.toString())
+            parameters.append(PARAM, token(target, isDirectory = false, deadline = deadline))
+        }.buildString()
+    }
+
+    /**
      * `k1.<owner>.<path>.<f|d>.<deadline>.<signature>`, the three middle parts
      * base64url without padding, and the signature over everything before it --
      * the version included, so a token of an older shape cannot be read as a
@@ -84,6 +102,8 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
         const val FILE = "f"
         const val SUBTREE = "d"
         const val FILES = "files"
+        const val THUMBNAILS = "thumb"
+        const val SIZE = "size"
         const val PARAM = "k"
     }
 }
