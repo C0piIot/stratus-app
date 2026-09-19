@@ -6,6 +6,7 @@ import dev.stratus.core.net.ProbeOutcome
 import dev.stratus.core.net.Prober
 import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.store.ConsentStore
+import dev.stratus.core.store.TrustStore
 import dev.stratus.core.store.SecureStore
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -23,8 +24,10 @@ private class MemoryStore : SecureStore {
 
 private class ScriptedProber(private val answers: MutableList<(Candidate) -> ProbeOutcome>) : Prober {
     val asked = mutableListOf<Pair<Candidate, Credentials?>>()
-    override suspend fun probe(attempt: Candidate, credentials: Credentials?): ProbeOutcome {
+    val pins = mutableListOf<String?>()
+    override suspend fun probe(attempt: Candidate, credentials: Credentials?, pin: String?): ProbeOutcome {
         asked += attempt to credentials
+        pins += pin
         return answers.removeFirst()(attempt)
     }
 }
@@ -37,7 +40,14 @@ class SignInControllerTest {
         scope: TestScope,
         store: MemoryStore = MemoryStore(),
         prober: ScriptedProber,
-    ) = SignInController(prober, InstanceStore(store), ConsentStore(store), scope, mintId = { "fixed-id" }) to store
+    ) = SignInController(
+        prober,
+        InstanceStore(store),
+        ConsentStore(store),
+        TrustStore(store),
+        scope,
+        mintId = { "fixed-id" },
+    ) to store
 
     @Test
     fun storesTheSessionOnceItIsProved() = runTest {
@@ -103,7 +113,7 @@ class SignInControllerTest {
         val prober = ScriptedProber(mutableListOf({ ProbeOutcome.IsWebDav(it) }, { ProbeOutcome.IsWebDav(it) }))
         val instances = InstanceStore(store)
         val signIn = SignInController(
-            prober, instances, ConsentStore(store), this, mintId = { "id-" + minted++ },
+            prober, instances, ConsentStore(store), TrustStore(store), this, mintId = { "id-" + minted++ },
         )
 
         signIn.submit(form.copy(address = "https://one"))

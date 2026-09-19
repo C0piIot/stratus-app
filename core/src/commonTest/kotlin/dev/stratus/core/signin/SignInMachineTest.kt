@@ -6,14 +6,24 @@ import dev.stratus.core.net.ProbeOutcome
 import dev.stratus.core.net.Scheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SignInMachineTest {
 
     private val form = SignInForm("host", "edu", "secret")
 
-    private fun submit(address: String = "host", consented: Set<String> = emptySet()): Step =
-        SignInMachine.next(SignInState.Idle, SignInEvent.Submitted(form.copy(address = address), consented))
+    private fun submit(
+        address: String = "host",
+        consented: Set<String> = emptySet(),
+        pins: Map<String, String> = emptyMap(),
+    ): Step = SignInMachine.next(
+        SignInState.Idle,
+        SignInEvent.Submitted(form.copy(address = address), consented, pins),
+    )
+
+    private fun Step.answer(accepted: Boolean): Step =
+        SignInMachine.next(state, SignInEvent.Answered((state as SignInState.Asking).question, accepted))
 
     private fun Step.then(outcome: ProbeOutcome): Step =
         SignInMachine.next(state, SignInEvent.Attempted(outcome))
@@ -203,5 +213,61 @@ class SignInMachineTest {
             SignInEvent.Submitted(form.copy(username = "a:b"), emptySet()),
         )
         assertEquals(SignInFailure.UsernameUnusable, (colon.state as SignInState.Failed).reason)
+    }
+
+    // ---- A certificate nobody vouches for ----------------------------------
+
+    @Test
+    fun anUntrustedCertificateIsAQuestionRatherThanAFailure() {
+        val first = submit()
+        val asked = first.then(ProbeOutcome.Untrusted(first.attempt, FINGERPRINT))
+
+        val question = (asked.state as SignInState.Asking).question
+        assertEquals(Question.AcceptCertificate("host:443", FINGERPRINT), question)
+        // Nothing is tried in the background while somebody is deciding.
+        assertEquals(emptyList(), asked.probes)
+    }
+
+    @Test
+    fun acceptingItPinsItAndRetriesTheSameCandidate() {
+        val first = submit()
+        val accepted = first.then(ProbeOutcome.Untrusted(first.attempt, FINGERPRINT)).answer(true)
+
+        assertEquals(
+            SignInEffect.Pin("host:443", FINGERPRINT),
+            accepted.effects.filterIsInstance<SignInEffect.Pin>().single(),
+        )
+        val retry = accepted.probes.single()
+        assertEquals(first.attempt, retry.attempt, "went off to some other candidate")
+        assertEquals(FINGERPRINT, retry.pin)
+    }
+
+    @Test
+    fun refusingItNeverFallsBackToHttp() {
+        // The worst bug this feature could have: "I do not trust this
+        // certificate" turning into "then send the password in clear".
+        val first = submit()
+        val refused = first.then(ProbeOutcome.Untrusted(first.attempt, FINGERPRINT)).answer(false)
+
+        assertEquals(SignInFailure.CertificateRefused("host:443"), (refused.state as SignInState.Failed).reason)
+        assertEquals(emptyList(), refused.probes)
+    }
+
+    @Test
+    fun aCertificateAlreadyVouchedForIsNotAskedAboutAgain() {
+        val step = submit(pins = mapOf("host:443" to FINGERPRINT))
+        assertEquals(FINGERPRINT, step.probes.single().pin)
+    }
+
+    @Test
+    fun aPinIsNotHandedToADifferentServer() {
+        // Keyed by host and port, so the other candidate on another port -- or
+        // the same host over http -- gets nothing.
+        val step = submit(address = "host:8443", pins = mapOf("host:443" to FINGERPRINT))
+        assertNull(step.probes.single().pin)
+    }
+
+    private companion object {
+        const val FINGERPRINT = "79:AC:73:12:E3:06"
     }
 }
