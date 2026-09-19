@@ -24,10 +24,13 @@ import io.ktor.http.contentType
  * while this has to classify something that may be a web page, a redirect or a
  * closed port -- and needs the `Location` header the client has no reason to keep.
  */
-class DavProber(private val newClient: (Credentials?) -> HttpClient) : Prober {
+class DavProber(private val newClient: (Credentials?, TrustPolicy) -> HttpClient) : Prober {
 
-    override suspend fun probe(attempt: Candidate, credentials: Credentials?): ProbeOutcome {
-        val client = newClient(credentials)
+    override suspend fun probe(attempt: Candidate, credentials: Credentials?, pin: String?): ProbeOutcome {
+        // Captured per probe rather than kept anywhere: the certificate that was
+        // refused belongs to this attempt and to nothing else.
+        var refused: ByteArray? = null
+        val client = newClient(credentials, TrustPolicy(pin) { der -> refused = der })
         return try {
             val response = client.request(attempt.baseUrl) {
                 method = PROPFIND
@@ -39,8 +42,12 @@ class DavProber(private val newClient: (Credentials?) -> HttpClient) : Prober {
         } catch (e: Exception) {
             // Anything thrown here is the connection failing to happen: a refused
             // port, a name that does not resolve, a TLS handshake that ended, a
-            // timeout. None of them say anything about the path.
-            ProbeOutcome.Unreachable(attempt, e.message ?: e::class.simpleName ?: "no detail")
+            // timeout. None of them say anything about the path -- except the one
+            // that handed us a certificate on its way out, which is a question
+            // for the person at the keyboard rather than a failure.
+            val seen = refused
+            if (seen != null) ProbeOutcome.Untrusted(attempt, fingerprintOf(seen))
+            else ProbeOutcome.Unreachable(attempt, e.message ?: e::class.simpleName ?: "no detail")
         } finally {
             client.close()
         }

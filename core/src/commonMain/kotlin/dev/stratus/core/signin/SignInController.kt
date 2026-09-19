@@ -5,6 +5,7 @@ import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.instance.newInstanceId
 import dev.stratus.core.net.Prober
 import dev.stratus.core.store.ConsentStore
+import dev.stratus.core.store.TrustStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,7 @@ class SignInController(
     private val prober: Prober,
     private val instances: InstanceStore,
     private val consent: ConsentStore,
+    private val trust: TrustStore,
     private val scope: CoroutineScope,
     // Injected so a test can assert on a whole stored record. Minting it here
     // rather than in the machine is what keeps the machine a pure function.
@@ -49,7 +51,7 @@ class SignInController(
     fun submit(form: SignInForm) {
         running?.cancel()
         running = scope.launch {
-            advance(SignInEvent.Submitted(form, consent.consentedHosts()))
+            advance(SignInEvent.Submitted(form, consent.consentedHosts(), trust.pins()))
         }
     }
 
@@ -72,9 +74,11 @@ class SignInController(
     private suspend fun perform(effect: SignInEffect) {
         when (effect) {
             is SignInEffect.Probe ->
-                advance(SignInEvent.Attempted(prober.probe(effect.attempt, effect.credentials)))
+                advance(SignInEvent.Attempted(prober.probe(effect.attempt, effect.credentials, effect.pin)))
 
             is SignInEffect.RememberConsent -> consent.remember(effect.host)
+
+            is SignInEffect.Pin -> trust.pin(effect.hostPort, effect.fingerprint)
 
             is SignInEffect.Store -> instances.put(
                 Instance(

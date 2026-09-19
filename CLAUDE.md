@@ -157,6 +157,32 @@ answer is **remembered per host**, because the risk belongs to the host rather
 than to this particular sign-in, and a warning shown every time is a warning
 nobody reads.
 
+**A certificate nothing vouches for is a question, and the order of operations is
+the security control.** Self-hosted servers very often present one, so refusing
+outright would be refusing the normal case; accepting quietly would be worse than
+plain http, because it looks encrypted. So: the system's validation runs exactly
+as it always did, and only a certificate it *rejected* is compared against a
+fingerprint somebody has vouched for. There is no mode in which verification is
+off -- a fingerprint captured from a handshake made without checking would mean
+the vulnerability has already shipped and the dialog is all that stands between
+it and a user. Three rules follow, each with a test:
+
+- **Pin per `host:port`, and only what failed validation.** Recording a
+  certificate that validated would break sign-in every sixty days, when Let's
+  Encrypt renews it, for everybody with a real one.
+- **A refused certificate never falls back to http.** "I do not trust this" must
+  not become "then send it in clear", and that is one line of control flow.
+- **The hostname is checked the same way**, because a home-lab certificate is
+  usually self-signed *and* wrong-named, and a name mismatch reports through the
+  verifier rather than the trust manager -- without handling it there, the
+  commonest case of all arrives with no certificate to show anybody.
+
+The Android trust manager is plain JDK code, so it lives in a `jvmCommon` source
+set and the fast loop proves it against a committed self-signed certificate --
+no private key in the repository and no TLS server in the test, because what is
+under test is the decision rather than the handshake. iOS is stratus-app#58 and
+until then behaves as it always has.
+
 Two properties hold around that, and both have tests. Nothing carrying a password
 goes out over http before consent -- the probe that precedes it is anonymous, so
 nobody is asked to accept a risk for a host that turns out not to exist. And an

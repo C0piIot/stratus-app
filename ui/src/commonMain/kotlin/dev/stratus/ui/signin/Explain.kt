@@ -30,6 +30,9 @@ internal fun explain(reason: SignInFailure): String = when (reason) {
         }
     }
 
+    is SignInFailure.CertificateRefused ->
+        "Cancelled. Nothing was sent to ${reason.hostPort}."
+
     is SignInFailure.PlaintextRefused ->
         "Cancelled. Nothing was sent to ${reason.host}."
 

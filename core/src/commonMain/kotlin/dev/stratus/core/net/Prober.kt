@@ -17,6 +17,15 @@ sealed interface ProbeOutcome {
     data class Redirected(val attempt: Candidate, val location: String) : ProbeOutcome
 
     data class Unreachable(val attempt: Candidate, val detail: String) : ProbeOutcome
+
+    /**
+     * The certificate is not vouched for by anything on this device.
+     *
+     * Separate from [Unreachable] only when the certificate was actually seen:
+     * a handshake that failed for any other reason has no fingerprint to show
+     * and nothing for anybody to decide.
+     */
+    data class Untrusted(val attempt: Candidate, val fingerprint: String) : ProbeOutcome
 }
 
 fun interface Prober {
@@ -29,5 +38,5 @@ fun interface Prober {
      * reads would otherwise dismiss the sign-in screen having proved nothing
      * about the credentials at all.
      */
-    suspend fun probe(attempt: Candidate, credentials: Credentials?): ProbeOutcome
+    suspend fun probe(attempt: Candidate, credentials: Credentials?, pin: String?): ProbeOutcome
 }

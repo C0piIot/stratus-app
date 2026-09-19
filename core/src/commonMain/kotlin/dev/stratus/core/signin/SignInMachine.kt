@@ -51,6 +51,7 @@ object SignInMachine {
             scheme = scheme,
             queue = address.candidates(scheme),
             consentedHosts = event.consentedHosts,
+            pins = event.pins,
         )
         return begin(plan)
     }
@@ -68,7 +69,13 @@ object SignInMachine {
         val needsConsent = attempt.scheme == Scheme.Http && attempt.host !in plan.consentedHosts
         return Step(
             SignInState.Probing(rest, attempt, authenticated = !needsConsent),
-            listOf(SignInEffect.Probe(attempt, if (needsConsent) null else plan.credentials)),
+            listOf(
+                SignInEffect.Probe(
+                    attempt,
+                    if (needsConsent) null else plan.credentials,
+                    plan.pins[attempt.hostPort],
+                ),
+            ),
         )
     }
 
@@ -77,8 +84,14 @@ object SignInMachine {
         // arrives here naming a question nobody is asking any more.
         if (state !is SignInState.Asking || state.question != event.question) return Step(state)
 
-        val question = state.question as Question.AcceptPlaintext
-        if (!event.accepted) {
+        return when (val question = state.question) {
+            is Question.AcceptPlaintext -> plaintext(state, question, event.accepted)
+            is Question.AcceptCertificate -> certificate(state, question, event.accepted)
+        }
+    }
+
+    private fun plaintext(state: SignInState.Asking, question: Question.AcceptPlaintext, accepted: Boolean): Step {
+        if (!accepted) {
             return Step(SignInState.Failed(SignInFailure.PlaintextRefused(question.host)))
         }
         val plan = state.plan.copy(consentedHosts = state.plan.consentedHosts + question.host)
@@ -86,7 +99,33 @@ object SignInMachine {
             SignInState.Probing(plan, state.attempt, authenticated = true),
             listOf(
                 SignInEffect.RememberConsent(question.host),
-                SignInEffect.Probe(state.attempt, plan.credentials),
+                SignInEffect.Probe(state.attempt, plan.credentials, plan.pins[state.attempt.hostPort]),
+            ),
+        )
+    }
+
+    /**
+     * A certificate refused is the end of the attempt, and **never** a reason to
+     * try http.
+     *
+     * "I do not trust this certificate" turning into "then send it in clear" is
+     * the worst bug this feature could have, and it is one line of control flow
+     * away: the plain `Failed` here is that line, written deliberately.
+     */
+    private fun certificate(state: SignInState.Asking, question: Question.AcceptCertificate, accepted: Boolean): Step {
+        if (!accepted) {
+            return Step(SignInState.Failed(SignInFailure.CertificateRefused(question.hostPort)))
+        }
+        val plan = state.plan.copy(pins = state.plan.pins + (question.hostPort to question.fingerprint))
+        return Step(
+            SignInState.Probing(plan, state.attempt, authenticated = state.authenticated),
+            listOf(
+                SignInEffect.Pin(question.hostPort, question.fingerprint),
+                SignInEffect.Probe(
+                    state.attempt,
+                    if (state.authenticated) plan.credentials else null,
+                    question.fingerprint,
+                ),
             ),
         )
     }
@@ -122,6 +161,7 @@ object SignInMachine {
                     ),
                     plan,
                     attempt,
+                    authenticated = false,
                 ),
             )
 
@@ -146,6 +186,18 @@ object SignInMachine {
                 }
             }
 
+            // Only a person can settle this, and only once: the fingerprint
+            // came out of a handshake that was refused, which is the only place
+            // it is allowed to come from.
+            is ProbeOutcome.Untrusted -> Step(
+                SignInState.Asking(
+                    Question.AcceptCertificate(attempt.hostPort, outcome.fingerprint),
+                    plan,
+                    attempt,
+                    state.authenticated,
+                ),
+            )
+
             is ProbeOutcome.Redirected -> redirect(state, outcome)
         }
     }
@@ -168,7 +220,11 @@ object SignInMachine {
         return Step(
             SignInState.Probing(plan.copy(redirects = plan.redirects + 1), target, state.authenticated),
             listOf(
-                SignInEffect.Probe(target, if (state.authenticated) plan.credentials else null),
+                SignInEffect.Probe(
+                    target,
+                    if (state.authenticated) plan.credentials else null,
+                    plan.pins[target.hostPort],
+                ),
             ),
         )
     }
@@ -206,6 +262,7 @@ object SignInMachine {
         is ProbeOutcome.Reachable -> outcome.attempt
         is ProbeOutcome.Redirected -> outcome.attempt
         is ProbeOutcome.Unreachable -> outcome.attempt
+        is ProbeOutcome.Untrusted -> outcome.attempt
     }
 
     private const val MAX_REDIRECTS = 3

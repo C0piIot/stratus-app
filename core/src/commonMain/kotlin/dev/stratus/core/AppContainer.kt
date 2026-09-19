@@ -12,10 +12,13 @@ import dev.stratus.core.files.FileHandoff
 import dev.stratus.core.instance.Instance
 import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.net.DavProber
+import dev.stratus.core.net.TrustPolicy
+import dev.stratus.core.net.hostPortOf
 import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.signin.SignInController
 import dev.stratus.core.store.ConsentStore
 import dev.stratus.core.store.SecureStore
+import dev.stratus.core.store.TrustStore
 import io.ktor.client.engine.HttpClientEngine
 import kotlinx.coroutines.CoroutineScope
 
@@ -30,7 +33,7 @@ import kotlinx.coroutines.CoroutineScope
  * belongs one level down, where a test can reach it. That is what [backup] is.
  */
 class AppContainer(
-    private val engine: () -> HttpClientEngine,
+    private val engine: (TrustPolicy) -> HttpClientEngine,
     private val secure: SecureStore,
     private val handoff: FileHandoff,
     databasePath: String,
@@ -46,18 +49,22 @@ class AppContainer(
     }
 
     /** The one place an instance turns into something that can make requests. */
+    private val trust = TrustStore(secure)
+
     private val connections = Connections { instance ->
         val credentials = instances.credentials(instance.id) ?: return@Connections null
-        val client = stratusHttpClient(engine(), credentials)
+        val pinned = TrustPolicy(trust.pins()[hostPortOf(instance.baseUrl)])
+        val client = stratusHttpClient(engine(pinned), credentials)
         Connection(client, DavClient(client, instance.baseUrl))
     }
 
     val backup: Backup by lazy { Backup(instances, database, assets, connections) }
 
     fun signIn(scope: CoroutineScope): SignInController = SignInController(
-        prober = DavProber { creds -> stratusHttpClient(engine(), creds) },
+        prober = DavProber { creds, policy -> stratusHttpClient(engine(policy), creds) },
         instances = instances,
         consent = ConsentStore(secure),
+        trust = trust,
         scope = scope,
     )
 

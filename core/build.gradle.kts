@@ -38,6 +38,21 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
+    // The trust manager is plain JDK code with no Android API in it, and Android
+    // is where it ships -- so it lives where both the Android target and the JVM
+    // one can see it, which is what puts a security control in the fast loop
+    // instead of on a device. Declared as a group on the default template rather
+    // than with a manual `dependsOn`, because a manual edge switches the default
+    // hierarchy off entirely and takes the iOS source sets with it.
+    applyDefaultHierarchyTemplate {
+        common {
+            group("jvmCommon") {
+                withJvm()
+                withCompilations { it.target.name == "android" }
+            }
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)

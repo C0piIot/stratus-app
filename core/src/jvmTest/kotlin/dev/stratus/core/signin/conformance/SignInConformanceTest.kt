@@ -10,6 +10,7 @@ import dev.stratus.core.signin.SignInForm
 import dev.stratus.core.signin.SignInState
 import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.store.ConsentStore
+import dev.stratus.core.store.TrustStore
 import dev.stratus.core.store.InMemorySecureStore
 import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.CoroutineScope
@@ -41,9 +42,10 @@ class SignInConformanceTest {
     private fun controller(scope: CoroutineScope): SignInController {
         val secure = InMemorySecureStore()
         return SignInController(
-            prober = DavProber { credentials -> stratusHttpClient(CIO.create(), credentials) },
+            prober = DavProber { credentials, _ -> stratusHttpClient(CIO.create(), credentials) },
             instances = InstanceStore(secure),
             consent = ConsentStore(secure),
+            trust = TrustStore(secure),
             scope = scope,
         )
     }
