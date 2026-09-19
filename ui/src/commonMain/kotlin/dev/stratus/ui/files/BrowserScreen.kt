@@ -1,6 +1,7 @@
 package dev.stratus.ui.files
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import dev.stratus.core.dav.DavResource
 import dev.stratus.core.files.BrowserController
 import dev.stratus.core.files.Confirmation
+import dev.stratus.core.share.ShareLife
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,10 +66,12 @@ fun BrowserScreen(controller: BrowserController, onOpenServers: () -> Unit) {
     when (val pending = state.pending) {
         is Confirmation.Delete -> DeleteDialog(pending.target, controller)
         is Confirmation.Rename -> RenameDialog(pending.target, controller)
+        is Confirmation.Share -> ShareDialog(pending.target, controller)
         null -> {}
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Row(entry: DavResource, controller: BrowserController) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -76,9 +80,13 @@ private fun Row(entry: DavResource, controller: BrowserController) {
         ListItem(
             headlineContent = { Text(entry.name) },
             supportingContent = { Text(if (entry.isDirectory) "Folder" else describe(entry)) },
-            modifier = Modifier.clickable {
-                if (entry.isDirectory) controller.enter(entry) else menuOpen = true
-            },
+            // A folder's menu had no way of opening at all, because tapping one
+            // walks into it -- so renaming or deleting a folder was unreachable.
+            // Holding is the gesture for "not the obvious thing", everywhere.
+            modifier = Modifier.combinedClickable(
+                onClick = { if (entry.isDirectory) controller.enter(entry) else menuOpen = true },
+                onLongClick = { menuOpen = true },
+            ),
         )
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             if (!entry.isDirectory) {
@@ -90,6 +98,12 @@ private fun Row(entry: DavResource, controller: BrowserController) {
                 DropdownMenuItem(
                     text = { Text("Download") },
                     onClick = { menuOpen = false; controller.saveFile(entry) },
+                )
+            }
+            if (controller.canShare) {
+                DropdownMenuItem(
+                    text = { Text("Share a link") },
+                    onClick = { menuOpen = false; controller.ask(Confirmation.Share(entry)) },
                 )
             }
             DropdownMenuItem(
@@ -140,4 +154,41 @@ private fun describe(entry: DavResource): String {
         size < 1024 * 1024 * 1024 -> "${size / (1024 * 1024)} MB"
         else -> "${size / (1024 * 1024 * 1024)} GB"
     }
+}
+
+/**
+ * The four lifetimes, and the sentence that has to be said out loud.
+ *
+ * None of this can be taken back one link at a time, so the screen that gives a
+ * link away is the only place somebody can be told so.
+ */
+@Composable
+private fun ShareDialog(target: DavResource, controller: BrowserController) {
+    AlertDialog(
+        onDismissRequest = controller::dismiss,
+        title = { Text("Share \"${target.name}\"") },
+        text = {
+            Text(
+                "Anyone with the link can open it, without signing in" +
+                    (if (target.isDirectory) ", and everything inside it" else "") + ".\n\n" +
+                    "There is no list of what you have shared and no way to withdraw one link: " +
+                    "changing your password withdraws them all. Renaming this breaks its link.",
+            )
+        },
+        confirmButton = {
+            Column {
+                for (life in ShareLife.entries) {
+                    TextButton(onClick = { controller.confirmShare(life) }) { Text(label(life)) }
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = controller::dismiss) { Text("Cancel") } },
+    )
+}
+
+private fun label(life: ShareLife) = when (life) {
+    ShareLife.ADay -> "For a day"
+    ShareLife.AWeek -> "For a week"
+    ShareLife.AMonth -> "For a month"
+    ShareLife.Forever -> "Until I change my password"
 }

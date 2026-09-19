@@ -20,6 +20,13 @@ data class BrowserState(
 sealed interface Confirmation {
     data class Delete(val target: DavResource) : Confirmation
     data class Rename(val target: DavResource) : Confirmation
+
+    /**
+     * Not a confirmation so much as a choice of how long, but it belongs here:
+     * it is the same one-thing-at-a-time slot, and what it gives away cannot be
+     * taken back either.
+     */
+    data class Share(val target: DavResource) : Confirmation
 }
 
 /**

@@ -91,6 +91,18 @@ If your machine is ARM, `.devcontainer/` describes a GitHub Codespace that is
 not: opening one gives an x86_64 box with Docker, where both caveats disappear
 and `make doctor` says so on first login.
 
+## Sharing
+
+Hold a row in the browser and the app makes a link anybody can open without an
+account -- a file, or a folder and what is under it -- for a day, a week, a
+month, or until you change your password.
+
+Nothing is asked of the server to make one: Stratus signs share links with a key
+derived from the password, so an app that holds the password can sign its own.
+Nothing is written down either, which is what the choice of lifetime is for.
+There is no list of what you have shared, no withdrawing one link on its own,
+and renaming a shared file breaks its link.
+
 ## Getting it onto an Android phone
 
 Every green CI run attaches `stratus-app-debug-apk` to itself: open the run under
