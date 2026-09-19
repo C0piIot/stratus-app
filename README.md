@@ -99,6 +99,9 @@ month, or until you change your password.
 
 Nothing is asked of the server to make one: Stratus signs share links with a key
 derived from the password, so an app that holds the password can sign its own.
+Other WebDAV servers do not understand them, and the app finds that out by
+offering the link to the server before offering it to you -- so sharing and
+casting disappear rather than producing a URL nobody can open.
 Nothing is written down either, which is what the choice of lifetime is for.
 There is no list of what you have shared, no withdrawing one link on its own,
 and renaming a shared file breaks its link.
@@ -120,15 +123,27 @@ the same app, without the cast button.
 
 ## Getting it onto an Android phone
 
-Every green CI run attaches `stratus-app-debug-apk` to itself: open the run under
-[Actions](https://github.com/C0piIot/stratus-app/actions), take it from
-Artifacts, and `adb install` it or open the file on the phone.
+One address, which never changes and needs no account:
 
-It is **debug-signed**, so the phone will ask whether you trust an app from
-outside the store, and it will refuse to install over a copy signed with
-anything else -- uninstall first when that happens. There is no release signing
-key and no Play listing yet; neither is needed to back up your own camera roll
-to your own server.
+**https://github.com/C0piIot/stratus-app/releases/download/latest/stratus.apk**
+
+It is the current state of `main`, rebuilt and replaced on every push. Open it on
+the phone and install, or `adb install stratus.apk`.
+
+Every CI run, on a branch or not, also attaches the APK to itself under
+[Actions](https://github.com/C0piIot/stratus-app/actions) — useful for trying a
+change before it lands, though GitHub serves artifacts as a zip and only to
+somebody signed in.
+
+The phone will ask whether you trust an app from outside the store. It will not
+ask you to uninstall the last one: every build from this repository is signed
+with the same key, kept as a repository secret, so updates install over each
+other and keep your session and your cache. A build made anywhere else -- a
+fork, or your own laptop -- is signed with a throwaway debug key instead and
+will not install over ours.
+
+That key is for sideloading and nothing else. Stable releases, if there are
+ever any, get a key of their own and a Play listing is not part of the plan.
 
 ## What cannot be promised on Android
 

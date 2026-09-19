@@ -1,6 +1,12 @@
 package dev.stratus.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -11,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import dev.stratus.core.AppContainer
 import dev.stratus.core.backup.BackupState
 import dev.stratus.core.cast.CastController
@@ -50,19 +57,35 @@ fun App(
     LaunchedEffect(Unit) { signIn.restore() }
 
     MaterialTheme {
-        when (val current = state) {
-            is SignInState.Done -> SignedIn(
-                container = container,
-                back = back,
-                onBackUpNow = onBackUpNow,
-                baseUrl = current.baseUrl,
-                // Adding a server is the same screen as the first sign-in,
-                // reached by putting the controller back where it starts.
-                onAddAnother = signIn::cancel,
-                onInstancesChanged = { signIn.restore() },
-            )
+        // Android has drawn edge to edge without asking since targetSdk 35, and
+        // iOS has a notch: without this the first thing on a screen sits under
+        // the status bar, which is where the sign-in form's server address was.
+        // Applied once at the root and consumed here, so the browser's Scaffold
+        // does not pad a second time.
+        //
+        // The top and the sides only. `safeDrawing` counts the keyboard too,
+        // and padding the root for it shrinks whatever is on screen instead of
+        // letting it scroll under -- which would have traded a field hidden at
+        // the top for one squeezed off the bottom.
+        Box(
+            Modifier.windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+            ),
+        ) {
+            when (val current = state) {
+                is SignInState.Done -> SignedIn(
+                    container = container,
+                    back = back,
+                    onBackUpNow = onBackUpNow,
+                    baseUrl = current.baseUrl,
+                    // Adding a server is the same screen as the first sign-in,
+                    // reached by putting the controller back where it starts.
+                    onAddAnother = signIn::cancel,
+                    onInstancesChanged = { signIn.restore() },
+                )
 
-            else -> SignInScreen(current, onSubmit = signIn::submit, onAnswer = signIn::answer)
+                else -> SignInScreen(current, onSubmit = signIn::submit, onAnswer = signIn::answer)
+            }
         }
     }
 }

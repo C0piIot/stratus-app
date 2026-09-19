@@ -41,4 +41,12 @@ sealed interface BrowserFailure {
     data class RenameNeedsAnEmptyFolder(val name: String) : BrowserFailure
     data class Operation(val error: DavError) : BrowserFailure
     data class Transfer(val name: String) : BrowserFailure
+
+    /**
+     * The link was signed and the server did not know what it was.
+     *
+     * A signed link is Stratus's, and this app works against any WebDAV server,
+     * so this is the ordinary answer from the others rather than a fault.
+     */
+    data object TheServerDoesNotDoLinks : BrowserFailure
 }

@@ -43,7 +43,8 @@ DOCKER_RUN = docker run --rm \
 	-v "$(CACHE_DIR)/konan":/konan \
 	-e HOME=/tmp \
 	-e GRADLE_USER_HOME=/gradle \
-	-e KONAN_DATA_DIR=/konan
+	-e KONAN_DATA_DIR=/konan \
+	-e STRATUS_KEYSTORE_BASE64 -e STRATUS_KEYSTORE_PASSWORD
 
 # The wrapper is the source of truth for the Gradle version as soon as it
 # exists; the one baked into the image is only there to create it.
