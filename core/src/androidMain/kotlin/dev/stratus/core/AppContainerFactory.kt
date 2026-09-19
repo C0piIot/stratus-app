@@ -6,6 +6,7 @@ import dev.stratus.core.files.AndroidFileHandoff
 import dev.stratus.core.net.PinnedHostnameVerifier
 import dev.stratus.core.net.PinningTrustManager
 import dev.stratus.core.net.pinnedSocketFactory
+import dev.stratus.core.share.AndroidLinkSharing
 import dev.stratus.core.store.AndroidSecureStore
 import io.ktor.client.engine.okhttp.OkHttp
 import javax.net.ssl.HttpsURLConnection
@@ -33,6 +34,7 @@ fun appContainer(context: Context): AppContainer {
         },
         secure = AndroidSecureStore(application),
         handoff = AndroidFileHandoff(application),
+        sharing = AndroidLinkSharing(application),
         databasePath = application.filesDir.resolve("backup.db").absolutePath,
         assets = AndroidAssetSource(application),
     )

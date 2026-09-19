@@ -2,6 +2,7 @@ package dev.stratus.core
 
 import dev.stratus.core.backup.IosAssetSource
 import dev.stratus.core.files.IosFileHandoff
+import dev.stratus.core.share.IosLinkSharing
 import dev.stratus.core.store.KeychainSecureStore
 import io.ktor.client.engine.darwin.Darwin
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -21,6 +22,7 @@ fun appContainer(): AppContainer = AppContainer(
     engine = { _ -> Darwin.create() },
     secure = KeychainSecureStore(),
     handoff = IosFileHandoff(),
+    sharing = IosLinkSharing(),
     databasePath = databasePath(),
     assets = IosAssetSource(),
 )

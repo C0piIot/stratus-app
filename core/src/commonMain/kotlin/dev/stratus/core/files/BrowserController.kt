@@ -3,6 +3,8 @@ package dev.stratus.core.files
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.dav.DavResource
+import dev.stratus.core.share.ShareLife
+import dev.stratus.core.share.Sharing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +29,11 @@ class BrowserController(
     private val dav: DavClient,
     private val handoff: FileHandoff,
     private val scope: CoroutineScope,
+    private val sharing: Sharing? = null,
 ) {
+    /** Whether there is anybody to share through, which the row menu asks. */
+    val canShare: Boolean get() = sharing != null
+
     private val mutable = MutableStateFlow(BrowserState())
     val state: StateFlow<BrowserState> = mutable.asStateFlow()
 
@@ -93,6 +99,20 @@ class BrowserController(
     fun confirmDelete() {
         val target = (mutable.value.pending as? Confirmation.Delete)?.target ?: return
         act(target) { dav.delete(target.path) }
+    }
+
+    /**
+     * Mints a link for what [ask] last put up and hands it to the system.
+     *
+     * Nothing is sent to the server: the signature comes from the password this
+     * app already holds, so making a link is arithmetic and the first time the
+     * server hears about it is when somebody opens it.
+     */
+    fun confirmShare(life: ShareLife) {
+        val target = (mutable.value.pending as? Confirmation.Share)?.target ?: return
+        val sharing = sharing ?: return
+        mutable.value = mutable.value.copy(pending = null)
+        scope.launch { sharing.offer(target, life) }
     }
 
     fun confirmRename(to: String) {

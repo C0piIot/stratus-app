@@ -1,5 +1,6 @@
 package dev.stratus.core.backup
 
+import dev.stratus.core.net.originOf
 import dev.stratus.core.net.sourceBody
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
@@ -8,7 +9,6 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
-import io.ktor.http.Url
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.io.RawSource
@@ -135,9 +135,7 @@ class TusTransport(
 
     /** A `Location` may be a path; everything after it has to be absolute. */
     private fun absolute(location: String): String =
-        if (location.startsWith("http")) location else Url(endpoint).let { "${it.protocol.name}://${it.host}" + portOf(it) + location }
-
-    private fun portOf(url: Url) = if (url.port == url.protocol.defaultPort) "" else ":${url.port}"
+        if (location.startsWith("http")) location else originOf(endpoint) + location
 
     private fun kindOf(status: Int) =
         if (status == 401 || status == 403) FailureKind.Permanent else FailureKind.Transient
@@ -163,9 +161,7 @@ class TusTransport(
  * used tomorrow, with nothing to invalidate.
  */
 suspend fun negotiateTus(http: HttpClient, baseUrl: String): String? {
-    val url = Url(baseUrl)
-    val port = if (url.port == url.protocol.defaultPort) "" else ":${url.port}"
-    val endpoint = "${url.protocol.name}://${url.host}$port/tus/"
+    val endpoint = originOf(baseUrl) + "/tus/"
     return try {
         val response: HttpResponse = http.request(endpoint) { method = HttpMethod.Options }
         if (response.headers["Tus-Resumable"] != null) endpoint else null

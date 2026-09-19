@@ -2,6 +2,11 @@ package dev.stratus.core.files
 
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavResource
+import dev.stratus.core.net.Credentials
+import dev.stratus.core.share.LinkSharing
+import dev.stratus.core.share.ShareLife
+import dev.stratus.core.share.ShareLinks
+import dev.stratus.core.share.Sharing
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -27,6 +32,15 @@ private class RecordingHandoff : FileHandoff {
     }
 }
 
+private class RecordingSheet : LinkSharing {
+    var link: String? = null
+    var label: String? = null
+    override suspend fun offer(link: String, name: String) {
+        this.link = link
+        this.label = name
+    }
+}
+
 class BrowserControllerTest {
 
     private val seen = mutableListOf<HttpRequestData>()
@@ -42,6 +56,8 @@ class BrowserControllerTest {
         append("</multistatus>")
     }
 
+    private val sheet = RecordingSheet()
+
     private fun controller(
         scope: TestScope,
         answer: (HttpRequestData) -> Pair<HttpStatusCode, String>,
@@ -51,7 +67,12 @@ class BrowserControllerTest {
             val (status, body) = answer(request)
             respond(body, status)
         }
-        return BrowserController(DavClient(HttpClient(engine), "http://host/dav/"), handoff, scope)
+        return BrowserController(
+            DavClient(HttpClient(engine), "http://host/dav/"),
+            handoff,
+            scope,
+            Sharing(ShareLinks("http://host/dav/", Credentials("edu", "secret")), sheet) { 1_700_000_000 },
+        )
     }
 
     // Waiting on the state rather than on the scheduler: the mock engine hops off
@@ -204,5 +225,40 @@ class BrowserControllerTest {
 
         assertTrue(browser.state.value.failure is BrowserFailure.Listing)
         assertTrue(!browser.state.value.busy, "left spinning")
+    }
+
+    @Test
+    fun sharingHandsTheSystemALinkAndNothingGoesToTheServer() = runTest {
+        val browser = controller(this, listingOf("/dav/photos/a.txt" to false))
+        browser.start()
+        browser.settled()
+        val target = browser.state.value.entries.single()
+
+        browser.ask(Confirmation.Share(target))
+        browser.confirmShare(ShareLife.ADay)
+        // Not settled(): nothing here is busy, because nothing here is a request.
+        testScheduler.advanceUntilIdle()
+
+        val link = requireNotNull(sheet.link)
+        assertTrue(link.startsWith("http://host/files/photos/a.txt?k="), "was $link")
+        assertEquals("a.txt", sheet.label)
+        // A link is arithmetic over the password: the first the server hears of
+        // it is when somebody opens it.
+        assertEquals(listOf("PROPFIND"), seen.map { it.method.value }.distinct())
+        assertNull(browser.state.value.pending)
+    }
+
+    @Test
+    fun aFolderIsSharedAsAFolder() = runTest {
+        val browser = controller(this, listingOf("/dav/album" to true))
+        browser.start()
+        browser.settled()
+
+        browser.ask(Confirmation.Share(browser.state.value.entries.single()))
+        browser.confirmShare(ShareLife.Forever)
+        testScheduler.advanceUntilIdle()
+
+        // The claim in the token, which is what makes it reach inside.
+        assertEquals("d", requireNotNull(sheet.link).substringAfter("?k=").split(".")[3])
     }
 }

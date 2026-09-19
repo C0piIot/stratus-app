@@ -201,6 +201,27 @@ the message stays and the conformance suite now pins the rename working. Deletin
 folder does work, and there is no trash anywhere in Stratus, so deletion asks
 first -- the same bargain the web UI already makes.
 
+**A link somebody without an account can open, minted here rather than asked
+for.** The server signs share links with a key derived from the password
+(stratus-backend#169), and this app holds that password -- so it can produce one
+itself, and no endpoint had to be invented for it. That is the difference
+between adding sharing and breaking the no-private-API rule, and it is worth
+noticing that the rule was what made the good design findable.
+
+The cost is that two codebases in two languages have to agree on a token byte
+for byte with no shared artefact between them, which no unit test here can
+promise. So the format is pinned twice: against a golden value computed with an
+independent implementation, which fails in seconds, and against a real server in
+the conformance suite, which is what actually settles it. What is signed is the
+raw path; what travels is the encoded one, and a name with a space, an accent
+and an ampersand is in the conformance test for that reason.
+
+The screen says what cannot be taken back, because none of it can be taken back
+one link at a time: there is no list of what has been shared, no withdrawing a
+single link -- changing the password withdraws every link and signs every
+browser out -- and renaming a shared file breaks its link, since a signature
+names a path and not a file.
+
 **Open and download are not the same button.** Open hands the file to whatever
 the system uses to view it; download keeps a copy. On Android that copy has an
 obvious home, on iOS it means the share sheet or the Files app, because there is

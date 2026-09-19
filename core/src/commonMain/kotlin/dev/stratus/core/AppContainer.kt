@@ -15,6 +15,9 @@ import dev.stratus.core.net.DavProber
 import dev.stratus.core.net.TrustPolicy
 import dev.stratus.core.net.hostPortOf
 import dev.stratus.core.net.stratusHttpClient
+import dev.stratus.core.share.LinkSharing
+import dev.stratus.core.share.ShareLinks
+import dev.stratus.core.share.Sharing
 import dev.stratus.core.signin.SignInController
 import dev.stratus.core.store.ConsentStore
 import dev.stratus.core.store.SecureStore
@@ -36,6 +39,7 @@ class AppContainer(
     private val engine: (TrustPolicy) -> HttpClientEngine,
     private val secure: SecureStore,
     private val handoff: FileHandoff,
+    private val sharing: LinkSharing,
     databasePath: String,
     /** Where photographs come from on this platform. */
     val assets: AssetSource,
@@ -89,6 +93,12 @@ class AppContainer(
     suspend fun browser(scope: CoroutineScope): BrowserController? {
         val instance = instances.current() ?: return null
         val connection = connections.to(instance) ?: return null
-        return BrowserController(connection.dav, handoff, scope)
+        val credentials = instances.credentials(instance.id) ?: return null
+        return BrowserController(
+            connection.dav,
+            handoff,
+            scope,
+            Sharing(ShareLinks(instance.baseUrl, credentials), sharing),
+        )
     }
 }
