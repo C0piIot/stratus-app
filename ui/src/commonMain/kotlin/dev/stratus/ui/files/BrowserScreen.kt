@@ -31,12 +31,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.dav.DavResource
 import dev.stratus.core.files.BrowserController
+import dev.stratus.core.cast.CastController
+import dev.stratus.core.cast.CastState
 import dev.stratus.core.files.Confirmation
 import dev.stratus.core.share.ShareLife
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BrowserScreen(controller: BrowserController, onOpenServers: () -> Unit) {
+fun BrowserScreen(
+    controller: BrowserController,
+    cast: CastController?,
+    onOpenServers: () -> Unit,
+) {
     val state by controller.state.collectAsState()
 
     Scaffold(
@@ -54,9 +60,11 @@ fun BrowserScreen(controller: BrowserController, onOpenServers: () -> Unit) {
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.failure?.let { Text(explain(it), Modifier.padding(16.dp)) }
 
+            if (cast != null) CastBar(cast)
+
             LazyColumn(Modifier.fillMaxSize()) {
                 items(state.entries, key = { it.path }) { entry ->
-                    Row(entry, controller)
+                    Row(entry, controller, cast)
                     Divider()
                 }
             }
@@ -73,7 +81,7 @@ fun BrowserScreen(controller: BrowserController, onOpenServers: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Row(entry: DavResource, controller: BrowserController) {
+private fun Row(entry: DavResource, controller: BrowserController, cast: CastController?) {
     var menuOpen by remember { mutableStateOf(false) }
 
     Box {
@@ -98,6 +106,12 @@ private fun Row(entry: DavResource, controller: BrowserController) {
                 DropdownMenuItem(
                     text = { Text("Download") },
                     onClick = { menuOpen = false; controller.saveFile(entry) },
+                )
+            }
+            if (cast?.canCast(entry) == true) {
+                DropdownMenuItem(
+                    text = { Text("Cast to a screen") },
+                    onClick = { menuOpen = false; cast.offer(entry) },
                 )
             }
             if (controller.canShare) {
@@ -191,4 +205,61 @@ private fun label(life: ShareLife) = when (life) {
     ShareLife.AWeek -> "For a week"
     ShareLife.AMonth -> "For a month"
     ShareLife.Forever -> "Until I change my password"
+}
+
+/**
+ * Everything casting has to say, which is a warning, a list of screens, or what
+ * is playing.
+ */
+@Composable
+private fun CastBar(cast: CastController) {
+    val state by cast.state.collectAsState()
+    val devices by cast.devices.collectAsState()
+
+    when (val here = state) {
+        CastState.Idle -> {}
+
+        is CastState.Playing -> ListItem(
+            headlineContent = { Text("Playing on ${here.device.name}") },
+            supportingContent = { Text(here.item.title) },
+            trailingContent = { TextButton(onClick = cast::stop) { Text("Stop") } },
+        )
+
+        // Told rather than refused: a pin is only consulted when the system's
+        // own check fails, so a server given a real certificate since would be
+        // warned about for nothing.
+        is CastState.CertificateIsOnlyTrustedHere -> AlertDialog(
+            onDismissRequest = cast::stop,
+            title = { Text("A television cannot check this certificate") },
+            text = {
+                Text(
+                    "You accepted this server's certificate on this phone, and nothing else " +
+                        "vouches for it. A television has nobody to ask, so it will most likely " +
+                        "fetch nothing and sit there.\n\n" +
+                        "What fixes it: a certificate from a real authority — Let's Encrypt is " +
+                        "free — or reaching the server over plain http on your own network.",
+                )
+            },
+            confirmButton = { TextButton(onClick = cast::goOnAnyway) { Text("Cast anyway") } },
+            dismissButton = { TextButton(onClick = cast::stop) { Text("Cancel") } },
+        )
+
+        is CastState.Choosing -> AlertDialog(
+            onDismissRequest = cast::stop,
+            title = { Text("Cast \"${here.item.title}\"") },
+            text = {
+                Column {
+                    if (devices.isEmpty()) {
+                        Text("Looking for screens on this network…")
+                    } else {
+                        for (device in devices) {
+                            TextButton(onClick = { cast.playOn(device) }) { Text(device.name) }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = cast::stop) { Text("Cancel") } },
+        )
+    }
 }

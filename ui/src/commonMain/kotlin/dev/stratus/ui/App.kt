@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import dev.stratus.core.AppContainer
 import dev.stratus.core.backup.BackupState
+import dev.stratus.core.cast.CastController
 import dev.stratus.core.backup.MediaAccess
 import dev.stratus.core.backup.MediaSource
 import dev.stratus.core.files.BrowserController
@@ -78,6 +79,7 @@ private fun SignedIn(
     val scope = rememberCoroutineScope()
     var screen by remember { mutableStateOf<Screen>(Screen.Browser) }
     var browser by remember { mutableStateOf<BrowserController?>(null) }
+    var cast by remember { mutableStateOf<CastController?>(null) }
     var servers by remember { mutableStateOf(emptyList<Instance>()) }
     var currentId by remember { mutableStateOf<String?>(null) }
     var overall by remember { mutableStateOf<BackupState>(BackupState.NeverRun) }
@@ -88,6 +90,7 @@ private fun SignedIn(
 
     LaunchedEffect(baseUrl, reload) {
         browser = container.browser(scope)?.also { it.start() }
+        cast = container.cast(scope)
         currentId = container.current()?.id
         folders = container.backup.sources()
         access = container.backup.access()
@@ -159,7 +162,7 @@ private fun SignedIn(
             val open = browser ?: return
             Column {
                 BackupStrip(overall) { screen = Screen.Backup }
-                BrowserScreen(open, onOpenServers = { screen = Screen.Servers })
+                BrowserScreen(open, cast, onOpenServers = { screen = Screen.Servers })
             }
         }
     }

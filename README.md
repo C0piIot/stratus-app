@@ -103,6 +103,21 @@ Nothing is written down either, which is what the choice of lifetime is for.
 There is no list of what you have shared, no withdrawing one link on its own,
 and renaming a shared file breaks its link.
 
+## Casting
+
+Hold a photograph or a video and send it to a Chromecast. It uses Google's
+default receiver, so there is nothing to register and nothing to pay: what the
+television fetches is a signed link that needs no account.
+
+A photograph is sent as the server's rendering of it, which is how a HEIC from
+an iPhone appears on a screen that cannot read one. Video is sent as it is, so
+H.264 plays and HEVC needs a 4K Chromecast. And a server whose certificate you
+accepted on the phone is one the television cannot check, so the app says so
+before trying.
+
+The Cast SDK is part of Google Play Services. On a phone without them the app is
+the same app, without the cast button.
+
 ## Getting it onto an Android phone
 
 Every green CI run attaches `stratus-app-debug-apk` to itself: open the run under
