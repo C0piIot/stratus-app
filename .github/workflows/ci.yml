@@ -77,6 +77,17 @@ jobs:
 
       - run: make gradle ARGS="assemble --stacktrace"
 
+      # The only route onto a phone. A debug-signed APK sideloads with no
+      # keystore, no Play account and no decision to make; release signing is a
+      # separate question and only arrives the day this goes to somebody else.
+      # `error` rather than a silent skip: an artifact nobody notices is missing
+      # is worse than a failed build.
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: stratus-app-debug-apk
+          path: androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
   # The Android code, actually running. Until this existed CI compiled it and
   # nothing more, which for a cursor over MediaStore and a permission state is
   # the same as not testing it at all.
