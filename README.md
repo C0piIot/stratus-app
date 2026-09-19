@@ -127,11 +127,15 @@ Every green CI run attaches `stratus-app-debug-apk` to itself: open the run unde
 [Actions](https://github.com/C0piIot/stratus-app/actions), take it from
 Artifacts, and `adb install` it or open the file on the phone.
 
-It is **debug-signed**, so the phone will ask whether you trust an app from
-outside the store, and it will refuse to install over a copy signed with
-anything else -- uninstall first when that happens. There is no release signing
-key and no Play listing yet; neither is needed to back up your own camera roll
-to your own server.
+The phone will ask whether you trust an app from outside the store. It will not
+ask you to uninstall the last one: every build from this repository is signed
+with the same key, kept as a repository secret, so updates install over each
+other and keep your session and your cache. A build made anywhere else -- a
+fork, or your own laptop -- is signed with a throwaway debug key instead and
+will not install over ours.
+
+That key is for sideloading and nothing else. Stable releases, if there are
+ever any, get a key of their own and a Play listing is not part of the plan.
 
 ## What cannot be promised on Android
 

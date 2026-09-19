@@ -75,7 +75,13 @@ jobs:
       - name: Build the toolchain image
         run: make toolchain BUILD_CACHE="--cache-from type=gha --cache-to type=gha,mode=max --load"
 
-      - run: make gradle ARGS="assemble --stacktrace"
+      - name: Build, signed with the key this repository keeps
+        run: make gradle ARGS="assemble --stacktrace"
+        env:
+          # Absent on a fork, where the build falls back to a throwaway debug
+          # key -- it still builds, its APK just will not install over ours.
+          STRATUS_KEYSTORE_BASE64: ${{ secrets.STRATUS_KEYSTORE_BASE64 }}
+          STRATUS_KEYSTORE_PASSWORD: ${{ secrets.STRATUS_KEYSTORE_PASSWORD }}
 
       # The only route onto a phone. A debug-signed APK sideloads with no
       # keystore, no Play account and no decision to make; release signing is a
