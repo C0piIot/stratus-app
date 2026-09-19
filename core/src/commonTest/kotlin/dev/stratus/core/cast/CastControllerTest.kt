@@ -2,8 +2,14 @@ package dev.stratus.core.cast
 
 import dev.stratus.core.dav.DavResource
 import dev.stratus.core.net.Credentials
+import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLinks
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -25,8 +31,16 @@ class CastControllerTest {
     private val links = ShareLinks("https://host/dav/", Credentials("edu", "secret"))
     private val caster = FakeCaster()
 
-    private fun controller(scope: TestScope, pinned: Boolean = false, caster: Caster = this.caster) =
-        CastController(caster, links, pinned, scope) { 1_700_000_000 }
+    /** A server that answers a signed link, unless a test says otherwise. */
+    private fun support(status: HttpStatusCode = HttpStatusCode.OK) =
+        LinkSupport(HttpClient(MockEngine { respond("", status) }))
+
+    private fun controller(
+        scope: TestScope,
+        pinned: Boolean = false,
+        caster: Caster = this.caster,
+        support: LinkSupport = support(),
+    ) = CastController(caster, links, pinned, support, scope) { 1_700_000_000 }
 
     private fun file(name: String, type: String?) =
         DavResource(path = "/album/$name", isDirectory = false, contentType = type)
@@ -74,6 +88,7 @@ class CastControllerTest {
         val cast = controller(this, pinned = true)
         cast.offer(file("clip.mp4", "video/mp4"))
         cast.goOnAnyway()
+        cast.state.first { it is CastState.Choosing }
 
         assertTrue(cast.state.value is CastState.Choosing)
         assertTrue(caster.discovering)
@@ -83,6 +98,7 @@ class CastControllerTest {
     fun choosingAScreenPlaysOnItAndStopsLookingForMore() = runTest {
         val cast = controller(this)
         cast.offer(file("clip.mp4", "video/mp4"))
+        cast.state.first { it is CastState.Choosing }
         cast.playOn(CastDevice("tv-1", "The television"))
         testScheduler.advanceUntilIdle()
 
@@ -98,10 +114,24 @@ class CastControllerTest {
         assertTrue(!cast.canCast(file("clip.mp4", "video/mp4")))
     }
 
+    @Test
+    fun aServerThatDoesNotDoLinksIsSaidSoRatherThanBlamedOnTheTelevision() = runTest {
+        // Every other WebDAV server, which is most of them: the signature means
+        // nothing there, and a television would simply never start.
+        val cast = controller(this, support = support(HttpStatusCode.SeeOther))
+        cast.offer(file("clip.mp4", "video/mp4"))
+        cast.state.first { it is CastState.TheServerDoesNotDoLinks }
+
+        assertEquals(CastState.TheServerDoesNotDoLinks, cast.state.value)
+        assertTrue(!caster.discovering, "went looking for screens for a link that means nothing")
+        // And having learned it, it stops being offered at all.
+        assertTrue(!cast.canCast(file("clip.mp4", "video/mp4")))
+    }
+
     /** What a screen would be handed, which is the decision under test. */
-    private fun chosenFor(scope: TestScope, name: String, type: String): CastItem {
+    private suspend fun chosenFor(scope: TestScope, name: String, type: String): CastItem {
         val cast = controller(scope)
         cast.offer(file(name, type))
-        return (cast.state.value as CastState.Choosing).item
+        return (cast.state.first { it is CastState.Choosing } as CastState.Choosing).item
     }
 }

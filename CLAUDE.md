@@ -208,6 +208,15 @@ itself, and no endpoint had to be invented for it. That is the difference
 between adding sharing and breaking the no-private-API rule, and it is worth
 noticing that the rule was what made the good design findable.
 
+**A signed link is Stratus's, and this app is meant to work against any WebDAV
+server**, so whether one means anything is a question rather than an assumption.
+It is asked with the link somebody is actually sending, at the moment they send
+it, and the answer is remembered: a speculative check at startup would have to
+sign something to ask about, and the only path always available to sign is the
+root -- putting an all-access signature on the wire to answer a question nobody
+had yet. The request carries no credentials, deliberately, because with them it
+would succeed everywhere and prove nothing.
+
 The cost is that two codebases in two languages have to agree on a token byte
 for byte with no shared artefact between them, which no unit test here can
 promise. So the format is pinned twice: against a golden value computed with an

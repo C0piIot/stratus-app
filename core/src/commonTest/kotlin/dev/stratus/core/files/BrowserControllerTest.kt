@@ -4,6 +4,7 @@ import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavResource
 import dev.stratus.core.net.Credentials
 import dev.stratus.core.share.LinkSharing
+import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLife
 import dev.stratus.core.share.ShareLinks
 import dev.stratus.core.share.Sharing
@@ -12,6 +13,7 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -33,11 +35,14 @@ private class RecordingHandoff : FileHandoff {
 }
 
 private class RecordingSheet : LinkSharing {
-    var link: String? = null
+    // A flow rather than a field for the same reason `settled` exists: the mock
+    // engine answers off the test dispatcher, so there is nothing to advance --
+    // only something to wait for.
+    val links = MutableStateFlow<String?>(null)
     var label: String? = null
     override suspend fun offer(link: String, name: String) {
-        this.link = link
-        this.label = name
+        label = name
+        links.value = link
     }
 }
 
@@ -57,9 +62,16 @@ class BrowserControllerTest {
     }
 
     private val sheet = RecordingSheet()
+    private val asked = mutableListOf<HttpRequestData>()
+
+    /** The server the link itself is offered to, which is a separate question. */
+    private fun support(status: HttpStatusCode = HttpStatusCode.OK) = LinkSupport(
+        HttpClient(MockEngine { request -> asked += request; respond("", status) }),
+    )
 
     private fun controller(
         scope: TestScope,
+        links: LinkSupport = support(),
         answer: (HttpRequestData) -> Pair<HttpStatusCode, String>,
     ): BrowserController {
         val engine = MockEngine { request ->
@@ -71,7 +83,11 @@ class BrowserControllerTest {
             DavClient(HttpClient(engine), "http://host/dav/"),
             handoff,
             scope,
-            Sharing(ShareLinks("http://host/dav/", Credentials("edu", "secret")), sheet) { 1_700_000_000 },
+            Sharing(
+                ShareLinks("http://host/dav/", Credentials("edu", "secret")),
+                sheet,
+                links,
+            ) { 1_700_000_000 },
         )
     }
 
@@ -87,7 +103,7 @@ class BrowserControllerTest {
     fun putsFoldersFirstAndThenSortsByNameIgnoringCase() = runTest {
         val browser = controller(
             this,
-            listingOf("/dav/zebra.txt" to false, "/dav/Apple.txt" to false, "/dav/photos" to true),
+            answer = listingOf("/dav/zebra.txt" to false, "/dav/Apple.txt" to false, "/dav/photos" to true),
         )
         browser.start()
         browser.settled()
@@ -96,7 +112,7 @@ class BrowserControllerTest {
 
     @Test
     fun walksIntoAFolderAndBackOutOfIt() = runTest {
-        val browser = controller(this, listingOf("/dav/photos" to true))
+        val browser = controller(this, answer = listingOf("/dav/photos" to true))
         browser.start()
         browser.settled()
 
@@ -136,7 +152,7 @@ class BrowserControllerTest {
 
     @Test
     fun dismissingAConfirmationDoesNothingAtAll() = runTest {
-        val browser = controller(this, listingOf("/dav/a.txt" to false))
+        val browser = controller(this, answer = listingOf("/dav/a.txt" to false))
         browser.start()
         browser.settled()
 
@@ -167,7 +183,7 @@ class BrowserControllerTest {
     @Test
     fun refusesARenameThatWouldBeAMove() = runTest {
         // A typed path would otherwise carry the file across the tree quietly.
-        val browser = controller(this, listingOf("/dav/a.txt" to false))
+        val browser = controller(this, answer = listingOf("/dav/a.txt" to false))
         browser.start()
         browser.settled()
 
@@ -229,17 +245,15 @@ class BrowserControllerTest {
 
     @Test
     fun sharingHandsTheSystemALinkAndNothingGoesToTheServer() = runTest {
-        val browser = controller(this, listingOf("/dav/photos/a.txt" to false))
+        val browser = controller(this, answer = listingOf("/dav/photos/a.txt" to false))
         browser.start()
         browser.settled()
         val target = browser.state.value.entries.single()
 
         browser.ask(Confirmation.Share(target))
         browser.confirmShare(ShareLife.ADay)
-        // Not settled(): nothing here is busy, because nothing here is a request.
-        testScheduler.advanceUntilIdle()
 
-        val link = requireNotNull(sheet.link)
+        val link = requireNotNull(sheet.links.first { it != null })
         assertTrue(link.startsWith("http://host/files/photos/a.txt?k="), "was $link")
         assertEquals("a.txt", sheet.label)
         // A link is arithmetic over the password: the first the server hears of
@@ -250,15 +264,49 @@ class BrowserControllerTest {
 
     @Test
     fun aFolderIsSharedAsAFolder() = runTest {
-        val browser = controller(this, listingOf("/dav/album" to true))
+        val browser = controller(this, answer = listingOf("/dav/album" to true))
         browser.start()
         browser.settled()
 
         browser.ask(Confirmation.Share(browser.state.value.entries.single()))
         browser.confirmShare(ShareLife.Forever)
-        testScheduler.advanceUntilIdle()
 
         // The claim in the token, which is what makes it reach inside.
-        assertEquals("d", requireNotNull(sheet.link).substringAfter("?k=").split(".")[3])
+        val link = requireNotNull(sheet.links.first { it != null })
+        assertEquals("d", link.substringAfter("?k=").split(".")[3])
+    }
+
+    @Test
+    fun aServerThatDoesNotUnderstandLinksIsToldAboutRatherThanGuessedAt() = runTest {
+        // A signed link is Stratus's. Against anything else it is a URL nobody
+        // has heard of, and handing that to somebody is worse than saying no.
+        val browser = controller(this, links = support(HttpStatusCode.SeeOther), answer = listingOf("/dav/a.txt" to false))
+        browser.start()
+        browser.settled()
+
+        browser.ask(Confirmation.Share(browser.state.value.entries.single()))
+        browser.confirmShare(ShareLife.ADay)
+        browser.state.first { it.failure != null }
+
+        assertNull(sheet.links.value, "handed somebody a link this server has never heard of")
+        assertEquals(BrowserFailure.TheServerDoesNotDoLinks, browser.state.value.failure)
+        assertTrue(!browser.canShare, "kept offering it after being told")
+    }
+
+    @Test
+    fun theQuestionIsAskedWithoutCredentials() = runTest {
+        // With them it would succeed against any server at all and prove
+        // nothing: what is being asked is whether the signature was enough.
+        val browser = controller(this, answer = listingOf("/dav/a.txt" to false))
+        browser.start()
+        browser.settled()
+
+        browser.ask(Confirmation.Share(browser.state.value.entries.single()))
+        browser.confirmShare(ShareLife.ADay)
+        sheet.links.first { it != null }
+
+        val check = asked.single()
+        assertEquals("HEAD", check.method.value)
+        assertNull(check.headers["Authorization"])
     }
 }

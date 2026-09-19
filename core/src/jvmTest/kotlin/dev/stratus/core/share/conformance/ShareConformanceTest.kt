@@ -5,6 +5,7 @@ import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
 import dev.stratus.core.net.originOf
 import dev.stratus.core.net.stratusHttpClient
+import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLife
 import dev.stratus.core.share.ShareLinks
 import io.ktor.client.HttpClient
@@ -117,6 +118,19 @@ class ShareConformanceTest {
         // A day from a day ago: a link whose life ran out while nobody looked.
         val link = links.link("$root/$name", false, ShareLife.ADay, nowEpochSeconds = now() - 2 * 86_400)
         assertEquals(403, stranger.get(link).status.value)
+    }
+
+    @Test
+    fun theServerAnswersTheQuestionTheAppAsksBeforeOfferingToShare() = runTest {
+        given()
+        // What decides whether the menu offers this at all. Against Stratus it
+        // is yes; against every other WebDAV server it is no, and the app has
+        // no other way of telling the two apart.
+        val support = LinkSupport(HttpClient(CIO) { followRedirects = false })
+        val link = links.link("$root/$name", false, ShareLife.Forever, now())
+
+        assertTrue(support.honours(link), "the server refused a link this app had just signed")
+        assertTrue(support.offered)
     }
 
     @Test

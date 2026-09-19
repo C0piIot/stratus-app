@@ -244,6 +244,18 @@ private fun CastBar(cast: CastController) {
             dismissButton = { TextButton(onClick = cast::stop) { Text("Cancel") } },
         )
 
+        CastState.TheServerDoesNotDoLinks -> AlertDialog(
+            onDismissRequest = cast::stop,
+            title = { Text("This server cannot hand a link to a television") },
+            text = {
+                Text(
+                    "A Chromecast fetches the file itself and cannot sign in, so it needs a link " +
+                        "that carries its own permission. Stratus makes those; this server does not.",
+                )
+            },
+            confirmButton = { TextButton(onClick = cast::stop) { Text("Close") } },
+        )
+
         is CastState.Choosing -> AlertDialog(
             onDismissRequest = cast::stop,
             title = { Text("Cast \"${here.item.title}\"") },

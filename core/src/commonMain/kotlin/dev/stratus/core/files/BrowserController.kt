@@ -32,7 +32,7 @@ class BrowserController(
     private val sharing: Sharing? = null,
 ) {
     /** Whether there is anybody to share through, which the row menu asks. */
-    val canShare: Boolean get() = sharing != null
+    val canShare: Boolean get() = sharing?.offered == true
 
     private val mutable = MutableStateFlow(BrowserState())
     val state: StateFlow<BrowserState> = mutable.asStateFlow()
@@ -112,7 +112,11 @@ class BrowserController(
         val target = (mutable.value.pending as? Confirmation.Share)?.target ?: return
         val sharing = sharing ?: return
         mutable.value = mutable.value.copy(pending = null)
-        scope.launch { sharing.offer(target, life) }
+        scope.launch {
+            if (!sharing.offer(target, life)) {
+                mutable.value = mutable.value.copy(failure = BrowserFailure.TheServerDoesNotDoLinks)
+            }
+        }
     }
 
     fun confirmRename(to: String) {

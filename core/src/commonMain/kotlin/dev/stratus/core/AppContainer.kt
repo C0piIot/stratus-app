@@ -18,6 +18,7 @@ import dev.stratus.core.net.TrustPolicy
 import dev.stratus.core.net.hostPortOf
 import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.share.LinkSharing
+import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLinks
 import dev.stratus.core.share.Sharing
 import dev.stratus.core.signin.SignInController
@@ -59,6 +60,10 @@ class AppContainer(
     /** The one place an instance turns into something that can make requests. */
     private val trust = TrustStore(secure)
 
+    // Kept because the browser and the caster both ask, and the answer belongs
+    // to the server rather than to either of them.
+    private var links: Pair<String, LinkSupport>? = null
+
     private val connections = Connections { instance ->
         val credentials = instances.credentials(instance.id) ?: return@Connections null
         val pinned = TrustPolicy(trust.pins()[hostPortOf(instance.baseUrl)])
@@ -94,6 +99,19 @@ class AppContainer(
     }
 
     /**
+     * How to reach an instance carrying nothing at all.
+     *
+     * The same trust as everywhere else -- a pinned certificate is still pinned
+     * -- and deliberately no credentials: a check for whether a signed link
+     * works would succeed against any server if it were authenticated.
+     */
+    private suspend fun linkSupportFor(instance: Instance): LinkSupport {
+        links?.takeIf { it.first == instance.id }?.let { return it.second }
+        val policy = TrustPolicy(trust.pins()[hostPortOf(instance.baseUrl)])
+        return LinkSupport(stratusHttpClient(engine(policy), null)).also { links = instance.id to it }
+    }
+
+    /**
      * Casting for whichever instance is being looked at, or null when there is
      * none. Built here because only the composition root knows both the
      * certificate this instance was trusted by and the sender this phone has.
@@ -108,6 +126,7 @@ class AppContainer(
             // vouched for by this device alone is one it cannot fetch from.
             certificateIsPinned = Url(instance.baseUrl).protocol.name == "https" &&
                 hostPortOf(instance.baseUrl) in trust.pins(),
+            support = linkSupportFor(instance),
             scope = scope,
         )
     }
@@ -121,7 +140,7 @@ class AppContainer(
             connection.dav,
             handoff,
             scope,
-            Sharing(ShareLinks(instance.baseUrl, credentials), sharing),
+            Sharing(ShareLinks(instance.baseUrl, credentials), sharing, linkSupportFor(instance)),
         )
     }
 }

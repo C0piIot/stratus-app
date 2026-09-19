@@ -11,6 +11,10 @@ internal fun explain(failure: BrowserFailure): String = when (failure) {
             "\"${failure.name}\" has to stay as it is for now."
 
     is BrowserFailure.Transfer -> "Could not fetch ${failure.name}."
+
+    BrowserFailure.TheServerDoesNotDoLinks ->
+        "This server does not understand shared links, so there is nothing to send. " +
+            "Stratus does; most other WebDAV servers do not."
     // The dead end worth naming: some servers show a folder they will not let
     // anybody list, because what is inside lives under a longer path. Left as
     // "the server answered 405" it reads as the app being broken.

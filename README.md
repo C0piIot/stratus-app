@@ -99,6 +99,9 @@ month, or until you change your password.
 
 Nothing is asked of the server to make one: Stratus signs share links with a key
 derived from the password, so an app that holds the password can sign its own.
+Other WebDAV servers do not understand them, and the app finds that out by
+offering the link to the server before offering it to you -- so sharing and
+casting disappear rather than producing a URL nobody can open.
 Nothing is written down either, which is what the choice of lifetime is for.
 There is no list of what you have shared, no withdrawing one link on its own,
 and renaming a shared file breaks its link.

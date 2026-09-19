@@ -18,8 +18,17 @@ interface LinkSharing {
 class Sharing(
     private val links: ShareLinks,
     private val sheet: LinkSharing,
+    private val support: LinkSupport,
     private val now: () -> Long = { getTimeMillis() / 1000 },
 ) {
-    suspend fun offer(target: DavResource, life: ShareLife) =
-        sheet.offer(links.link(target.path, target.isDirectory, life, now()), target.name)
+    /** Whether this is worth offering at all, after what a server has answered. */
+    val offered: Boolean get() = support.offered
+
+    /** False when the server does not honour the link, which is worth saying. */
+    suspend fun offer(target: DavResource, life: ShareLife): Boolean {
+        val link = links.link(target.path, target.isDirectory, life, now())
+        if (!support.honours(link)) return false
+        sheet.offer(link, target.name)
+        return true
+    }
 }
