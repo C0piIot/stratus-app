@@ -17,7 +17,6 @@ class BackupStatus(
     private val now: () -> Long = { getTimeMillis() },
 ) {
     suspend fun of(instance: Instance): BackupState {
-        database.migrate()
 
         // Before anything else: with no camera roll to read there is nothing to
         // say about progress, and silence here is what a broken backup looks like.

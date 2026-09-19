@@ -89,8 +89,8 @@ private fun SignedIn(
     LaunchedEffect(baseUrl, reload) {
         browser = container.browser(scope)?.also { it.start() }
         currentId = container.current()?.id
-        folders = container.availableSources()
-        access = container.libraryAccess()
+        folders = container.backup.sources()
+        access = container.backup.access()
     }
 
     // Polled rather than pushed: the backup runs in another process, and reading
@@ -99,9 +99,9 @@ private fun SignedIn(
     LaunchedEffect(reload) {
         while (true) {
             servers = container.instances()
-            overall = container.backupStatus.across(servers)
+            overall = container.backup.status.across(servers)
             statuses = servers.map {
-                InstanceStatus(it, container.backupStatus.of(it), container.backupFailures(it.id))
+                InstanceStatus(it, container.backup.status.of(it), container.backup.failures(it.id))
             }
             delay(1_000)
         }
@@ -127,7 +127,7 @@ private fun SignedIn(
             servers = servers,
             currentId = currentId,
             onLookAt = { id -> scope.launch { container.switchTo(id); reload++ } },
-            onEnableBackup = { id, on -> scope.launch { container.setBackupEnabled(id, on); reload++ } },
+            onEnableBackup = { id, on -> scope.launch { container.backup.setEnabled(id, on); reload++ } },
             onChooseSources = { screen = Screen.Sources(it) },
             onSignOut = { id ->
                 scope.launch {
@@ -147,7 +147,7 @@ private fun SignedIn(
             chosen = servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
             onSave = { chosen ->
                 scope.launch {
-                    container.setSources(here.instanceId, chosen)
+                    container.backup.setSources(here.instanceId, chosen)
                     reload++
                     screen = Screen.Servers
                 }

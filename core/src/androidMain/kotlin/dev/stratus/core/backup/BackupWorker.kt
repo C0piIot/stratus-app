@@ -34,33 +34,26 @@ class BackupWorker(
 ) : CoroutineWorker(context, parameters) {
 
     override suspend fun doWork(): Result {
-        val container = appContainer(applicationContext)
-        val instances = container.instances().filter { it.backupEnabled }
-        if (instances.isEmpty()) return Result.success()
+        val backup = appContainer(applicationContext).backup
+        if (backup.enabled().isEmpty()) return Result.success()
 
         setForeground(getForegroundInfo())
 
-        val run = container.backupRun()
-        var waiting = false
-        for (instance in instances) {
-            if (isStopped) break
-            val report = run.once(
-                instance = instance,
-                // Asked between files, so being reclaimed costs nothing: the
-                // queue is in the database and picks up where it stopped.
-                keepGoing = { !isStopped },
-                onStep = { step ->
-                    if (step is QueueStep.Uploaded) {
-                        setForegroundAsync(notify(step.path.substringAfterLast('/')))
-                    }
-                },
-            )
-            if (report.stopped == StoppedBecause.WaitingToRetry) waiting = true
-        }
+        val outcome = backup.pass(
+            // Asked between files, so being reclaimed costs nothing: the queue
+            // is in the database and picks up where it stopped.
+            keepGoing = { !isStopped },
+            onStep = { step ->
+                if (step is QueueStep.Uploaded) {
+                    setForegroundAsync(notify(step.path.substringAfterLast('/')))
+                }
+            },
+        )
 
-        // Coming back later is WorkManager's job; which item is ready is the
-        // queue's. The two backoffs are about different things and do not fight.
-        return if (waiting) Result.retry() else Result.success()
+        // Coming back later is WorkManager's job; whether there is a reason to
+        // is the queue's, and which item is ready is the queue's too. The two
+        // backoffs are about different things and do not fight.
+        return if (outcome == PassOutcome.ComeBackLater) Result.retry() else Result.success()
     }
 
     /**

@@ -297,6 +297,17 @@ chunk comes next, what to retry, when to give up, when a file counts as done,
 belongs in shared code with tests around it. The rule of thumb: if debugging it
 would need a device, it should not be the thing on the device.
 
+**The composition root is where that rule leaks, so watch it.** `AppContainer`
+opens a database, builds HTTP clients and reads the keychain, which means no test
+can construct one -- so anything that drifts in there has left the tested part of
+the app without anybody deciding that it should. It happened twice: the choice
+between tus and `PUT` lived in the container, and the fan-out over instances --
+which of them get a pass, and whether to ask the system to come back -- lived in
+`BackupWorker`, where iOS would have had to reimplement it. Both are in `Backup`
+now, behind a `Connections` seam whose only job is to be the part that needs an
+engine and a keychain. The container is wiring, the platform holds a
+notification and a return value, and everything in between is in `commonTest`.
+
 There is one qualification to all of that, with a sting in it: **the iOS source
 sets compile on Linux -- but only on x86_64.** Kotlin/Native does not support
 `linux-aarch64` as a host at all, so on the ARM development box every Apple

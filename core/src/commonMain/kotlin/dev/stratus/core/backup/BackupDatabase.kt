@@ -6,6 +6,8 @@ import dev.stratus.core.sql.use
 import androidx.sqlite.execSQL
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -19,11 +21,36 @@ class BackupDatabase(
     private val connection: SQLiteConnection,
     private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
-    fun cacheFor(instanceId: String): BackupCache = BackupCache(connection, instanceId, io)
+    private val schema = Mutex()
+    private var migrated = false
 
-    fun pendingFor(instanceId: String): PendingStore = PendingStore(connection, instanceId, io)
+    /**
+     * Applies the schema once, before anything is handed out.
+     *
+     * Every accessor does this rather than trusting a caller to have called
+     * [migrate] first. That rule was kept by memory in five places and the sixth
+     * would have been a missing table at runtime, on somebody's phone, in a
+     * background pass nobody is watching.
+     */
+    private suspend fun ready() {
+        if (migrated) return
+        schema.withLock { if (!migrated) { migrate(); migrated = true } }
+    }
 
-    fun journalFor(instanceId: String): BackupJournal = BackupJournal(connection, instanceId, io)
+    suspend fun cacheFor(instanceId: String): BackupCache {
+        ready()
+        return BackupCache(connection, instanceId, io)
+    }
+
+    suspend fun pendingFor(instanceId: String): PendingStore {
+        ready()
+        return PendingStore(connection, instanceId, io)
+    }
+
+    suspend fun journalFor(instanceId: String): BackupJournal {
+        ready()
+        return BackupJournal(connection, instanceId, io)
+    }
 
     /**
      * Brings the file up to the current schema.
@@ -103,7 +130,12 @@ class BackupDatabase(
     }
 
     /** Drops everything an instance knew, for when it is forgotten. */
-    suspend fun forget(instanceId: String) = withContext(io) {
+    suspend fun forget(instanceId: String) {
+        ready()
+        forgetRows(instanceId)
+    }
+
+    private suspend fun forgetRows(instanceId: String) = withContext(io) {
         for (table in listOf("uploaded", "pending", "journal")) {
             connection.prepare("DELETE FROM $table WHERE instance = ?").use { statement ->
                 statement.bindText(1, instanceId)
