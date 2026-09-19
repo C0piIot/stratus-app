@@ -91,6 +91,18 @@ If your machine is ARM, `.devcontainer/` describes a GitHub Codespace that is
 not: opening one gives an x86_64 box with Docker, where both caveats disappear
 and `make doctor` says so on first login.
 
+## Getting it onto an Android phone
+
+Every green CI run attaches `stratus-app-debug-apk` to itself: open the run under
+[Actions](https://github.com/C0piIot/stratus-app/actions), take it from
+Artifacts, and `adb install` it or open the file on the phone.
+
+It is **debug-signed**, so the phone will ask whether you trust an app from
+outside the store, and it will refuse to install over a copy signed with
+anything else -- uninstall first when that happens. There is no release signing
+key and no Play listing yet; neither is needed to back up your own camera roll
+to your own server.
+
 ## What cannot be promised on Android
 
 Background work that is not in the foreground is killed by the battery managers
