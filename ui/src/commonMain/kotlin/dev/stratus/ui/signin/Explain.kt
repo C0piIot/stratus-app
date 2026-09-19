@@ -16,10 +16,19 @@ internal fun explain(reason: SignInFailure): String = when (reason) {
 
     // The distinction that earns its keep: a server is there, so the address is
     // right and only the path is wrong. Telling somebody to check the address
-    // here would send them looking in the wrong place.
-    is SignInFailure.NotWebDav ->
-        "${reason.origin} answered, but there is no WebDAV server at " +
-            reason.triedPaths.joinToString(" or ") + ". Try typing the full path."
+    // here would send them looking in the wrong place. The second sentence is
+    // the one that helps, and it is only true in the second case: a server that
+    // answers something -- a web page, a 405 -- at the address somebody typed is
+    // usually one whose files are published somewhere else entirely.
+    is SignInFailure.NotWebDav -> {
+        val paths = reason.tried.joinToString(" or ") { it.path }
+        if (reason.tried.all { it.status == 404 }) {
+            "Nothing is published at $paths on ${reason.origin}. Type the full path to your files."
+        } else {
+            "${reason.origin} answered, but there is no WebDAV at $paths. A server's WebDAV " +
+                "address is often not the one its web interface shows -- type the full path it documents."
+        }
+    }
 
     is SignInFailure.PlaintextRefused ->
         "Cancelled. Nothing was sent to ${reason.host}."

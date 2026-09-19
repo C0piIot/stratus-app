@@ -5,6 +5,7 @@ import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.signin.Question
 import dev.stratus.core.signin.SignInController
 import dev.stratus.core.signin.SignInFailure
+import dev.stratus.core.signin.Tried
 import dev.stratus.core.signin.SignInForm
 import dev.stratus.core.signin.SignInState
 import dev.stratus.core.instance.InstanceStore
@@ -91,7 +92,7 @@ class SignInConformanceTest {
         val failed = signIn.awaitOutcome() as SignInState.Failed
         val reason = failed.reason
         assertTrue(reason is SignInFailure.NotWebDav, "was $reason")
-        assertEquals(listOf("/definitely-not-here/"), reason.triedPaths)
+        assertEquals(listOf(Tried("/definitely-not-here/", 404)), reason.tried)
     }
 
     @Test

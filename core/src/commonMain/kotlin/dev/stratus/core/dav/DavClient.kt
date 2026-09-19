@@ -164,6 +164,7 @@ class DavClient(
         401 -> DavError.Unauthorized()
         403 -> DavError.Forbidden(path)
         404 -> DavError.NotFound(path)
+        405 -> DavError.MethodNotAllowed(path)
         409 -> DavError.Conflict(path, bodyAsText().trim().take(200))
         412 -> DavError.PreconditionFailed(path)
         else -> DavError.Unexpected(status.value, path)

@@ -59,7 +59,7 @@ object SignInMachine {
     private fun begin(plan: SignInPlan): Step {
         val attempt = plan.queue.firstOrNull()
             ?: return Step(SignInState.Failed(exhausted(plan)))
-        val rest = plan.copy(queue = plan.queue.drop(1), triedPaths = plan.triedPaths + attempt.path)
+        val rest = plan.copy(queue = plan.queue.drop(1), tried = plan.tried + Tried(attempt.path))
 
         // Over TLS the password is safe to send straight away. Over http it is
         // not, so the first question is the cheap one -- is anything even there --
@@ -128,7 +128,7 @@ object SignInMachine {
             // The server is alive and this scheme works; only the path was wrong.
             // Falling back to http from here would downgrade a working connection
             // for no reason at all.
-            is ProbeOutcome.NotWebDav -> begin(plan)
+            is ProbeOutcome.NotWebDav -> begin(plan.answered(outcome.status))
 
             // Nothing is listening, so the remaining paths on this origin cannot
             // help either -- they are the same port. Drop them and try the other
@@ -137,7 +137,7 @@ object SignInMachine {
                 val fallback = plan.copy(
                     scheme = Scheme.Http,
                     queue = plan.address.candidates(Scheme.Http),
-                    triedPaths = emptyList(),
+                    tried = emptyList(),
                 )
                 if (plan.address.scheme == null && plan.scheme == Scheme.Https) {
                     begin(fallback)
@@ -184,9 +184,19 @@ object SignInMachine {
         return if (normalised == from.path) null else from.copy(path = normalised)
     }
 
+    /**
+     * Fills in what the path just tried answered.
+     *
+     * Recorded here rather than in [begin] because that is where the status is
+     * known, and a 404 everywhere is a different sentence from a server that
+     * answered something that is not WebDAV.
+     */
+    private fun SignInPlan.answered(status: Int?): SignInPlan =
+        if (tried.isEmpty()) this else copy(tried = tried.dropLast(1) + tried.last().copy(status = status))
+
     private fun exhausted(plan: SignInPlan): SignInFailure {
         val origin = plan.address.candidates(plan.scheme).first().origin
-        return SignInFailure.NotWebDav(origin, plan.triedPaths)
+        return SignInFailure.NotWebDav(origin, plan.tried)
     }
 
     private fun outcomeAttempt(outcome: ProbeOutcome): Candidate = when (outcome) {
