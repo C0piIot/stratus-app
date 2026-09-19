@@ -44,7 +44,14 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
     )
 
     /**
-     * The URL to send somebody.
+     * The URL to send somebody: the WebDAV address, with a signature on it.
+     *
+     * On `/dav/` rather than on the web UI's `/files/`, though both take the
+     * same token (stratus-backend#180). Two reasons: this app speaks WebDAV and
+     * already holds this URL, so nothing has to be derived; and the web UI is
+     * the surface most likely to change shape, while a mount is not. `/files/`
+     * also sets `Content-Disposition: attachment`, which nothing has been seen
+     * to mind and would be miserable to diagnose in a television that did.
      *
      * [path] is as WebDAV gives it, leading slash and all; the server's own
      * paths have none, and the signature is over its form rather than ours.
@@ -52,8 +59,8 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
     fun link(path: String, isDirectory: Boolean, life: ShareLife, nowEpochSeconds: Long): String {
         val target = path.trim('/')
         val deadline = life.seconds?.let { nowEpochSeconds + it } ?: 0L
-        return URLBuilder(originOf(baseUrl)).apply {
-            appendPathSegments(listOf(FILES) + target.split('/'))
+        return URLBuilder(baseUrl).apply {
+            appendPathSegments(target.split('/'))
             parameters.append(PARAM, token(target, isDirectory, deadline))
         }.buildString()
     }
@@ -62,9 +69,12 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
      * The URL of the server's own rendering of a picture, signed the same way.
      *
      * The same token as [link] -- the signature is over the path, and the
-     * thumbnail lives behind the same gate as the file -- so this is the file
-     * link with another prefix and a size on it. It is what makes a HEIC
-     * something a television or a gallery can show without decoding it here.
+     * thumbnail lives behind the same gate as the file -- with a size on it.
+     * It is what makes a HEIC something a television or a gallery can show
+     * without decoding it here.
+     *
+     * This one does hang off the origin, because there is no thumbnail in
+     * WebDAV and nowhere else to put it.
      */
     fun thumbnail(path: String, width: Int, life: ShareLife, nowEpochSeconds: Long): String {
         val target = path.trim('/')
@@ -101,7 +111,6 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
         const val VERSION = "k1"
         const val FILE = "f"
         const val SUBTREE = "d"
-        const val FILES = "files"
         const val THUMBNAILS = "thumb"
         const val SIZE = "size"
         const val PARAM = "k"

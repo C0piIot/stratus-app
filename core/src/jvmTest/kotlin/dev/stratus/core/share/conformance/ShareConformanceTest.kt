@@ -3,7 +3,6 @@ package dev.stratus.core.share.conformance
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
-import dev.stratus.core.net.originOf
 import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLife
@@ -69,8 +68,8 @@ class ShareConformanceTest {
     private fun tokenOf(url: String) = url.substringAfter("?k=")
 
     private fun urlFor(path: String, token: String) =
-        URLBuilder(originOf(baseUrl)).apply {
-            appendPathSegments(listOf("files") + path.trim('/').split('/'))
+        URLBuilder(baseUrl).apply {
+            appendPathSegments(path.trim('/').split('/'))
             parameters.append("k", token)
         }.buildString()
 

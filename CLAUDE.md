@@ -215,6 +215,13 @@ itself, and no endpoint had to be invented for it. That is the difference
 between adding sharing and breaking the no-private-API rule, and it is worth
 noticing that the rule was what made the good design findable.
 
+The link is the **WebDAV** address with a signature on it, not the web UI's
+`/files/`, though the server takes the token at both (stratus-backend#180). The
+app already holds this URL, so nothing has to be derived from it -- and a mount
+is not the surface that changes shape, while the web UI has a PWA and a calendar
+filed against it. The one exception is a thumbnail, which has nowhere else to
+live because WebDAV has no such thing.
+
 **A signed link is Stratus's, and this app is meant to work against any WebDAV
 server**, so whether one means anything is a question rather than an assumption.
 It is asked with the link somebody is actually sending, at the moment they send
