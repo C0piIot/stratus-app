@@ -1,3 +1,6 @@
+// `java` inside an `android` block is Gradle's own extension, not the package.
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
@@ -31,7 +34,7 @@ android {
     if (keystoreBase64.isPresent && keystorePassword.isPresent) {
         val keystore = layout.buildDirectory.file("signing/stratus.jks").get().asFile
         keystore.parentFile.mkdirs()
-        keystore.writeBytes(java.util.Base64.getDecoder().decode(keystoreBase64.get()))
+        keystore.writeBytes(Base64.getDecoder().decode(keystoreBase64.get()))
 
         signingConfigs.create("sideloaded") {
             storeFile = keystore
