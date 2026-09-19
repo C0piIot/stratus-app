@@ -57,6 +57,9 @@ jobs:
     name: android
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only this job publishes anything, so only this one can write.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -93,6 +96,24 @@ jobs:
           name: stratus-app-debug-apk
           path: androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # Artifacts are always served as a zip, even for one file, and only to
+      # somebody signed in to GitHub -- which is two obstacles too many on a
+      # phone. A release asset is a plain .apk at an address that never changes.
+      #
+      # Deleted and remade rather than edited, so the `latest` tag is always the
+      # commit the build came from rather than whichever one first created it.
+      - name: Publish it where a phone can reach it
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp androidApp/build/outputs/apk/debug/androidApp-debug.apk stratus.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest stratus.apk \
+            --prerelease \
+            --title "Latest build" \
+            --notes "The current state of main, replaced on every push. Signed with this repository's sideloading key, so it installs over the previous one. Built from ${GITHUB_SHA}." 
 
   # The Android code, actually running. Until this existed CI compiled it and
   # nothing more, which for a cursor over MediaStore and a permission state is

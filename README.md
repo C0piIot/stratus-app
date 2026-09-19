@@ -123,9 +123,17 @@ the same app, without the cast button.
 
 ## Getting it onto an Android phone
 
-Every green CI run attaches `stratus-app-debug-apk` to itself: open the run under
-[Actions](https://github.com/C0piIot/stratus-app/actions), take it from
-Artifacts, and `adb install` it or open the file on the phone.
+One address, which never changes and needs no account:
+
+**https://github.com/C0piIot/stratus-app/releases/download/latest/stratus.apk**
+
+It is the current state of `main`, rebuilt and replaced on every push. Open it on
+the phone and install, or `adb install stratus.apk`.
+
+Every CI run, on a branch or not, also attaches the APK to itself under
+[Actions](https://github.com/C0piIot/stratus-app/actions) — useful for trying a
+change before it lands, though GitHub serves artifacts as a zip and only to
+somebody signed in.
 
 The phone will ask whether you trust an app from outside the store. It will not
 ask you to uninstall the last one: every build from this repository is signed
