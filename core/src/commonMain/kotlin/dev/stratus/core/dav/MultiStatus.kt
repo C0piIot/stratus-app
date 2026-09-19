@@ -127,7 +127,14 @@ internal object MultiStatus {
         val decoded = DavPath.decode(encoded)
         val base = DavPath.decode(basePath)
         val relative = if (base.isNotEmpty() && decoded.startsWith(base)) decoded.removePrefix(base) else decoded
-        return if (relative.startsWith("/")) relative else "/$relative"
+        val absolute = if (relative.startsWith("/")) relative else "/$relative"
+
+        // One form for one resource. A collection's href ends in a slash on most
+        // servers -- Apache, sabre/dav, Nextcloud, RFC 4918's own examples -- and
+        // not on others, and a path is used as a key: by the backup cache, by the
+        // self entry a Depth 1 listing has to drop, by a signed link. Deciding it
+        // here is the only place it can be decided once.
+        return if (absolute.length > 1) absolute.trimEnd('/') else absolute
     }
 
     /** "HTTP/1.1 200 OK" -- the code is the only part worth reading. */

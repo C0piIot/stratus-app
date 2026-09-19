@@ -117,4 +117,34 @@ class MultiStatusTest {
         val thrown = runCatching { MultiStatus.parse(broken, "/dav") }.exceptionOrNull()
         assertTrue(thrown is DavError.Malformed, "was $thrown")
     }
+
+    @Test
+    fun aCollectionIsTheSamePathWhicheverFormTheServerSendsItIn() {
+        // Most servers end a collection's href with a slash -- Apache, sabre/dav,
+        // Nextcloud, and RFC 4918's own examples -- and ours did not until it
+        // changed libraries. A path is a key here, so both have to arrive alike.
+        fun listing(href: String) = MultiStatus.parse(
+            """<multistatus xmlns="DAV:"><response><href>$href</href><propstat><prop>""" +
+                "<resourcetype><collection/></resourcetype></prop>" +
+                "<status>HTTP/1.1 200 OK</status></propstat></response></multistatus>",
+            "/dav",
+        ).single()
+
+        assertEquals("/Photos", listing("/dav/Photos/").path)
+        assertEquals("/Photos", listing("/dav/Photos").path)
+        assertTrue(listing("/dav/Photos/").isDirectory)
+    }
+
+    @Test
+    fun theRootKeepsItsOnlySlash() {
+        // The one path that is nothing but a trailing slash, and trimming it to
+        // the empty string would make the top of the tree unaddressable.
+        val root = MultiStatus.parse(
+            """<multistatus xmlns="DAV:"><response><href>/dav/</href><propstat><prop>""" +
+                "<resourcetype><collection/></resourcetype></prop>" +
+                "<status>HTTP/1.1 200 OK</status></propstat></response></multistatus>",
+            "/dav",
+        ).single()
+        assertEquals("/", root.path)
+    }
 }
