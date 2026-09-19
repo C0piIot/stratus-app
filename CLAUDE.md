@@ -131,6 +131,23 @@ they are typing what their browser shows them. Credentials are proved with a rea
 request before the screen is dismissed, so that a typo fails at the keyboard
 rather than silently four hours later when the first upload runs.
 
+**There is no standard way to discover a files collection, and this was measured
+rather than assumed.** `current-user-principal` (RFC 5397) is the answer for
+CalDAV and CardDAV because those define a home-set property pointing at the
+collection; WebDAV files define nothing of the kind. Against Nextcloud 35:
+`/.well-known/caldav` does redirect to the DAV root, and the principal does come
+back from there -- and then it stops, because the container the files live in
+answers `405` to a `PROPFIND`, so it cannot even be walked into. The only way
+across that last step is to know that the path is `files/<principal id>/`, which
+is product knowledge in a client that is supposed to work against any server.
+
+So a typed path stays the answer for servers that are not ours, and the effort
+goes into failing in a way that says so: the sign-in failure carries what each
+path answered, because nothing there (404 everywhere) and something there that
+is not WebDAV are different sentences, and a folder that answers `405` is
+explained as a folder the server will not list rather than as an error. This is
+stratus-app#32, closed with the measurements on it.
+
 **Plain `http` is consented to, not blocked and not silent.** It is the normal
 case for a self-hosted server on somebody's own network, so refusing it would
 make the app useless where it is most used -- but a password in clear text is

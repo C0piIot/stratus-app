@@ -49,6 +49,18 @@ class SignInMachineTest {
     }
 
     @Test
+    fun remembersWhatEachPathAnsweredAndNotJustThatItFailed() {
+        // A server publishing WebDAV under a longer path answers 405 at the
+        // shallow one, and that is a different sentence from a 404 everywhere.
+        // Measured against Nextcloud, which answers 405 at both `/dav/` and `/`.
+        val first = submit()
+        val second = first.then(ProbeOutcome.NotWebDav(first.attempt, 405))
+        val exhausted = second.then(ProbeOutcome.NotWebDav(second.attempt, 405))
+        val reason = (exhausted.state as SignInState.Failed).reason
+        assertEquals(listOf(Tried("/dav/", 405), Tried("/", 405)), (reason as SignInFailure.NotWebDav).tried)
+    }
+
+    @Test
     fun stopsDeadOnRejectedCredentials() {
         // Wrong at one path is wrong at all of them, and walking the queue would
         // be several failed logins against a server that counts them.
@@ -68,7 +80,8 @@ class SignInMachineTest {
         val exhausted = second.then(ProbeOutcome.NotWebDav(second.attempt, 404))
         val reason = (exhausted.state as SignInState.Failed).reason
         assertTrue(reason is SignInFailure.NotWebDav, "was $reason")
-        assertEquals(listOf("/dav/", "/"), reason.triedPaths)
+        // Both paths, and what each answered: the message depends on the second.
+        assertEquals(listOf(Tried("/dav/", 404), Tried("/", 404)), reason.tried)
         assertEquals(emptyList(), exhausted.probes)
     }
 

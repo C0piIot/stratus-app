@@ -19,6 +19,15 @@ sealed class DavError(message: String) : Exception(message) {
     class NotFound(val path: String) : DavError("no such path: $path")
 
     /**
+     * The resource is there and will not answer this method.
+     *
+     * Worth its own case because of where it shows up: a server that publishes
+     * WebDAV under a deeper path answers 405 on the shallower one, so this is
+     * "you are in the right building, wrong floor" rather than an error.
+     */
+    class MethodNotAllowed(val path: String) : DavError("not allowed here: $path")
+
+    /**
      * The request cannot apply to the tree as it stands.
      *
      * One status covering two genuinely different situations, and the server

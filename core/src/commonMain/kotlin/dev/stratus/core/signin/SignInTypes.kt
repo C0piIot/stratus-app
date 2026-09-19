@@ -25,16 +25,20 @@ enum class PlaintextReason { Typed, HttpsUnreachable }
 /**
  * Why sign-in did not happen, in terms that suggest what to do about it.
  *
- * [NotWebDav] carries the paths that were tried because "this is not a WebDAV
- * server" and "it is one, but not at any path I guessed" lead somewhere
- * different: check the address, or type the full path.
+ * [NotWebDav] carries what each path answered, not merely which were tried:
+ * nothing at all there and something there that is not WebDAV lead somewhere
+ * different, and the second is what a server whose files live under a deeper
+ * path looks like from here.
  */
+/** A path that was asked, and what came back -- null when nothing answered. */
+data class Tried(val path: String, val status: Int? = null)
+
 sealed interface SignInFailure {
     data class Address(val problem: AddressProblem) : SignInFailure
     data object UsernameUnusable : SignInFailure
     data class Unreachable(val host: String, val detail: String) : SignInFailure
     data class WrongCredentials(val host: String) : SignInFailure
-    data class NotWebDav(val origin: String, val triedPaths: List<String>) : SignInFailure
+    data class NotWebDav(val origin: String, val tried: List<Tried>) : SignInFailure
     data class PlaintextRefused(val host: String) : SignInFailure
 }
 
@@ -44,7 +48,7 @@ data class SignInPlan(
     val credentials: Credentials,
     val scheme: Scheme,
     val queue: List<Candidate>,
-    val triedPaths: List<String> = emptyList(),
+    val tried: List<Tried> = emptyList(),
     val consentedHosts: Set<String> = emptySet(),
     val redirects: Int = 0,
 )

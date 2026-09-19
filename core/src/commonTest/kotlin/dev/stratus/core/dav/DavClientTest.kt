@@ -132,6 +132,16 @@ class DavClientTest {
     }
 
     @Test
+    fun reportsAResourceThatWillNotAnswerAsMethodNotAllowed() = runTest {
+        // Not an `Unexpected`: a server that keeps its files under a longer path
+        // answers 405 on the shallower one, and only that tells the difference
+        // between nothing being there and the wrong floor of the right building.
+        val client = clientAnswering(HttpStatusCode.MethodNotAllowed)
+        val thrown = runCatching { client.list("/") }.exceptionOrNull()
+        assertTrue(thrown is DavError.MethodNotAllowed, "was $thrown")
+    }
+
+    @Test
     fun conflictKeepsWhateverTheServerSaid() = runTest {
         // Measured from a real Stratus: renaming a folder with anything in it.
         // The status alone cannot distinguish that from a missing parent, so the
