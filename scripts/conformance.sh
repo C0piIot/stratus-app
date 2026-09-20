@@ -19,6 +19,13 @@ DAV_USER="${DAV_USER:-conformance}"
 DAV_PASS="${DAV_PASS:-conformance-secret}"
 PORT="${PORT:-18099}"
 
+# Normally the invoking user, because the data directories below are bind mounts
+# created here and the image's own nonroot uid could not write to them. The
+# Makefile passes it so that a host where that uid is not runnable -- rootless
+# podman without subuid ranges, where the only uid in the namespace is container
+# root -- can say so in one place.
+RUN_AS="${RUN_AS:-$(id -u):$(id -g)}"
+
 SUFFIX="$$"
 NET="stratus-conformance-$SUFFIX"
 NAME="stratus-conformance-$SUFFIX"
@@ -35,10 +42,10 @@ trap cleanup EXIT
 
 docker network create "$NET" >/dev/null
 
-# Runs as the invoking user because the data directory is a bind mount created
-# here; the image's own nonroot uid could not write to it.
+# The data directory is a bind mount created here, so the container runs as a
+# uid that can write to it -- see RUN_AS above.
 docker run -d --name "$NAME" --network "$NET" \
-    --user "$(id -u):$(id -g)" \
+    --user "$RUN_AS" \
     -p "127.0.0.1:$PORT:8080" \
     -e STRATUS_ADDR=:8080 \
     -e STRATUS_DATA_DIR=/data \
@@ -50,7 +57,7 @@ docker run -d --name "$NAME" --network "$NET" \
 # A second one, because the app holds several instances and the only honest way
 # to show that one's cache does not answer for the other is two real servers.
 docker run -d --name "$SECOND" --network "$NET" \
-    --user "$(id -u):$(id -g)" \
+    --user "$RUN_AS" \
     -e STRATUS_ADDR=:8080 \
     -e STRATUS_DATA_DIR=/data \
     -e STRATUS_USERNAME="$DAV_USER" \

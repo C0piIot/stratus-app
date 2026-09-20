@@ -19,6 +19,14 @@ TEST_IMAGE ?= eclipse-temurin:21-jdk-noble
 UID    ?= $(shell id -u)
 GID    ?= $(shell id -g)
 
+# The user the *backend* containers of the conformance run get, kept as one
+# variable rather than a second `id -u` inside the script -- so that a host
+# where the invoking uid is not the right answer says so once. A rootless
+# podman with no subuid ranges is such a host: its user namespace holds a
+# single uid, container root is the invoking user, and asking for any other
+# uid is refused by the runtime rather than merely inconvenient.
+RUN_AS ?= $(UID):$(GID)
+
 # Caches are bind mounts under .cache/, not named volumes: a fresh named volume
 # is created root-owned and the toolchain runs as the invoking user, which could
 # not then write to it. Same reasoning as the backend's Makefile.
@@ -85,8 +93,16 @@ doctor:
 # building the image two different ways.
 BUILD_CACHE ?=
 
+# The builder is a variable because `docker build` is not always the one that
+# works. Docker 29's CLI routes it to buildx, whose default driver keeps the
+# result in a build cache rather than in the image store, and its legacy builder
+# unpacks the context through the daemon API -- which a rootless podman with no
+# subuid ranges refuses, since the context carries files owned by a uid its user
+# namespace does not contain. `podman build` has neither problem.
+DOCKER_BUILD ?= docker build
+
 toolchain:
-	docker build $(BUILD_CACHE) -t $(IMAGE) .
+	$(DOCKER_BUILD) $(BUILD_CACHE) -t $(IMAGE) .
 
 $(CACHE_DIR)/gradle $(CACHE_DIR)/konan:
 	@mkdir -p $@
@@ -107,7 +123,7 @@ test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 # Starts a real backend, runs the suite against it, and tears it down whatever
 # happens. See scripts/conformance.sh for why the image is pinned by digest.
 conformance: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
-	TEST_IMAGE=$(TEST_IMAGE) scripts/conformance.sh
+	TEST_IMAGE=$(TEST_IMAGE) RUN_AS=$(RUN_AS) scripts/conformance.sh
 
 # The one thing that actually runs the Android code rather than compiling it.
 # The emulator wants the host's KVM, and the system image lands in the Gradle

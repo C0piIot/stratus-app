@@ -29,6 +29,22 @@ ARG GRADLE_SHA256
 ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
 
+# APT fetches packages as the unprivileged `_apt` user rather than as root, and
+# that is a uid the build has to actually contain. A rootless podman whose host
+# has no subuid ranges gets a user namespace one uid wide, so there is no uid 42
+# to drop to and apt does not degrade -- it dies:
+#
+#   E: setgroups 65534 failed - setgroups (1: Operation not permitted)
+#   E: Method http has died unexpectedly!
+#
+# Turning the download sandbox off costs little here and nothing on a host where
+# the namespace is wide enough: every other step of this build already runs as
+# root, the image is a throwaway toolchain that ships to no phone, and what the
+# sandbox defends against is a compromised mirror attacking apt's fetch methods.
+# The alternative is writing subuid ranges into /etc, which is root on the host
+# and outside what a Dockerfile can promise.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/00no-sandbox
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl unzip git \
     && rm -rf /var/lib/apt/lists/*

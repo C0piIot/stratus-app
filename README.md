@@ -56,7 +56,8 @@ Worth knowing before judging the app for it:
 
 ## Building
 
-No JDK, Gradle or Android SDK on your machine — only Docker.
+No JDK, Gradle or Android SDK on your machine — only Docker, or a rootless
+Podman standing in for it.
 
 ```sh
 make doctor     # can this machine run it?
@@ -90,6 +91,60 @@ a job on a macOS runner.
 If your machine is ARM, `.devcontainer/` describes a GitHub Codespace that is
 not: opening one gives an x86_64 box with Docker, where both caveats disappear
 and `make doctor` says so on first login.
+
+### Podman in place of Docker
+
+Every toolchain command here is a `docker run`, and Podman answers the same API,
+so pointing the CLI at its socket is most of the work:
+
+```sh
+systemctl --user enable --now podman.socket
+docker context create podman \
+    --docker host=unix://$XDG_RUNTIME_DIR/podman/podman.sock
+docker context use podman
+```
+
+The rest belongs in a `.env` beside the `Makefile`, which is read before any
+default here and is not committed:
+
+```
+UID = 0
+GID = 0
+DOCKER_BUILD = podman build
+```
+
+`UID` and `GID` are `0` because rootless Podman maps container root to *your*
+uid on the host — so asking for `0` inside the container is what leaves files
+owned by you outside it, which is the whole reason the `Makefile` passes `-u` at
+all. `DOCKER_BUILD` is there because Docker's CLI now routes `docker build` to
+buildx, whose default driver leaves the result in a build cache that nothing
+afterwards runs.
+
+One check on the host is worth making before any of it:
+
+```sh
+podman unshare cat /proc/self/uid_map
+```
+
+A single line ending in `1` means your user has no subuid ranges — `/etc/subuid`
+and `/etc/subgid` are empty — and the namespace is exactly one uid wide. Most
+images then refuse to unpack at all, with `potentially insufficient UIDs or GIDs
+available in user namespace`. Either add the ranges, which needs root once:
+
+```sh
+echo "$USER:100000:65536" | sudo tee /etc/subuid /etc/subgid
+podman system migrate
+```
+
+or, where that is not yours to do, tell the storage driver to ignore the chowns
+it cannot perform, in `~/.config/containers/storage.conf`:
+
+```toml
+[storage.options.overlay]
+ignore_chown_errors = "true"
+```
+
+Every target works either way, and the `.env` above is the same in both.
 
 ## Sharing
 
