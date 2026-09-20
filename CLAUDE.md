@@ -359,6 +359,14 @@ a contributor should not have to install a version of anything to be useful, and
 a version installed on one machine and not another is a class of bug nobody
 should be debugging.
 
+**Docker is the interface, not the requirement.** Podman answers the same API,
+so a `docker` CLI pointed at its socket runs every target here, and the README
+says what else to set. It costs exactly one concession in the `Dockerfile`: APT
+fetches packages as the `_apt` user, and a rootless namespace one uid wide has
+no uid for it to drop to, so the download sandbox is turned off there. That is
+inert on a host whose namespace is wide enough, which is the argument for
+putting it in the image rather than in a setting somebody has to discover.
+
 Two walls to know about before assuming this covers everything.
 
 **Android has no ARM Linux toolchain.** Google publishes no Android SDK for
