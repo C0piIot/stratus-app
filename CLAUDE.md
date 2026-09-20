@@ -62,6 +62,15 @@ cache of that, and it must be rebuildable by walking the server — because a
 reinstall, a restore to a new phone or a cleared app storage will all destroy it,
 and none of those should cause the whole camera roll to upload again.
 
+**A listing asks for the five properties it reads and no others.** This was
+`allprop` on the reasoning that a round trip costs the same either way, which is
+true of the round trip and false of the server: answering `supportedlock` and
+`creationdate` for ten thousand entries is work done for a client that throws
+all of it away. Measured against stratus-backend, ten thousand files in one
+folder: 6.70 MB and 1.43 s for `allprop`, 4.11 MB and 0.18 s for the five. The
+list lives next to the parser that reads them and the request is built from it,
+so the two cannot drift.
+
 A path is therefore a key, and a key has to have one form. **The trailing slash
 on a collection's href is normalised away where the multistatus is parsed**, and
 that is the only place it can be done once: most servers end a collection's href

@@ -36,7 +36,7 @@ class DavProber(private val newClient: (Credentials?, TrustPolicy) -> HttpClient
                 method = PROPFIND
                 header(HttpHeaders.Depth, "0")
                 contentType(ContentType.Application.Xml)
-                setBody(ALLPROP)
+                setBody(PROPS)
             }
             classify(attempt, response, authenticated = credentials != null)
         } catch (e: Exception) {
@@ -90,7 +90,8 @@ class DavProber(private val newClient: (Credentials?, TrustPolicy) -> HttpClient
 
     private companion object {
         val PROPFIND = HttpMethod("PROPFIND")
-        const val ALLPROP = """<?xml version="1.0" encoding="utf-8"?>
-<propfind xmlns="DAV:"><allprop/></propfind>"""
+        // The same body the client sends, for the same reason: a server should
+        // not be asked to answer properties nobody is going to read.
+        val PROPS = MultiStatus.propfindBody()
     }
 }

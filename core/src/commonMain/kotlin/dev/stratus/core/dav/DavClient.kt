@@ -61,7 +61,7 @@ class DavClient(
             method = PROPFIND
             header(HttpHeaders.Depth, depth.header)
             contentType(ContentType.Application.Xml)
-            setBody(ALLPROP)
+            setBody(PROPS)
         }
         // 207 is the correct answer and what everything real sends. A plain 200
         // carrying a multistatus is tolerated because some servers do that and
@@ -175,9 +175,7 @@ class DavClient(
         val MOVE = HttpMethod("MOVE")
         val MKCOL = HttpMethod("MKCOL")
 
-        // allprop rather than a named list: a server may know properties we do
-        // not ask about yet, and asking for everything costs the same round trip.
-        const val ALLPROP = """<?xml version="1.0" encoding="utf-8"?>
-<propfind xmlns="DAV:"><allprop/></propfind>"""
+        /** Named rather than `allprop`, and the reason is in [MultiStatus.propfindBody]. */
+        val PROPS = MultiStatus.propfindBody()
     }
 }
