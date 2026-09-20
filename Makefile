@@ -32,6 +32,17 @@ RUN_AS ?= $(UID):$(GID)
 # not then write to it. Same reasoning as the backend's Makefile.
 CACHE_DIR := $(CURDIR)/.cache
 
+# The emulator's system image is a cache rather than a layer in the toolchain
+# image, and size is the whole reason: 586 MiB to download and 8.2 GB once
+# unpacked, which would take the image from under two gigabytes to nearly
+# eleven -- and `BUILD_CACHE` pushes every layer of it to the Actions cache with
+# `mode=max`, against the ten gigabytes GitHub keeps for a repository.
+#
+# The emulator itself is a layer instead, because sdkmanager cannot install onto
+# a mount point; the Dockerfile says why. Build-tools stays a layer too, which is
+# why the Dockerfile pins the version AGP asks for rather than moving it here.
+SDK_CACHE := $(CACHE_DIR)/android-sdk
+
 # Run as the invoking user, or Gradle leaves build/ owned by root in the working
 # tree, unremovable without sudo.
 #
@@ -67,10 +78,10 @@ help:
 	@echo "make toolchain  build the toolchain image"
 	@echo "make test       shared tests and the iOS sources, native and fast"
 	@echo "make conformance the same client against a real stratus-backend"
-	@echo "make device-test the Android halves on an emulator AGP downloads"
+	@echo "make device-test the Android halves on an emulator, cached after one run"
 	@echo "make gradle ARGS='tasks'"
 	@echo "make shell      a shell inside the toolchain"
-	@echo "make clean      drop caches and build output"
+	@echo "make clean      drop caches and build output, the emulator's included"
 
 # The Android SDK is x86_64-only, so on an ARM host the toolchain image runs
 # under emulation and needs binfmt registered before it will start at all. The
@@ -104,7 +115,7 @@ DOCKER_BUILD ?= docker build
 toolchain:
 	$(DOCKER_BUILD) $(BUILD_CACHE) -t $(IMAGE) .
 
-$(CACHE_DIR)/gradle $(CACHE_DIR)/konan:
+$(CACHE_DIR)/gradle $(CACHE_DIR)/konan $(SDK_CACHE)/system-images:
 	@mkdir -p $@
 
 gradle: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
@@ -126,10 +137,20 @@ conformance: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	TEST_IMAGE=$(TEST_IMAGE) RUN_AS=$(RUN_AS) scripts/conformance.sh
 
 # The one thing that actually runs the Android code rather than compiling it.
-# The emulator wants the host's KVM, and the system image lands in the Gradle
-# cache that is already mounted, so it is downloaded once.
-device-test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
-	$(DOCKER_RUN) --device /dev/kvm $(IMAGE) $(GRADLE_CMD) --no-daemon :core:emulatorAndroidDeviceTest
+# The emulator wants the host's KVM.
+#
+# It also wants a system image the toolchain image does not carry, and
+# `sdkmanager` installs it under ANDROID_HOME -- inside a container started with
+# `--rm`, so without this mount it is fetched again on every single run. It is
+# mounted here rather than in DOCKER_RUN because `make test` runs in a plain JDK
+# image with no /opt/android-sdk to mount it over.
+#
+# Expect about 8 GB under .cache/ after the first run. `make clean` takes it
+# with the rest.
+device-test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan $(SDK_CACHE)/system-images
+	$(DOCKER_RUN) --device /dev/kvm \
+		-v "$(SDK_CACHE)/system-images":/opt/android-sdk/system-images \
+		$(IMAGE) $(GRADLE_CMD) --no-daemon :core:emulatorAndroidDeviceTest
 
 shell: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(DOCKER_RUN) -it $(IMAGE) bash
