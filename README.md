@@ -72,6 +72,11 @@ image with no Android SDK, which means no emulation on an ARM machine: about 25
 seconds against five minutes through the full toolchain. Reach for
 `make gradle` when you need an actual Android artifact.
 
+`make device-test` is the exception to how little this costs. Its system image
+is too large to live in the toolchain image, so it is downloaded on first use
+and kept under `.cache/` — about eight gigabytes of it, which `make clean`
+discards along with everything else.
+
 Three modules: `core` holds the protocol layer and its tests, `ui` holds the
 Compose Multiplatform interface and produces the framework Xcode will embed, and
 `androidApp` is the Android application. The shared tests run on `core`'s JVM
