@@ -219,14 +219,21 @@ jobs:
       # Proves the framework is consumable from Swift, which linking it does
       # not: search paths, a static framework's symbols and the Kotlin runtime
       # all fail here rather than at link time.
+      #
+      # arm64 only, because that is the one slice Gradle links -- a generic
+      # destination also asks for x86_64 and the link fails for it. And pipefail,
+      # because without it `tail` is what the step's result came from: this
+      # printed a linker failure and passed for as long as that was true.
       - name: Build the app for a simulator
         run: |
+          set -o pipefail
           xcodebuild build \
             -project iosApp/Stratus.xcodeproj \
             -scheme Stratus \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             -derivedDataPath build/xcode \
+            ARCHS=arm64 \
             DEBUG_INFORMATION_FORMAT=dwarf-with-dsym \
             CODE_SIGNING_ALLOWED=NO | tail -40
 
