@@ -81,6 +81,10 @@ jobs:
       - name: Build, signed with the key this repository keeps
         run: make gradle ARGS="assemble --stacktrace"
         env:
+          # Where crash reports go. A variable rather than a secret, because it
+          # ends up inside the APK anyway; absent on a fork, whose build then
+          # has no reporting to offer.
+          SENTRY_DSN: ${{ vars.SENTRY_DSN }}
           # Absent on a fork, where the build falls back to a throwaway debug
           # key -- it still builds, its APK just will not install over ours.
           STRATUS_KEYSTORE_BASE64: ${{ secrets.STRATUS_KEYSTORE_BASE64 }}
@@ -180,6 +184,10 @@ jobs:
     name: ios
     runs-on: macos-latest
     timeout-minutes: 30
+    # Job-level because a step's `if` cannot read a secret, nor an env of its
+    # own; this is how the upload below knows whether it has a token.
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -202,6 +210,8 @@ jobs:
 
       - name: Link the framework Xcode embeds
         run: ./gradlew --no-daemon :ui:linkDebugFrameworkIosSimulatorArm64
+        env:
+          SENTRY_DSN: ${{ vars.SENTRY_DSN }}
 
       - name: Generate the Xcode project
         run: brew install xcodegen && xcodegen generate --spec iosApp/project.yml --project iosApp
@@ -216,4 +226,20 @@ jobs:
             -scheme Stratus \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
+            -derivedDataPath build/xcode \
+            DEBUG_INFORMATION_FORMAT=dwarf-with-dsym \
             CODE_SIGNING_ALLOWED=NO | tail -40
+
+      # What turns an iOS crash report into Kotlin function names and lines:
+      # the Kotlin framework is static, so its symbols are in the app's dSYM.
+      # A simulator build is the only one there is until an Apple Developer
+      # account exists (#5), so today this proves the pipeline more than it
+      # serves a crash -- the day a device build appears, it runs this step too.
+      #
+      # IDs rather than slugs, read off the DSN, so nothing here names the
+      # account; the token is the one thing that has to be secret.
+      - name: Upload debug symbols to Sentry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.SENTRY_AUTH_TOKEN != ''
+        env:
+          SENTRY_DSN: ${{ vars.SENTRY_DSN }}
+        run: scripts/upload-symbols.sh build/xcode/Build/Products

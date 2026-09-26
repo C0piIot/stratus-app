@@ -176,6 +176,20 @@ before trying.
 The Cast SDK is part of Google Play Services. On a phone without them the app is
 the same app, without the cast button.
 
+## Crash reports
+
+Off until you turn them on, under Servers. Then a crash sends the error and
+which phone it happened on to [Sentry](https://sentry.io), a service that is not
+your server. Never a photograph, a screenshot or a password, but an error can
+name a server address or a file.
+
+Where they go is set when the app is built, by `SENTRY_DSN` in its environment.
+A build without it — a fork, a build on your own machine — has no reporting and
+no switch offering it. CI reads it from the repository variable of the same
+name, and with a `SENTRY_AUTH_TOKEN` secret it also uploads the iOS debug
+symbols that turn a crash into Kotlin function names. Android needs none while
+its builds are not minified, which they are not.
+
 ## Getting it onto an Android phone
 
 One address, which never changes and needs no account:

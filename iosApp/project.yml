@@ -8,6 +8,15 @@ options:
   deploymentTarget:
     iOS: "15.0"
 
+# The Cocoa half of crash reporting. The Kotlin SDK in the framework calls it
+# and does not carry it -- a static framework links nothing -- so the app links
+# it, at exactly the version that SDK release was built against (see
+# gradle/libs.versions.toml).
+packages:
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    exactVersion: 8.58.2
+
 targets:
   Stratus:
     type: application
@@ -31,6 +40,7 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
     dependencies:
+      - package: Sentry
       # Static, so it is linked and not embedded: there is no dynamic library to
       # carry into the bundle.
       - framework: ../ui/build/bin/iosSimulatorArm64/debugFramework/StratusUI.framework

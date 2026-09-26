@@ -46,8 +46,17 @@ android {
     }
 }
 
+// Two halves of sentry-android left out of the APK: session replay records the
+// screen, which here is somebody's photographs, and the NDK handler is for
+// native code this app does not have.
+configurations.configureEach {
+    exclude(group = "io.sentry", module = "sentry-android-replay")
+    exclude(group = "io.sentry", module = "sentry-android-ndk")
+}
+
 dependencies {
     implementation(project(":ui"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime)
+    implementation(libs.kotlinx.coroutines.core)
 }

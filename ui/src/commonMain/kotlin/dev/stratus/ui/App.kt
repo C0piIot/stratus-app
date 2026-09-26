@@ -110,6 +110,9 @@ private fun SignedIn(
     var folders by remember { mutableStateOf(emptyList<MediaSource>()) }
     var access by remember { mutableStateOf(MediaAccess.None) }
     var reload by remember { mutableStateOf(0) }
+    var reporting by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { reporting = container.reporting.granted() }
 
     LaunchedEffect(baseUrl, reload) {
         browser = container.browser(scope)?.also { it.start() }
@@ -164,6 +167,14 @@ private fun SignedIn(
                 }
             },
             onAddAnother = onAddAnother,
+            reporting = reporting.takeIf { CrashReports.available },
+            onReporting = { on ->
+                scope.launch {
+                    container.reporting.set(on)
+                    if (on) CrashReports.start() else CrashReports.stop()
+                    reporting = on
+                }
+            },
             onClose = { screen = Screen.Browser },
         )
 
