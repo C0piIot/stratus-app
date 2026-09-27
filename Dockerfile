@@ -7,7 +7,13 @@
 ARG JDK_VERSION=21
 ARG CMDLINE_TOOLS=16111833
 ARG ANDROID_PLATFORM=36
-ARG BUILD_TOOLS=36.1.0
+# Not the newest build-tools, but the one AGP asks for: nothing pins
+# `buildToolsVersion` in Gradle, so AGP picks its own default and downloads it if
+# the image has anything else -- which is what a baked 36.1.0 was doing, adding
+# 150 MB to the image that no build ever opened and a download to every run.
+# A mismatch degrades rather than breaks, so it shows up as `Install Android SDK
+# Build-Tools` in the log rather than as a failure. Re-check it when AGP moves.
+ARG BUILD_TOOLS=36.0.0
 ARG GRADLE_VERSION=9.7.1
 ARG GRADLE_SHA256=acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a
 
@@ -70,11 +76,24 @@ RUN set -eu; \
 
 # Licences are accepted at build time so that no interactive prompt can appear
 # in the middle of somebody's first build.
+# The emulator is here rather than in the Makefile's cache, and the reason is
+# mechanical rather than a preference: sdkmanager installs a package by unpacking
+# it beside the target and then *deleting and replacing* that directory, and a
+# bind mount point cannot be deleted --
+#
+#   java.nio.file.FileSystemException: /opt/android-sdk/emulator: Device or
+#   resource busy ... at FileOpUtils.moveOrCopyAndDelete
+#
+# The system image escapes this because its package lands in a subdirectory of
+# the mount rather than on the mount itself, which is why that one is cached and
+# this one is a layer. It costs about 800 MB in the image; the system image
+# would have cost 8.2 GB, which is the whole argument for splitting them.
 RUN yes | sdkmanager --licenses > /dev/null \
     && sdkmanager --install \
          "platform-tools" \
          "platforms;android-${ANDROID_PLATFORM}" \
          "build-tools;${BUILD_TOOLS}" \
+         "emulator" \
     && chmod -R a+rwX "$ANDROID_HOME"
 
 # This Gradle exists to bootstrap the wrapper and nothing else. The moment the

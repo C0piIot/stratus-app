@@ -30,6 +30,19 @@ kotlin {
                     device = "Pixel 6"
                     apiLevel = 34
                     systemImageSource = "aosp-atd"
+                    // Pinned rather than defaulted, because the default becomes
+                    // arm64-v8a in AGP 10.0 -- which would fetch a different
+                    // system image and quietly empty the cache the Makefile
+                    // mounts, on a machine where this image is the right one.
+                    //
+                    // AGP 9.4.0 goes on printing "does not specify a testedAbi"
+                    // even with this set, and the property is real -- it is
+                    // `getTestedAbi`/`setTestedAbi` on ManagedVirtualDevice in
+                    // gradle-api-9.4.0. So the warning looks like a check that
+                    // reads the wrong place rather than a value being ignored.
+                    // Worth settling at the AGP 10 bump, which is the release
+                    // where being wrong about it would start costing a download.
+                    testedAbi = "x86_64"
                 }
             }
         }
