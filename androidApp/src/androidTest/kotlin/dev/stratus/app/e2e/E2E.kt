@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import dev.stratus.app.MainActivity
 import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import kotlin.random.Random
 
@@ -32,6 +33,17 @@ abstract class E2E {
     val unique = "e2e${Random.nextInt(1_000_000)}"
 
     private var scenario: ActivityScenario<MainActivity>? = null
+
+    // Said once and plainly, rather than as twenty tests each failing to find
+    // a dialog that only appears once a server has answered.
+    @Before
+    fun theServerIsThere() {
+        try {
+            Stratus.exists("/")
+        } catch (e: Exception) {
+            throw AssertionError("the backend is not reachable at ${Stratus.upstream} from the emulator", e)
+        }
+    }
 
     fun launch() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
