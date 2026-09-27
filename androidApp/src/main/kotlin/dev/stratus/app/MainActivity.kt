@@ -1,15 +1,34 @@
 package dev.stratus.app
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import dev.stratus.core.appContainer
+import dev.stratus.core.backup.AndroidAssetSource
 import dev.stratus.core.backup.BackupWorker
 import dev.stratus.ui.App
 import dev.stratus.ui.BackRequests
 
 class MainActivity : ComponentActivity() {
+
+    private val photos by lazy { AndroidAssetSource(applicationContext).permissions() }
+
+    // After a second refusal Android stops showing the dialog and answers no at
+    // once, so a request that changed nothing opens the settings page instead:
+    // it is the only place left where somebody can say yes.
+    private val askForPhotos = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted.values.none { it } && photos.none { shouldShowRequestPermissionRationale(it) }) {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+            )
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val container = appContainer(applicationContext)
@@ -30,7 +49,12 @@ class MainActivity : ComponentActivity() {
         BackupWorker.schedule(applicationContext)
 
         setContent {
-            App(container, back, onBackUpNow = { BackupWorker.now(applicationContext) })
+            App(
+                container,
+                back,
+                onBackUpNow = { BackupWorker.now(applicationContext) },
+                onRequestAccess = { askForPhotos.launch(photos) },
+            )
         }
     }
 }

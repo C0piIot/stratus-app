@@ -75,6 +75,16 @@ class AndroidAssetSourceTest {
         inserted.forEach { resolver.delete(it, null, null) }
     }
 
+    // What the rule grants is what access() calls Full, so a request that asked
+    // for less would end in a yes that still reads as no (stratus-app#75).
+    @Test
+    fun asksForEverythingFullAccessIsMadeOf() {
+        assertTrue(
+            source.permissions().toSet()
+                .containsAll(setOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)),
+        )
+    }
+
     @Test
     fun reportsAGrantedPermissionAsFullAccess() = runTest {
         assertEquals(MediaAccess.Full, source.access())
