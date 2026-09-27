@@ -17,12 +17,6 @@ data class Candidate(
     val hostPort: String get() = "$host:$port"
 }
 
-/** The one candidate an instance already is, from the address it was saved with. */
-fun candidateOf(baseUrl: String): Candidate = with(io.ktor.http.Url(baseUrl)) {
-    val scheme = if (protocol.name == "https") Scheme.Https else Scheme.Http
-    Candidate(scheme, host, port, encodedPath.ifEmpty { "/" })
-}
-
 /**
  * What to try over [scheme], most likely first.
  *

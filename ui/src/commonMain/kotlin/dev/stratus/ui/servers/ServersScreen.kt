@@ -13,7 +13,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -21,17 +20,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.instance.Instance
-import dev.stratus.core.session.PasswordChange
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,10 +38,8 @@ fun ServersScreen(
     onEnableBackup: (String, Boolean) -> Unit,
     onChooseSources: (String) -> Unit,
     onSignOut: (String) -> Unit,
-    /** Tries a new password and says how it went; see SignedInController.changePassword. */
-    onChangePassword: (id: String, password: String, done: (PasswordChange) -> Unit) -> Unit,
-    /** Opens straight onto the password of this one, for a server that stopped accepting it. */
-    changingFirst: String? = null,
+    /** Opens the sign-in form on this server, filled in, to change any of it. */
+    onEdit: (String) -> Unit,
     onAddAnother: () -> Unit,
     /** Whether crash reports are on, or null in a build that cannot send any. */
     reporting: Boolean?,
@@ -53,18 +47,6 @@ fun ServersScreen(
     onClose: () -> Unit,
 ) {
     var signingOutOf by remember { mutableStateOf<Instance?>(null) }
-    var changing by remember { mutableStateOf<Instance?>(null) }
-    // Offered once on arriving, and not again every time the list is re-read
-    // after it was answered or dismissed.
-    var offered by remember { mutableStateOf(changingFirst == null) }
-    LaunchedEffect(servers) {
-        if (!offered) {
-            servers.firstOrNull { it.id == changingFirst }?.let {
-                changing = it
-                offered = true
-            }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -108,7 +90,7 @@ fun ServersScreen(
                         TextButton(onClick = { onChooseSources(server.id) }) {
                             Text(if (server.sources.isEmpty()) "All folders" else "${server.sources.size} folders")
                         }
-                        TextButton(onClick = { changing = server }) { Text("Change password") }
+                        TextButton(onClick = { onEdit(server.id) }) { Text("Edit") }
                         // "Remove" and not "Sign out": it forgets the server and
                         // its backup record, and was not found under the other
                         // name when somebody looked for it (stratus-app#87).
@@ -166,55 +148,4 @@ fun ServersScreen(
             dismissButton = { TextButton(onClick = { signingOutOf = null }) { Text("Cancel") } },
         )
     }
-
-    changing?.let { server ->
-        PasswordDialog(server, onChangePassword, onDone = { changing = null })
-    }
-}
-
-@Composable
-private fun PasswordDialog(
-    server: Instance,
-    onChangePassword: (id: String, password: String, done: (PasswordChange) -> Unit) -> Unit,
-    onDone: () -> Unit,
-) {
-    var password by remember { mutableStateOf("") }
-    var trying by remember { mutableStateOf(false) }
-    var refused by remember { mutableStateOf<PasswordChange?>(null) }
-
-    AlertDialog(
-        onDismissRequest = { if (!trying) onDone() },
-        title = { Text("Password for ${server.username}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(server.baseUrl, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it; refused = null },
-                    label = { Text("New password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    enabled = !trying,
-                )
-                when (refused) {
-                    PasswordChange.Rejected -> Text("The server did not accept it. The old one is kept.")
-                    PasswordChange.Unreachable -> Text("Could not reach the server to try it, so nothing was changed.")
-                    else -> {}
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = password.isNotEmpty() && !trying,
-                onClick = {
-                    trying = true
-                    onChangePassword(server.id, password) { outcome ->
-                        trying = false
-                        if (outcome == PasswordChange.Saved) onDone() else refused = outcome
-                    }
-                },
-            ) { Text("Save") }
-        },
-        dismissButton = { TextButton(enabled = !trying, onClick = onDone) { Text("Cancel") } },
-    )
 }

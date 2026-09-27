@@ -12,7 +12,6 @@ import dev.stratus.core.backup.MediaSource
 import dev.stratus.core.instance.Instance
 import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.net.Credentials
-import dev.stratus.core.net.ProbeOutcome
 import dev.stratus.core.store.ReportingConsent
 import dev.stratus.core.store.SecureStore
 import kotlinx.coroutines.test.runTest
@@ -65,19 +64,7 @@ class SignedInControllerTest {
         ask = { asked += it },
         notificationsAsked = AskedOnce(store, "notifications-asked"),
         reportingChanged = { reported += it },
-        prove = { instance, credentials ->
-            proved += credentials
-            val candidate = dev.stratus.core.net.candidateOf(instance.baseUrl)
-            when (serverSays) {
-                "yes" -> ProbeOutcome.IsWebDav(candidate)
-                "no" -> ProbeOutcome.Rejected(candidate)
-                else -> ProbeOutcome.Unreachable(candidate, "refused")
-            }
-        },
     )
-
-    private var serverSays = "yes"
-    private val proved = mutableListOf<Credentials>()
 
     private suspend fun signedIn(id: String) =
         instances.put(Instance(id, "https://$id.example/dav/", "edu"), Credentials("edu", "secret"))
@@ -186,41 +173,5 @@ class SignedInControllerTest {
 
         assertEquals(listOf("home"), forgotten)
         assertEquals(listOf("vps"), controller.state.value.servers.map { it.id })
-    }
-
-    // stratus-app#87: the demo's password changes on every deploy, and the
-    // only way to follow it was to sign out and lose the backup record.
-    @Test
-    fun aNewPasswordIsProvedThenKeptOnTheSameServer() = runTest {
-        signedIn("home")
-        controller.start()
-        val before = controller.state.value.credentialsRevision
-
-        assertEquals(PasswordChange.Saved, controller.changePassword("home", "new-secret"))
-
-        assertEquals(Credentials("edu", "new-secret"), proved.single())
-        assertEquals(Credentials("edu", "new-secret"), instances.credentials("home"))
-        assertEquals(listOf("home"), instances.ids(), "it became a second server")
-        assertEquals(before + 1, controller.state.value.credentialsRevision)
-    }
-
-    @Test
-    fun aPasswordTheServerRefusesIsNotKept() = runTest {
-        signedIn("home")
-        controller.start()
-        serverSays = "no"
-
-        assertEquals(PasswordChange.Rejected, controller.changePassword("home", "typo"))
-        assertEquals(Credentials("edu", "secret"), instances.credentials("home"))
-    }
-
-    @Test
-    fun aPasswordThatCouldNotBeTriedIsNotKeptEither() = runTest {
-        signedIn("home")
-        controller.start()
-        serverSays = "nothing"
-
-        assertEquals(PasswordChange.Unreachable, controller.changePassword("home", "maybe"))
-        assertEquals(Credentials("edu", "secret"), instances.credentials("home"))
     }
 }

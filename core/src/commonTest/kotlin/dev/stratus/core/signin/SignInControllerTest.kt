@@ -138,4 +138,63 @@ class SignInControllerTest {
         assertEquals("https://host/dav/", second.restore()?.baseUrl)
         assertTrue(second.state.value is SignInState.Done)
     }
+
+    // stratus-app#87: a server's password changed, or it moved, and the only
+    // way to follow it was to remove it -- and its backup record with it.
+    @Test
+    fun editingKeepsTheInstanceAndItsBackupSettings() = runTest {
+        val store = MemoryStore()
+        val instances = InstanceStore(store)
+        instances.put(
+            dev.stratus.core.instance.Instance("home", "https://old.example/dav/", "edu", backupEnabled = true, sources = setOf("camera")),
+            Credentials("edu", "old-secret"),
+        )
+        val prober = ScriptedProber(mutableListOf({ ProbeOutcome.IsWebDav(it) }))
+        val (signIn, _) = controller(this, store, prober)
+
+        signIn.edit("home")
+        assertEquals(SignInForm("https://old.example/dav/", "edu", "old-secret"), signIn.editing.value?.form)
+
+        signIn.submit(SignInForm("https://new.example/dav/", "edu", "new-secret"))
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("home"), instances.ids(), "editing added a server instead")
+        val edited = instances.instance("home")!!
+        assertEquals("https://new.example/dav/", edited.baseUrl)
+        assertTrue(edited.backupEnabled)
+        assertEquals(setOf("camera"), edited.sources)
+        assertEquals(Credentials("edu", "new-secret"), instances.credentials("home"))
+        assertNull(signIn.editing.value)
+    }
+
+    @Test
+    fun anEditTheServerRefusesChangesNothing() = runTest {
+        val store = MemoryStore()
+        val instances = InstanceStore(store)
+        instances.put(dev.stratus.core.instance.Instance("home", "https://host/dav/", "edu"), Credentials("edu", "old-secret"))
+        val prober = ScriptedProber(mutableListOf({ ProbeOutcome.Rejected(it) }))
+        val (signIn, _) = controller(this, store, prober)
+
+        signIn.edit("home")
+        signIn.submit(SignInForm("https://host/dav/", "edu", "typo"))
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(signIn.state.value is SignInState.Failed)
+        assertEquals(Credentials("edu", "old-secret"), instances.credentials("home"))
+    }
+
+    @Test
+    fun goingBackFromAnEditLeavesEverythingAsItWas() = runTest {
+        val store = MemoryStore()
+        val instances = InstanceStore(store)
+        instances.put(dev.stratus.core.instance.Instance("home", "https://host/dav/", "edu"), Credentials("edu", "secret"))
+        val (signIn, _) = controller(this, store, ScriptedProber(mutableListOf()))
+
+        signIn.edit("home")
+        assertTrue(signIn.canGoBack.value)
+        signIn.back()
+
+        assertTrue(signIn.state.value is SignInState.Done)
+        assertNull(signIn.editing.value)
+    }
 }

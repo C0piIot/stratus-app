@@ -136,11 +136,12 @@ Three surfaces, and no more than three:
    to; every install is somebody's own.
 2. **The file browser**, which is the main screen: walk the tree, open or
    download a file, rename it, delete it.
-3. **A menu**, holding each server's password, its removal, and the choice of
-   which folders are watched for backup. A password is changed in place and
-   proved first, like at sign-in, so the instance keeps its id and its backup
-   record -- which removing and signing in again would throw away
-   (stratus-app#87).
+3. **A menu**, holding each server's details, its removal, and the choice of
+   which folders are watched for backup. Editing a server is the sign-in form
+   again, filled in and with every field open, so a new address or password is
+   proved the way a first sign-in is -- a new certificate, a first time over
+   plain http -- and the instance keeps its id and its backup record, which
+   removing it and signing in again would throw away (stratus-app#87).
 
 What that implies, in the order it will be discovered:
 

@@ -46,8 +46,8 @@ fun BrowserScreen(
     controller: BrowserController,
     cast: CastController?,
     onOpenServers: () -> Unit,
-    /** For a server that stopped accepting the password this app holds. */
-    onChangePassword: () -> Unit = {},
+    /** For a server that stopped accepting the sign-in this app holds. */
+    onEditServer: () -> Unit = {},
 ) {
     val state by controller.state.collectAsState()
     // Which of two indicators a listing shows: the pulled one for a pull, the
@@ -74,8 +74,8 @@ fun BrowserScreen(
                 // was to walk somewhere else and back.
                 if (it.isRejectedSignIn()) {
                     // Trying again with the same password cannot help, and the
-                    // next thing somebody needs is the field to type the new one.
-                    TextButton(onClick = onChangePassword, Modifier.padding(horizontal = 8.dp)) { Text("Change password") }
+                    // next thing somebody needs is the form to type the new one.
+                    TextButton(onClick = onEditServer, Modifier.padding(horizontal = 8.dp)) { Text("Edit server") }
                 } else {
                     TextButton(onClick = controller::refresh, Modifier.padding(horizontal = 8.dp)) { Text("Try again") }
                 }

@@ -9,6 +9,9 @@ import dev.stratus.core.net.ServerAddress
 
 data class SignInForm(val address: String, val username: String, val password: String)
 
+/** An existing instance open in the sign-in form, and what the form starts with. */
+data class Editing(val id: String, val form: SignInForm)
+
 /** Something only the person at the keyboard can decide. */
 sealed interface Question {
     /**

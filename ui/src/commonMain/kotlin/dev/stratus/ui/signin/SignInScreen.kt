@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -38,10 +39,14 @@ fun SignInScreen(
     state: SignInState,
     onSubmit: (SignInForm) -> Unit,
     onAnswer: (Question, Boolean) -> Unit,
+    /** A server being edited, whose details the form starts from (stratus-app#87). */
+    initial: SignInForm? = null,
+    /** Leaves without changing anything; null when there is nowhere to go back to. */
+    onBack: (() -> Unit)? = null,
 ) {
-    var address by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var address by remember(initial) { mutableStateOf(initial?.address ?: "") }
+    var username by remember(initial) { mutableStateOf(initial?.username ?: "") }
+    var password by remember(initial) { mutableStateOf(initial?.password ?: "") }
     val busy = state is SignInState.Probing
 
     Column(
@@ -53,7 +58,7 @@ fun SignInScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Sign in to your server")
+        Text(if (initial != null) "Edit server" else "Sign in to your server")
 
         OutlinedTextField(
             value = address,
@@ -83,11 +88,14 @@ fun SignInScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Button(
-            onClick = { onSubmit(SignInForm(address, username, password)) },
-            enabled = !busy && address.isNotBlank() && username.isNotBlank(),
-        ) {
-            Text("Sign in")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { onSubmit(SignInForm(address, username, password)) },
+                enabled = !busy && address.isNotBlank() && username.isNotBlank(),
+            ) {
+                Text(if (initial != null) "Save" else "Sign in")
+            }
+            if (onBack != null) TextButton(onClick = onBack, enabled = !busy) { Text("Cancel") }
         }
 
         if (busy) CircularProgressIndicator()

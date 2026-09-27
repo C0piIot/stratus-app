@@ -39,8 +39,7 @@ import kotlinx.coroutines.launch
 private sealed interface Screen {
     data object Browser : Screen
     data object Backup : Screen
-    /** [changing] opens it onto that server's password, as the browser asks when it was refused. */
-    data class Servers(val changing: String? = null) : Screen
+    data object Servers : Screen
     data class Sources(val instanceId: String) : Screen
 }
 
@@ -55,6 +54,8 @@ fun App(
     val scope = rememberCoroutineScope()
     val signIn = remember { container.signIn(scope) }
     val state by signIn.state.collectAsState()
+    val editing by signIn.editing.collectAsState()
+    val canGoBack by signIn.canGoBack.collectAsState()
 
     LaunchedEffect(Unit) { signIn.restore() }
 
@@ -83,11 +84,27 @@ fun App(
                     baseUrl = current.baseUrl,
                     // Adding a server is the same screen as the first sign-in,
                     // reached by putting the controller back where it starts.
-                    onAddAnother = signIn::cancel,
+                    onAddAnother = signIn::addAnother,
+                    onEdit = { id -> scope.launch { signIn.edit(id) } },
                     onInstancesChanged = { signIn.restore() },
                 )
 
-                else -> SignInScreen(current, onSubmit = signIn::submit, onAnswer = signIn::answer)
+                else -> {
+                    // Opened from inside the app -- editing a server, or adding
+                    // one more -- the form has a way back, the system gesture
+                    // included.
+                    DisposableEffect(canGoBack) {
+                        back.onBack = if (canGoBack) { { scope.launch { signIn.back() }; true } } else null
+                        onDispose { back.onBack = null }
+                    }
+                    SignInScreen(
+                        current,
+                        onSubmit = signIn::submit,
+                        onAnswer = signIn::answer,
+                        initial = editing?.form,
+                        onBack = if (canGoBack) { { scope.launch { signIn.back() } } } else null,
+                    )
+                }
             }
         }
     }
@@ -101,6 +118,7 @@ private fun SignedIn(
     onAsk: ((Set<Ask>) -> Unit)?,
     baseUrl: String,
     onAddAnother: () -> Unit,
+    onEdit: (String) -> Unit,
     onInstancesChanged: suspend () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -118,7 +136,7 @@ private fun SignedIn(
     // excludes the moment before the controller has said which one it is: built
     // then as well, the root was listed twice on every sign-in and redrawn
     // under the finger of whoever tapped first.
-    LaunchedEffect(baseUrl, state.currentId, state.credentialsRevision) {
+    LaunchedEffect(baseUrl, state.currentId) {
         if (state.currentId == null) return@LaunchedEffect
         browser = container.browser(scope)?.also { it.start() }
         cast = container.cast(scope)
@@ -147,7 +165,7 @@ private fun SignedIn(
     DisposableEffect(screen, browser) {
         back.onBack = when (screen) {
             is Screen.Browser -> browser?.let { { it.goUp() } } ?: { false }
-            is Screen.Sources -> { { screen = Screen.Servers(); true } }
+            is Screen.Sources -> { { screen = Screen.Servers; true } }
             else -> { { screen = Screen.Browser; true } }
         }
         onDispose { back.onBack = null }
@@ -176,10 +194,7 @@ private fun SignedIn(
             onAddAnother = onAddAnother,
             reporting = state.reporting.takeIf { CrashReports.available },
             onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
-            onChangePassword = { id, password, done ->
-                scope.launch { done(signedIn.changePassword(id, password)) }
-            },
-            changingFirst = here.changing,
+            onEdit = onEdit,
             onClose = { screen = Screen.Browser },
         )
 
@@ -193,10 +208,10 @@ private fun SignedIn(
                 onSave = { chosen ->
                     scope.launch {
                         signedIn.chooseSources(here.instanceId, chosen)
-                        screen = Screen.Servers()
+                        screen = Screen.Servers
                     }
                 },
-                onClose = { screen = Screen.Servers() },
+                onClose = { screen = Screen.Servers },
             )
         }
 
@@ -207,8 +222,8 @@ private fun SignedIn(
                 BrowserScreen(
                     open,
                     cast,
-                    onOpenServers = { screen = Screen.Servers() },
-                    onChangePassword = { screen = Screen.Servers(changing = state.currentId) },
+                    onOpenServers = { screen = Screen.Servers },
+                    onEditServer = { state.currentId?.let(onEdit) },
                 )
             }
         }
