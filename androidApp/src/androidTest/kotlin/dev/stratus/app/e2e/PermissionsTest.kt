@@ -36,7 +36,7 @@ class PermissionsTest : E2E() {
         openServers()
         ui.onAllNodes(isToggleable())[0].performClick()
         assertTrue(Phone.permissionDialogShown(), "turning backup on asked for nothing")
-        while (Phone.permissionDialogShown(timeoutMs = 3_000)) Phone.deny()
+        Phone.answerAll(allow = false)
         see("Back up to this server")
     }
 

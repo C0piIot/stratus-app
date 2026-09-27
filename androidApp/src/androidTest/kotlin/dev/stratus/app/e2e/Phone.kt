@@ -44,6 +44,27 @@ object Phone {
         requireNotNull(button) { "no allow button on the permission dialog" }.click()
     }
 
+    /**
+     * Answers every permission dialog that comes up, one after another -- a
+     * request for several permissions is several dialogs -- until none has.
+     * Keyed on the buttons rather than on the dialog's package, which lingers
+     * for a moment after the last one is pressed.
+     */
+    fun answerAll(allow: Boolean) {
+        val ids = if (allow) {
+            listOf("permission_allow_all_button", "permission_allow_button")
+        } else {
+            listOf("permission_deny_button", "permission_deny_and_dont_ask_again_button")
+        }
+        repeat(4) {
+            val button = ids.firstNotNullOfOrNull { id ->
+                device.wait(Until.findObject(By.res(CONTROLLER, id)), 1_500)
+            } ?: return
+            button.click()
+            device.waitForIdle()
+        }
+    }
+
     /** The second time it asks, Android offers "don't ask again" under another id. */
     fun deny() {
         val button = device.wait(Until.findObject(By.res(CONTROLLER, "permission_deny_button")), 5_000)

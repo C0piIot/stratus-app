@@ -153,9 +153,7 @@ abstract class E2E {
     fun turnBackupOn(allow: Boolean = true) {
         openServers()
         ui.onAllNodes(isToggleable())[0].performClick()
-        while (Phone.permissionDialogShown(timeoutMs = 3_000)) {
-            if (allow) Phone.allowAll() else Phone.deny()
-        }
+        Phone.answerAll(allow)
         tap("Back")
     }
 }
