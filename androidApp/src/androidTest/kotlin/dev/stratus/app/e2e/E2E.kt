@@ -128,7 +128,15 @@ abstract class E2E {
     fun tap(text: String, timeoutMs: Long = 15_000) {
         val button = hasText(text, substring = false) and hasClickAction()
         try {
-            ui.waitUntil(timeoutMs) { ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+            ui.waitUntil(timeoutMs) {
+                if (ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty()) return@waitUntil true
+                runCatching {
+                    if (ui.onAllNodes(hasScrollToNodeAction()).fetchSemanticsNodes().isNotEmpty()) {
+                        ui.onAllNodes(hasScrollToNodeAction())[0].performScrollToNode(button)
+                    }
+                }
+                ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty()
+            }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError("nothing to press saying \"$text\". The screen showed:\n${screen()}", e)
         }
