@@ -13,12 +13,13 @@ class ServersTest : E2E() {
     @After
     fun closeSecond() = second.close()
 
+    // Same host, so the consent given to the first is the answer for the second.
     @Test
     fun aSecondServerIsAddedAndEitherCanBeLookedAt() {
         signedIn()
         openServers()
         tap("Add")
-        signIn(address = second.address)
+        signIn(address = second.address, consentAsked = false)
         see("Servers")
 
         openServers()
@@ -34,7 +35,7 @@ class ServersTest : E2E() {
         signedIn()
         openServers()
         tap("Add")
-        signIn(address = second.address)
+        signIn(address = second.address, consentAsked = false)
         openServers()
 
         tap("Sign out")

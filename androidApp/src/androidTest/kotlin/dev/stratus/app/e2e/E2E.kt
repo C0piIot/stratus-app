@@ -121,13 +121,17 @@ abstract class E2E {
     fun type(field: String, value: String) =
         ui.onNode(hasSetTextAction() and hasText(field, substring = true)).performTextInput(value)
 
-    /** The first sign-in, over plain http and consented to, which is how a home server is reached. */
-    fun signIn(address: String = link.address, password: String = Stratus.password) {
+    /**
+     * A sign-in over plain http, consented to when asked -- and only the first
+     * time for a host, since the answer is remembered per host, which is what
+     * a second server on the same machine shows.
+     */
+    fun signIn(address: String = link.address, password: String = Stratus.password, consentAsked: Boolean = true) {
         type("Server address", address)
         type("Username", Stratus.user)
         type("Password", password)
         tap("Sign in")
-        tap("Send anyway")
+        if (consentAsked) tap("Send anyway")
     }
 
     /** Signed in and looking at the root of the tree. */
