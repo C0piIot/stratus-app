@@ -106,8 +106,13 @@ class CastController(
         scope.launch { caster.stop() }
     }
 
-    /** Asks the server whether the link means anything before looking for a screen. */
-    private suspend fun choose(item: CastItem) {
+    /**
+     * Asks the server whether the link means anything before looking for a
+     * screen, and takes the fallback where the first choice is not served.
+     */
+    private suspend fun choose(offered: CastItem) {
+        val fallback = offered.fallback
+        val item = if (fallback != null && !support.serves(offered.url, offered.contentType)) fallback else offered
         if (!support.honours(item.url)) {
             mutable.value = CastState.TheServerDoesNotDoLinks
             return

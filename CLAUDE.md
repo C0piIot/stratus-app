@@ -265,9 +265,18 @@ What is sent is decided in `commonMain` and is the interesting half. **A
 photograph goes as the server's JPEG, not as itself**, because no Chromecast
 reads HEIC and HEIC is what an iPhone records and what this app uploads
 untouched; `/thumb/` already renders one, and the conformance suite proves a
-HEIC comes back as a JPEG to a request with no account behind it. Video goes as
-it is and an older Chromecast will not play HEVC -- refusing it here would also
-refuse everything that does work, so the television reports its own failure.
+HEIC comes back as a JPEG to a request with no account behind it.
+
+**A video goes as HLS**, `&hls=index.m3u8` on the same signed WebDAV link
+(stratus-backend#50), and always rather than only when it has to: WebDAV says
+nothing about codecs, so the app cannot tell an iPhone's HEVC from an H.264,
+and the server's master playlist declares both for the receiver to choose. A
+`HEAD` first, checked by content type rather than status -- a server that
+ignores the query answers 200 with the film -- and where it is not a playlist
+the file goes as it is, the television reporting its own failure if it cannot
+decode it. The segments are MPEG-TS, which the receiver has to be told. The
+conformance suite casts the server's own AC-3 Matroska fixture, playlist and
+segment, with no account.
 
 **The one failure worth predicting is the certificate.** A server trusted only
 because somebody pinned it on this phone is one a television has nobody to ask
