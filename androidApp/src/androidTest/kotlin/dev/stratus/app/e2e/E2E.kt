@@ -4,7 +4,9 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.printToString
@@ -91,17 +93,31 @@ abstract class E2E {
         scenario?.close()
         link.close()
         Phone.airplane(false)
+        // Every test shares one server, and a root that outgrows the screen
+        // hides the next test's folder below the fold.
+        Stratus.remove("/$unique/")
+        Stratus.remove("/${unique}b/")
     }
 
     fun see(text: String, timeoutMs: Long = 15_000, substring: Boolean = true): SemanticsNodeInteraction {
+        val wanted = hasText(text, substring = substring)
+        fun found() = ui.onAllNodes(wanted).fetchSemanticsNodes().isNotEmpty()
         try {
             ui.waitUntil(timeoutMs) {
-                ui.onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().isNotEmpty()
+                if (found()) return@waitUntil true
+                // A list only composes what is on screen, so something further
+                // down is not there to be seen until the list is scrolled to it.
+                runCatching {
+                    if (ui.onAllNodes(hasScrollToNodeAction()).fetchSemanticsNodes().isNotEmpty()) {
+                        ui.onAllNodes(hasScrollToNodeAction())[0].performScrollToNode(wanted)
+                    }
+                }
+                found()
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError("never saw \"$text\" on screen. It showed:\n${screen()}", e)
         }
-        return ui.onAllNodes(hasText(text, substring = substring))[0]
+        return ui.onAllNodes(wanted)[0]
     }
 
     fun gone(text: String, timeoutMs: Long = 15_000) = ui.waitUntil(timeoutMs) {
