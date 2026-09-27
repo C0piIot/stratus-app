@@ -113,8 +113,12 @@ private fun SignedIn(
 
     LaunchedEffect(Unit) { signedIn.start() }
 
-    // Rebuilt when the server being looked at changes, and only then.
+    // Rebuilt when the server being looked at changes, and only then -- which
+    // excludes the moment before the controller has said which one it is: built
+    // then as well, the root was listed twice on every sign-in and redrawn
+    // under the finger of whoever tapped first.
     LaunchedEffect(baseUrl, state.currentId) {
+        if (state.currentId == null) return@LaunchedEffect
         browser = container.browser(scope)?.also { it.start() }
         cast = container.cast(scope)
     }

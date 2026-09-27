@@ -116,7 +116,13 @@ abstract class E2E {
         } catch (e: ComposeTimeoutException) {
             throw AssertionError("nothing to press saying \"$text\". The screen showed:\n${screen()}", e)
         }
-        ui.onAllNodes(button)[0].performClick()
+        // Once more if it was redrawn between being found and being pressed.
+        try {
+            ui.onAllNodes(button)[0].performClick()
+        } catch (_: AssertionError) {
+            ui.waitUntil(timeoutMs) { ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+            ui.onAllNodes(button)[0].performClick()
+        }
     }
 
     fun type(field: String, value: String) =
