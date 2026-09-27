@@ -71,7 +71,7 @@ GRADLE_CMD = $(if $(wildcard gradlew),./gradlew,gradle)
 
 GRADLE = $(DOCKER_RUN) $(IMAGE) $(GRADLE_CMD) --no-daemon
 
-.PHONY: help doctor toolchain gradle test conformance device-test shell clean
+.PHONY: help doctor toolchain gradle test conformance device-test e2e shell clean
 
 help:
 	@echo "make doctor     check this machine can run the toolchain"
@@ -79,6 +79,7 @@ help:
 	@echo "make test       shared tests and the iOS sources, native and fast"
 	@echo "make conformance the same client against a real stratus-backend"
 	@echo "make device-test the Android halves on an emulator, cached after one run"
+	@echo "make e2e        the whole app on an emulator, against a real backend"
 	@echo "make gradle ARGS='tasks'"
 	@echo "make shell      a shell inside the toolchain"
 	@echo "make clean      drop caches and build output, the emulator's included"
@@ -151,6 +152,11 @@ device-test: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan $(SDK_CACHE)/system-images
 	$(DOCKER_RUN) --device /dev/kvm \
 		-v "$(SDK_CACHE)/system-images":/opt/android-sdk/system-images \
 		$(IMAGE) $(GRADLE_CMD) --no-daemon :core:emulatorAndroidDeviceTest
+
+# The whole app on the emulator against a real backend, which the script starts
+# and stops. The same system-image cache as device-test.
+e2e: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan $(SDK_CACHE)/system-images
+	RUN_AS=$(RUN_AS) scripts/e2e.sh
 
 shell: | $(CACHE_DIR)/gradle $(CACHE_DIR)/konan
 	$(DOCKER_RUN) -it $(IMAGE) bash

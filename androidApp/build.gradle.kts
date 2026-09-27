@@ -29,6 +29,27 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Every test starts from an app that has never run: no instance, no
+        // cache, no permission. `pm clear` would kill the process the test runs
+        // in, so the orchestrator does it between tests instead.
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
+    }
+
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+        animationsDisabled = true
+        // The whole app against a real server (stratus-app#78). The same image
+        // as :core's device tests, so the cache the Makefile mounts serves both.
+        managedDevices {
+            localDevices.create("emulator") {
+                device = "Pixel 6"
+                apiLevel = 34
+                systemImageSource = "aosp-atd"
+                testedAbi = "x86_64"
+            }
+        }
     }
 
     if (keystoreBase64.isPresent && keystorePassword.isPresent) {
@@ -55,6 +76,19 @@ configurations.configureEach {
 }
 
 dependencies {
+    androidTestImplementation(kotlin("test-junit"))
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    // For arranging and checking the server behind the app's back, with the
+    // app's own WebDAV client rather than a second one to keep in step.
+    androidTestImplementation(libs.ktor.client.core)
+    androidTestImplementation(libs.ktor.client.okhttp)
+    androidTestUtil(libs.androidx.test.orchestrator)
+    androidTestUtil(libs.androidx.test.services)
+    debugImplementation(libs.compose.ui.test.manifest)
     implementation(project(":ui"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime)
