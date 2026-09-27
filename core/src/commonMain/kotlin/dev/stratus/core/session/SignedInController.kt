@@ -7,6 +7,8 @@ import dev.stratus.core.backup.MediaSource
 import dev.stratus.core.backup.PendingUpload
 import dev.stratus.core.instance.Instance
 import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.net.Credentials
+import dev.stratus.core.net.ProbeOutcome
 import dev.stratus.core.store.ReportingConsent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,17 @@ data class InstanceStatus(
     val failures: List<PendingUpload>,
 )
 
+/** What came of offering a server a new password. */
+sealed interface PasswordChange {
+    data object Saved : PasswordChange
+
+    /** The server said no, so nothing was kept: the old one is still there. */
+    data object Rejected : PasswordChange
+
+    /** No answer either way, so nothing was kept -- a password is not saved unproved. */
+    data object Unreachable : PasswordChange
+}
+
 data class SignedInState(
     val servers: List<Instance> = emptyList(),
     val currentId: String? = null,
@@ -31,6 +44,11 @@ data class SignedInState(
     val access: MediaAccess = MediaAccess.None,
     val folders: List<MediaSource> = emptyList(),
     val reporting: Boolean = false,
+    /**
+     * Moves when a server's password does, so whatever holds a connection
+     * built with the old one -- the browser -- is built again.
+     */
+    val credentialsRevision: Int = 0,
 )
 
 /**
@@ -55,6 +73,8 @@ class SignedInController(
     private val notificationsAsked: AskedOnce,
     /** Starts or stops the reporter itself, which lives outside `:core`. */
     private val reportingChanged: (Boolean) -> Unit,
+    /** One authenticated request to an instance with these credentials, as sign-in makes. */
+    private val prove: suspend (Instance, Credentials) -> ProbeOutcome = { _, _ -> error("not wired") },
 ) {
     private val mutable = MutableStateFlow(SignedInState())
     val state: StateFlow<SignedInState> = mutable.asStateFlow()
@@ -122,6 +142,25 @@ class SignedInController(
     suspend fun chooseSources(id: String, sources: Set<String>) {
         backup.setSources(id, sources)
         refresh()
+    }
+
+    /**
+     * Tries [password] against the server before keeping it, the way sign-in
+     * does: a typo should fail at the keyboard, not at three in the morning in
+     * a backup nobody watches.
+     */
+    suspend fun changePassword(id: String, password: String): PasswordChange {
+        val instance = instances.instance(id) ?: return PasswordChange.Rejected
+        val credentials = Credentials(instance.username, password)
+        return when (prove(instance, credentials)) {
+            is ProbeOutcome.IsWebDav -> {
+                instances.updateCredentials(id, credentials)
+                mutable.update { it.copy(credentialsRevision = it.credentialsRevision + 1) }
+                PasswordChange.Saved
+            }
+            is ProbeOutcome.Rejected -> PasswordChange.Rejected
+            else -> PasswordChange.Unreachable
+        }
     }
 
     suspend fun signOut(id: String) {

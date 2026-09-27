@@ -21,7 +21,7 @@ import kotlin.concurrent.thread
  * so a server that disappears, stops answering or drops a transfer halfway is a
  * method call rather than a container somebody outside has to stop.
  */
-class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
+class FaultyLink(@Volatile private var upstream: InetSocketAddress) : Closeable {
 
     private companion object {
         const val TAG = "FaultyLink"
@@ -68,6 +68,12 @@ class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
             bind(InetSocketAddress(LOOPBACK, port))
         }
         serve(listener)
+    }
+
+    /** Forwards to another server from now on, as if this one had been replaced. */
+    fun retarget(to: InetSocketAddress) {
+        upstream = to
+        dropAll()
     }
 
     /** Connections are accepted and then nothing is ever answered. */

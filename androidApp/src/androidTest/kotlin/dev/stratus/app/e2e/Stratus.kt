@@ -23,6 +23,10 @@ object Stratus {
     /** 10.0.2.2 is the emulator's name for the machine it runs on. */
     val upstream = InetSocketAddress("10.0.2.2", port)
 
+    /** The same user on a second server under another password: a password changed. */
+    val otherPassword: String = arguments.getString("stratusPassword2") ?: "e2e-secret-2"
+    val otherUpstream = InetSocketAddress("10.0.2.2", arguments.getString("stratusPort2")?.toInt() ?: 18097)
+
     /** The server behind the app's back, for arranging a test and checking its outcome. */
     val dav = DavClient(stratusHttpClient(OkHttp.create(), Credentials(user, password)), "http://10.0.2.2:$port/dav/")
 

@@ -38,6 +38,16 @@ class InstanceStore(private val secure: SecureStore) {
     }
 
     /**
+     * A new password for an instance that keeps everything else: its id, and
+     * with it the backup record and the queue (stratus-app#87). Not [put],
+     * which would also make it the one being looked at.
+     */
+    suspend fun updateCredentials(id: String, credentials: Credentials) {
+        val existing = load(id) ?: return
+        secure.write(key(id), InstanceBlob.encode(existing.first, credentials))
+    }
+
+    /**
      * Forgets an instance.
      *
      * The caller is responsible for its cached rows: they are keyed by an id that

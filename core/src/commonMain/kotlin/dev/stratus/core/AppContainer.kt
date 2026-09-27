@@ -15,6 +15,7 @@ import dev.stratus.core.instance.Instance
 import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.net.DavProber
 import dev.stratus.core.net.TrustPolicy
+import dev.stratus.core.net.candidateOf
 import dev.stratus.core.net.hostPortOf
 import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.share.LinkSharing
@@ -90,6 +91,12 @@ class AppContainer(
 
     fun signedIn(ask: ((Set<Ask>) -> Unit)?, reportingChanged: (Boolean) -> Unit) = SignedInController(
         instances, backup, reporting, ::forget, ask, AskedOnce(secure, "notifications-asked"), reportingChanged,
+        prove = { instance, credentials ->
+            // The prober sign-in uses, with the trust this server already has:
+            // a pinned certificate is still pinned for a password change.
+            val prober = DavProber { creds, policy -> stratusHttpClient(engine(policy), creds) }
+            prober.probe(candidateOf(instance.baseUrl), credentials, trust.pins()[hostPortOf(instance.baseUrl)])
+        },
     )
 
     suspend fun instances(): List<Instance> = instances.all()

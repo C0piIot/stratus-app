@@ -31,22 +31,22 @@ class ServersTest : E2E() {
     }
 
     @Test
-    fun signingOutAsksFirstAndThenForgetsTheServer() {
+    fun removingAsksFirstAndThenForgetsTheServer() {
         signedIn()
         openServers()
         tap("Add")
         signIn(address = second.address, consentAsked = false)
         openServers()
 
-        tap("Sign out")
-        see("Sign out of")
+        tap("Remove")
+        see("Remove http")
         tap("Cancel")
         see(second.address)
 
-        tap("Sign out")
-        see("Sign out of")
+        tap("Remove")
+        see("Remove http")
         // The confirm button, which the dialog puts after the one in the row.
-        val confirm = hasText("Sign out", substring = false) and hasClickAction()
+        val confirm = hasText("Remove", substring = false) and hasClickAction()
         val buttons = ui.onAllNodes(confirm).fetchSemanticsNodes().size
         ui.onAllNodes(confirm)[buttons - 1].performClick()
         see("Servers")

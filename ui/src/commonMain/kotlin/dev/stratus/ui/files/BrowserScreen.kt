@@ -20,8 +20,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,10 +31,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import dev.stratus.core.dav.DavResource
-import dev.stratus.core.files.BrowserController
 import dev.stratus.core.cast.CastController
 import dev.stratus.core.cast.CastState
+import dev.stratus.core.dav.DavError
+import dev.stratus.core.dav.DavResource
+import dev.stratus.core.files.BrowserController
+import dev.stratus.core.files.BrowserFailure
 import dev.stratus.core.files.Confirmation
 import dev.stratus.core.share.ShareLife
 
@@ -44,6 +46,8 @@ fun BrowserScreen(
     controller: BrowserController,
     cast: CastController?,
     onOpenServers: () -> Unit,
+    /** For a server that stopped accepting the password this app holds. */
+    onChangePassword: () -> Unit = {},
 ) {
     val state by controller.state.collectAsState()
     // Which of two indicators a listing shows: the pulled one for a pull, the
@@ -68,7 +72,13 @@ fun BrowserScreen(
                 Text(explain(it), Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
                 // Without it, the only way to ask again after a server came back
                 // was to walk somewhere else and back.
-                TextButton(onClick = controller::refresh, Modifier.padding(horizontal = 8.dp)) { Text("Try again") }
+                if (it.isRejectedSignIn()) {
+                    // Trying again with the same password cannot help, and the
+                    // next thing somebody needs is the field to type the new one.
+                    TextButton(onClick = onChangePassword, Modifier.padding(horizontal = 8.dp)) { Text("Change password") }
+                } else {
+                    TextButton(onClick = controller::refresh, Modifier.padding(horizontal = 8.dp)) { Text("Try again") }
+                }
             }
 
             if (cast != null) CastBar(cast)
@@ -297,3 +307,7 @@ private fun CastBar(cast: CastController) {
         )
     }
 }
+
+private fun BrowserFailure.isRejectedSignIn() =
+    (this is BrowserFailure.Listing && error is DavError.Unauthorized) ||
+        (this is BrowserFailure.Operation && error is DavError.Unauthorized)
