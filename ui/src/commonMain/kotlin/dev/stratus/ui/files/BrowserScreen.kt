@@ -20,8 +20,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +46,10 @@ fun BrowserScreen(
     onOpenServers: () -> Unit,
 ) {
     val state by controller.state.collectAsState()
+    // Which of two indicators a listing shows: the pulled one for a pull, the
+    // bar for everything else, and never both.
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(state.busy) { if (!state.busy) pulled = false }
 
     Scaffold(
         topBar = {
@@ -57,7 +63,7 @@ fun BrowserScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (state.busy && !pulled) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.failure?.let {
                 Text(explain(it), Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
                 // Without it, the only way to ask again after a server came back
@@ -67,10 +73,21 @@ fun BrowserScreen(
 
             if (cast != null) CastBar(cast)
 
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(state.entries, key = { it.path }) { entry ->
-                    Row(entry, controller, cast)
-                    Divider()
+            // The one way to see what another client added since the folder was
+            // opened, short of walking out and back in (stratus-app#82).
+            PullToRefreshBox(
+                isRefreshing = pulled && state.busy,
+                onRefresh = {
+                    pulled = true
+                    controller.refresh()
+                },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(state.entries, key = { it.path }) { entry ->
+                        Row(entry, controller, cast)
+                        Divider()
+                    }
                 }
             }
         }

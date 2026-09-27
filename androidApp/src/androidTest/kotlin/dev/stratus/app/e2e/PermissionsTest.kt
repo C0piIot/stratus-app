@@ -36,8 +36,27 @@ class PermissionsTest : E2E() {
         openServers()
         ui.onAllNodes(isToggleable())[0].performClick()
         assertTrue(Phone.permissionDialogShown(), "turning backup on asked for nothing")
-        Phone.deny()
+        while (Phone.permissionDialogShown(timeoutMs = 3_000)) Phone.deny()
         see("Back up to this server")
+    }
+
+    // stratus-app#81: without it, from Android 13, a backup runs with its
+    // notification hidden. Asked once; a second toggle does not ask again.
+    @Test
+    fun turningBackupOnAsksOnceToShowItsNotification() {
+        Phone.grantPhotos()
+        signedIn()
+        openServers()
+        val toggle = { ui.onAllNodes(isToggleable())[0].performClick() }
+
+        toggle()
+        assertTrue(Phone.permissionDialogShown(), "nothing asked to show the backup's notification")
+        Phone.allowAll()
+        ui.waitUntil(5_000) { Phone.granted(android.Manifest.permission.POST_NOTIFICATIONS) }
+
+        toggle()
+        toggle()
+        assertTrue(!Phone.permissionDialogShown(timeoutMs = 3_000), "it asked a second time")
     }
 
     // Twice refused, Android answers no without showing anything, and the app

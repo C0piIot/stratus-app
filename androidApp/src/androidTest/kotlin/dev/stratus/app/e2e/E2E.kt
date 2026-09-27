@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
@@ -142,4 +143,19 @@ abstract class E2E {
     }
 
     fun openServers() = tap("Servers")
+
+    /**
+     * Turns backup on for the first server and answers what the system asks on
+     * the way -- the notification permission the first time (stratus-app#81),
+     * and the library too if it was not granted. Left up, a dialog pauses the
+     * app and with it the status the tests read.
+     */
+    fun turnBackupOn(allow: Boolean = true) {
+        openServers()
+        ui.onAllNodes(isToggleable())[0].performClick()
+        while (Phone.permissionDialogShown(timeoutMs = 3_000)) {
+            if (allow) Phone.allowAll() else Phone.deny()
+        }
+        tap("Back")
+    }
 }

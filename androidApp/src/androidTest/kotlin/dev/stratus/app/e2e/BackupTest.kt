@@ -2,7 +2,6 @@ package dev.stratus.app.e2e
 
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.performClick
 import org.junit.Test
 import kotlin.random.Random
@@ -12,12 +11,6 @@ import kotlin.test.assertTrue
 
 /** A photograph on the phone ending up on the server, and what happens when the server is not there. */
 class BackupTest : E2E() {
-
-    private fun backupOn() {
-        openServers()
-        ui.onAllNodes(isToggleable())[0].performClick()
-        tap("Back")
-    }
 
     private fun openBackupAndRun() {
         // The strip is the way in, whatever it says at the moment.
@@ -40,7 +33,7 @@ class BackupTest : E2E() {
         Phone.photograph("$unique.jpg", unique, bytes)
         Phone.grantPhotos()
         signedIn()
-        backupOn()
+        turnBackupOn()
 
         openBackupAndRun()
 
@@ -54,7 +47,7 @@ class BackupTest : E2E() {
         Phone.photograph("$unique.jpg", unique, Random.nextBytes(10_000))
         Phone.grantPhotos()
         signedIn()
-        backupOn()
+        turnBackupOn()
 
         link.down()
         openBackupAndRun()
@@ -76,7 +69,7 @@ class BackupTest : E2E() {
         Phone.photograph("$unique.jpg", unique, bytes)
         Phone.grantPhotos()
         signedIn()
-        backupOn()
+        turnBackupOn()
 
         link.cutUploadAfter(2_000_000)
         openBackupAndRun()

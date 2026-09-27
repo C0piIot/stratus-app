@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+/** What the platform is asked to request, together, since it can only show one request at a time. */
+enum class Ask { Photos, Notifications }
+
 /** One server and what its backup is doing. */
 data class InstanceStatus(
     val instance: Instance,
@@ -46,8 +49,10 @@ class SignedInController(
     private val consent: ReportingConsent,
     /** Forgets an instance and what is cached about it; see AppContainer.forget. */
     private val forget: suspend (String) -> Unit,
-    /** Asks the platform for the photo library, or null where nothing can. */
-    private val askForAccess: (() -> Unit)?,
+    /** Asks the platform for permissions, or null where nothing can. */
+    private val ask: ((Set<Ask>) -> Unit)?,
+    /** Whether the notification permission has been asked for once already. */
+    private val notificationsAsked: AskedOnce,
     /** Starts or stops the reporter itself, which lives outside `:core`. */
     private val reportingChanged: (Boolean) -> Unit,
 ) {
@@ -93,11 +98,26 @@ class SignedInController(
     }
 
     suspend fun enableBackup(id: String, enabled: Boolean) {
-        // The moment the library is needed is the moment to ask for it.
-        if (enabled && mutable.value.access == MediaAccess.None) askForAccess?.invoke()
+        if (enabled) {
+            // The moment the library is needed is the moment to ask for it --
+            // and for the notification that says a backup is running, which
+            // from Android 13 is hidden without one (stratus-app#81). That one
+            // is asked once: a refusal is an answer, not a first attempt.
+            val needed = buildSet {
+                if (mutable.value.access == MediaAccess.None) add(Ask.Photos)
+                if (!notificationsAsked.already()) add(Ask.Notifications)
+            }
+            if (needed.isNotEmpty() && ask != null) {
+                ask.invoke(needed)
+                if (Ask.Notifications in needed) notificationsAsked.remember()
+            }
+        }
         backup.setEnabled(id, enabled)
         refresh()
     }
+
+    /** The Folders screen's button, which is about the library and nothing else. */
+    fun askForPhotos() = ask?.invoke(setOf(Ask.Photos))
 
     suspend fun chooseSources(id: String, sources: Set<String>) {
         backup.setSources(id, sources)
@@ -123,4 +143,10 @@ class SignedInController(
         accessRead = true
         mutable.update { it.copy(access = access, folders = backup.sources()) }
     }
+}
+
+/** A question the app puts once and then leaves alone, whatever the answer was. */
+class AskedOnce(private val secure: dev.stratus.core.store.SecureStore, private val key: String) {
+    suspend fun already(): Boolean = secure.read(key) != null
+    suspend fun remember() = secure.write(key, "asked")
 }

@@ -51,6 +51,9 @@ object Phone {
         requireNotNull(button) { "no deny button on the permission dialog" }.click()
     }
 
+    fun granted(permission: String) =
+        context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
     fun inFront(): String = device.currentPackageName
 
     fun backToApp() {

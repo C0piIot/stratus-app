@@ -6,6 +6,8 @@ import kotlinx.io.Buffer
 import kotlinx.io.RawSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 private class FakeAssets(private val bytes: ByteArray = ByteArray(100)) : AssetSource {
@@ -208,6 +210,25 @@ class UploadQueueTest {
         queue.runNext()
 
         assertEquals(Resume("upload-1", 0), transport.sent[1].second)
+    }
+
+    // stratus-app#83: Android stopping the worker is not the server refusing
+    // the file, and must not be written down as if it were.
+    @Test
+    fun aPassStoppedByTheSystemLeavesTheUploadPendingWithNoFailure() = runTest {
+        val stopped = object : Transport {
+            override val resumable = false
+            override suspend fun send(target: UploadTarget, resume: Resume?, open: suspend (from: Long) -> RawSource) =
+                throw kotlinx.coroutines.CancellationException("Job was cancelled")
+        }
+        val queue = queue(stopped)
+        queue.enqueue(listOf(asset(5)))
+
+        assertFailsWith<kotlinx.coroutines.CancellationException> { queue.runNext() }
+
+        val left = database.pendingFor("instance-a").next(clock)
+        assertEquals(0, left?.attempts)
+        assertNull(left?.lastError)
     }
 
     @Test

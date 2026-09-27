@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import dev.stratus.core.AppContainer
+import dev.stratus.core.session.Ask
 import dev.stratus.core.cast.CastController
 import dev.stratus.core.files.BrowserController
 import dev.stratus.core.signin.SignInState
@@ -47,8 +48,8 @@ fun App(
     container: AppContainer,
     back: BackRequests = BackRequests(),
     onBackUpNow: (() -> Unit)? = null,
-    /** Asks the system for the photo library; null where nothing can ask yet. */
-    onRequestAccess: (() -> Unit)? = null,
+    /** Asks the system for these permissions, in one request; null where nothing can ask yet. */
+    onAsk: ((Set<Ask>) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val signIn = remember { container.signIn(scope) }
@@ -77,7 +78,7 @@ fun App(
                     container = container,
                     back = back,
                     onBackUpNow = onBackUpNow,
-                    onRequestAccess = onRequestAccess,
+                    onAsk = onAsk,
                     baseUrl = current.baseUrl,
                     // Adding a server is the same screen as the first sign-in,
                     // reached by putting the controller back where it starts.
@@ -96,14 +97,14 @@ private fun SignedIn(
     container: AppContainer,
     back: BackRequests,
     onBackUpNow: (() -> Unit)?,
-    onRequestAccess: (() -> Unit)?,
+    onAsk: ((Set<Ask>) -> Unit)?,
     baseUrl: String,
     onAddAnother: () -> Unit,
     onInstancesChanged: suspend () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val signedIn = remember {
-        container.signedIn(onRequestAccess) { on -> if (on) CrashReports.start() else CrashReports.stop() }
+        container.signedIn(onAsk) { on -> if (on) CrashReports.start() else CrashReports.stop() }
     }
     val state by signedIn.state.collectAsState()
     var screen by remember { mutableStateOf<Screen>(Screen.Browser) }
@@ -178,7 +179,7 @@ private fun SignedIn(
             SourcesScreen(
                 available = state.folders,
                 access = state.access,
-                onRequestAccess = onRequestAccess,
+                onRequestAccess = onAsk?.let { { signedIn.askForPhotos() } },
                 chosen = state.servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
                 onSave = { chosen ->
                     scope.launch {

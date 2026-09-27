@@ -1,6 +1,8 @@
 package dev.stratus.app.e2e
 
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -23,6 +25,22 @@ class BrowserTest : E2E() {
         Phone.device.pressBack()
         see(unique)
         gone("inside.txt")
+    }
+
+    // stratus-app#82: something another client added shows without walking
+    // out of the folder and back.
+    @Test
+    fun pullingTheListDownShowsWhatWasAddedSince() {
+        Stratus.folder("/$unique/")
+        Stratus.file("/$unique/first.txt")
+        signedIn()
+        tap(unique)
+        see("first.txt")
+
+        Stratus.file("/$unique/second.txt")
+        ui.onAllNodes(hasScrollAction())[0].performTouchInput { swipeDown() }
+
+        see("second.txt")
     }
 
     @Test

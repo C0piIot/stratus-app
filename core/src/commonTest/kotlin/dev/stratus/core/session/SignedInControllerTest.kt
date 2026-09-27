@@ -52,7 +52,7 @@ class SignedInControllerTest {
         roll,
         Connections { null },
     )
-    private var asked = 0
+    private val asked = mutableListOf<Set<Ask>>()
     private val reported = mutableListOf<Boolean>()
     private val forgotten = mutableListOf<String>()
 
@@ -61,7 +61,8 @@ class SignedInControllerTest {
         backup = backup,
         consent = ReportingConsent(store),
         forget = { forgotten += it; instances.remove(it) },
-        askForAccess = { asked++ },
+        ask = { asked += it },
+        notificationsAsked = AskedOnce(store, "notifications-asked"),
         reportingChanged = { reported += it },
     )
 
@@ -110,10 +111,11 @@ class SignedInControllerTest {
         controller.start()
 
         controller.enableBackup("home", false)
-        assertEquals(0, asked, "turning it off needs no photographs")
+        assertEquals(emptyList(), asked, "turning it off needs nothing")
 
         controller.enableBackup("home", true)
-        assertEquals(1, asked)
+        // One request for both, because Android shows one at a time.
+        assertEquals(listOf(setOf(Ask.Photos, Ask.Notifications)), asked)
         assertTrue(controller.state.value.servers.single().backupEnabled)
     }
 
@@ -124,7 +126,29 @@ class SignedInControllerTest {
         controller.start()
 
         controller.enableBackup("home", true)
-        assertEquals(0, asked)
+        assertEquals(listOf(setOf(Ask.Notifications)), asked, "the library was already readable")
+    }
+
+    // stratus-app#81: a refusal is an answer, so it is asked once and not on
+    // every toggle.
+    @Test
+    fun theNotificationPermissionIsAskedForOnceAndThenLeftAlone() = runTest {
+        signedIn("home")
+        roll.access = MediaAccess.Full
+        controller.start()
+
+        controller.enableBackup("home", true)
+        controller.enableBackup("home", false)
+        controller.enableBackup("home", true)
+
+        assertEquals(listOf(setOf(Ask.Notifications)), asked)
+    }
+
+    @Test
+    fun theFoldersButtonAsksForThePhotosAlone() = runTest {
+        controller.start()
+        controller.askForPhotos()
+        assertEquals(listOf(setOf(Ask.Photos)), asked)
     }
 
     @Test
