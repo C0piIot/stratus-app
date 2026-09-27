@@ -20,16 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.backup.AttentionReason
 import dev.stratus.core.backup.BackupState
-import dev.stratus.core.backup.PendingUpload
 import dev.stratus.core.backup.WaitingReason
-import dev.stratus.core.instance.Instance
-
-/** One server and what its backup is doing. */
-data class InstanceStatus(
-    val instance: Instance,
-    val state: BackupState,
-    val failures: List<PendingUpload>,
-)
+import dev.stratus.core.session.InstanceStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

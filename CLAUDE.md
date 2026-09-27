@@ -422,6 +422,13 @@ now, behind a `Connections` seam whose only job is to be the part that needs an
 engine and a keychain. The container is wiring, the platform holds a
 notification and a return value, and everything in between is in `commonTest`.
 
+**A composable is the same leak one layer up**, and it happened a third time:
+the signed-in screens kept their state in `App.kt`, where nothing re-read the
+photo access after somebody granted it and `:ui` had no test to notice
+(stratus-app#75). It is `SignedInController` now, and what the interface keeps
+is navigation and when to call `resumed()`. The test for a new piece of state
+on a screen is where it lives: if it is in a `remember`, it is untested.
+
 There is one qualification to all of that, with a sting in it: **the iOS source
 sets compile on Linux -- but only on x86_64.** Kotlin/Native does not support
 `linux-aarch64` as a host at all, so on the ARM development box every Apple
