@@ -39,6 +39,14 @@ object Stratus {
         }
     }
 
+    /** Gone, whether or not it was there. */
+    fun remove(path: String) = runBlocking {
+        try {
+            dav.delete(path)
+        } catch (_: Exception) {
+        }
+    }
+
     fun names(path: String): List<String> = runBlocking { dav.list(path).map { it.name } }
 
     /**

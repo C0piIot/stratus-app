@@ -239,6 +239,10 @@ prevents it — a transfer runs as a foreground service with a notification, whi
 is the strongest thing an app is allowed to do, and on those phones it can still
 be stopped.
 
+That notification needs permission from Android 13, and the app asks for it the
+first time backup is turned on — once. Refused, the backup still runs; it is just
+not shown, and the Backup screen is the place to see it.
+
 Where that happens the honest answer is to say so rather than to look as though
 the backup is running, and the app being the only thing in a position to notice
 is why that matters. If a backup stops overnight on one of those phones, the

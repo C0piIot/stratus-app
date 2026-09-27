@@ -4,8 +4,11 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
@@ -90,17 +93,31 @@ abstract class E2E {
         scenario?.close()
         link.close()
         Phone.airplane(false)
+        // Every test shares one server, and a root that outgrows the screen
+        // hides the next test's folder below the fold.
+        Stratus.remove("/$unique/")
+        Stratus.remove("/${unique}b/")
     }
 
     fun see(text: String, timeoutMs: Long = 15_000, substring: Boolean = true): SemanticsNodeInteraction {
+        val wanted = hasText(text, substring = substring)
+        fun found() = ui.onAllNodes(wanted).fetchSemanticsNodes().isNotEmpty()
         try {
             ui.waitUntil(timeoutMs) {
-                ui.onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().isNotEmpty()
+                if (found()) return@waitUntil true
+                // A list only composes what is on screen, so something further
+                // down is not there to be seen until the list is scrolled to it.
+                runCatching {
+                    if (ui.onAllNodes(hasScrollToNodeAction()).fetchSemanticsNodes().isNotEmpty()) {
+                        ui.onAllNodes(hasScrollToNodeAction())[0].performScrollToNode(wanted)
+                    }
+                }
+                found()
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError("never saw \"$text\" on screen. It showed:\n${screen()}", e)
         }
-        return ui.onAllNodes(hasText(text, substring = substring))[0]
+        return ui.onAllNodes(wanted)[0]
     }
 
     fun gone(text: String, timeoutMs: Long = 15_000) = ui.waitUntil(timeoutMs) {
@@ -111,11 +128,25 @@ abstract class E2E {
     fun tap(text: String, timeoutMs: Long = 15_000) {
         val button = hasText(text, substring = false) and hasClickAction()
         try {
-            ui.waitUntil(timeoutMs) { ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+            ui.waitUntil(timeoutMs) {
+                if (ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty()) return@waitUntil true
+                runCatching {
+                    if (ui.onAllNodes(hasScrollToNodeAction()).fetchSemanticsNodes().isNotEmpty()) {
+                        ui.onAllNodes(hasScrollToNodeAction())[0].performScrollToNode(button)
+                    }
+                }
+                ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty()
+            }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError("nothing to press saying \"$text\". The screen showed:\n${screen()}", e)
         }
-        ui.onAllNodes(button)[0].performClick()
+        // Once more if it was redrawn between being found and being pressed.
+        try {
+            ui.onAllNodes(button)[0].performClick()
+        } catch (_: AssertionError) {
+            ui.waitUntil(timeoutMs) { ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+            ui.onAllNodes(button)[0].performClick()
+        }
     }
 
     fun type(field: String, value: String) =
@@ -142,4 +173,17 @@ abstract class E2E {
     }
 
     fun openServers() = tap("Servers")
+
+    /**
+     * Turns backup on for the first server and answers what the system asks on
+     * the way -- the notification permission the first time (stratus-app#81),
+     * and the library too if it was not granted. Left up, a dialog pauses the
+     * app and with it the status the tests read.
+     */
+    fun turnBackupOn(allow: Boolean = true) {
+        openServers()
+        ui.onAllNodes(isToggleable())[0].performClick()
+        Phone.answerAll(allow)
+        tap("Back")
+    }
 }

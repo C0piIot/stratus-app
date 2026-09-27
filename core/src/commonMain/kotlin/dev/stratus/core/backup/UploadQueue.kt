@@ -1,5 +1,6 @@
 package dev.stratus.core.backup
 
+import kotlinx.coroutines.CancellationException
 import io.ktor.util.date.getTimeMillis
 
 /** Makes a directory and whatever it hangs from, ignoring what is already there. */
@@ -77,6 +78,8 @@ class UploadQueue(
         // folder has to be there before the upload is even created.
         try {
             directories.ensure(upload.path.substringBeforeLast('/') + "/")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             return failure(upload, FailureKind.Transient, e.message ?: "could not make the folder")
         }
@@ -97,6 +100,11 @@ class UploadQueue(
                 UploadTarget(upload.path, upload.size, upload.contentType),
                 resume,
             ) { from -> source.open(upload.localId, upload.part, from) }
+        } catch (e: CancellationException) {
+            // The system stopping the pass is not the server refusing the file;
+            // recorded as a failure it showed up in the Backup screen as one,
+            // reading "Job was cancelled" (stratus-app#83).
+            throw e
         } catch (e: Exception) {
             return failure(upload, FailureKind.Transient, e.message ?: e::class.simpleName ?: "no detail")
         }
