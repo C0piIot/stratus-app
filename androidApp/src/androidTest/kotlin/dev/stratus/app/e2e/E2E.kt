@@ -56,6 +56,22 @@ abstract class E2E {
         throw AssertionError("the backend is not reachable at ${Stratus.upstream} from the emulator", last)
     }
 
+    // And through the link, which is the path the app takes: a link that
+    // cannot forward would otherwise look like the app failing to sign in.
+    @Before
+    fun theLinkForwards() {
+        val answer = runCatching {
+            (java.net.URL("${link.address}/healthz").openConnection() as java.net.HttpURLConnection).run {
+                connectTimeout = 5_000
+                readTimeout = 5_000
+                inputStream.use { it.readBytes().decodeToString() }
+            }
+        }
+        if (answer.getOrNull()?.trim() != "ok") {
+            throw AssertionError("the link at ${link.address} does not forward: $answer")
+        }
+    }
+
     /** Everything on screen, for a failure to say what it saw instead. */
     fun screen(): String = try {
         ui.onAllNodes(isRoot()).fetchSemanticsNodes().indices.joinToString("\n") {

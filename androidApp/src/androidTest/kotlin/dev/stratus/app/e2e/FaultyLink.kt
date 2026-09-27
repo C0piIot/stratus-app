@@ -1,5 +1,6 @@
 package dev.stratus.app.e2e
 
+import android.util.Log
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -21,6 +22,10 @@ import kotlin.concurrent.thread
  * method call rather than a container somebody outside has to stop.
  */
 class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
+
+    private companion object {
+        const val TAG = "FaultyLink"
+    }
 
     val port: Int
     val address: String get() = "http://127.0.0.1:$port"
@@ -87,10 +92,12 @@ class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
         while (!on.isClosed) {
             val client = try { on.accept() } catch (_: IOException) { return@thread }
             live += client
+            Log.i(TAG, "accepted ${client.remoteSocketAddress} stalled=$stalled")
             if (stalled) continue
             val server = try {
                 Socket().apply { connect(upstream, 5_000) }
-            } catch (_: IOException) {
+            } catch (e: IOException) {
+                Log.w(TAG, "could not reach $upstream", e)
                 client.close()
                 continue
             }
@@ -120,7 +127,8 @@ class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
                     to.write(buffer, 0, n)
                     to.flush()
                 }
-            } catch (_: IOException) {
+            } catch (e: IOException) {
+                Log.i(TAG, "pump ended: $e")
             } finally {
                 runCatching { a.close() }
                 runCatching { b.close() }
