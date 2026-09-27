@@ -3,6 +3,7 @@ package dev.stratus.core.backup
 import dev.stratus.core.net.originOf
 import dev.stratus.core.net.sourceBody
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.CancellationException
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
@@ -108,12 +109,22 @@ class TusTransport(
         from: Long,
         open: suspend (from: Long) -> RawSource,
     ): UploadOutcome {
-        val response = http.request(handle) {
-            method = HttpMethod.Patch
-            header(TUS_VERSION_HEADER, TUS_VERSION)
-            header(UPLOAD_OFFSET, from.toString())
-            header(HttpHeaders.ContentType, OFFSET_OCTET_STREAM)
-            setBody(sourceBody(target.size - from, open(from)))
+        val response = try {
+            http.request(handle) {
+                method = HttpMethod.Patch
+                header(TUS_VERSION_HEADER, TUS_VERSION)
+                header(UPLOAD_OFFSET, from.toString())
+                header(HttpHeaders.ContentType, OFFSET_OCTET_STREAM)
+                setBody(sourceBody(target.size - from, open(from)))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // The connection went halfway through, which is the whole case tus
+            // is here for. The handle is what the next pass needs to ask where
+            // the server got to; thrown away with the exception, it was a new
+            // upload from byte zero every time (stratus-app#78).
+            return UploadOutcome.Interrupted(Resume(handle, from))
         }
 
         // A conflict means the server is somewhere else than we thought, which a

@@ -19,7 +19,11 @@ import kotlinx.coroutines.withContext
  */
 class BackupDatabase(
     private val connection: SQLiteConnection,
-    private val io: CoroutineDispatcher = Dispatchers.Default,
+    // One thread at a time, because the connection is shared and SQLite's is
+    // not safe to use from two at once: the status poll and a resume reading
+    // together was a SIGSEGV in the native library, found by the end-to-end
+    // suite (stratus-app#78).
+    private val io: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
 ) {
     private val schema = Mutex()
     private var migrated = false

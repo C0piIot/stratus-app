@@ -190,6 +190,26 @@ class UploadQueueTest {
         assertEquals(listOf(0L, 40L), assets.openedFrom)
     }
 
+    // Cut before the server acknowledged a byte, the upload still exists there
+    // and is what the next pass has to ask about -- not a new one from zero.
+    @Test
+    fun anUploadCutBeforeItsFirstByteIsStillResumedByItsHandle() = runTest {
+        val transport = FakeTransport(
+            resumable = true,
+            answers = mutableListOf(
+                UploadOutcome.Interrupted(Resume("upload-1", 0)),
+                UploadOutcome.Done("etag"),
+            ),
+        )
+        val queue = queue(transport)
+        queue.enqueue(listOf(asset(5)))
+
+        queue.runNext()
+        queue.runNext()
+
+        assertEquals(Resume("upload-1", 0), transport.sent[1].second)
+    }
+
     @Test
     fun startsOverWithATransportThatCannotResume() = runTest {
         val transport = FakeTransport(

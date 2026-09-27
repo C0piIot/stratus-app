@@ -25,6 +25,13 @@ internal fun explain(failure: BrowserFailure): String = when (failure) {
         else -> describe(failure.error)
     }
     is BrowserFailure.Operation -> describe(failure.error)
+
+    is BrowserFailure.Unreachable ->
+        if (failure.timedOut) {
+            "The server did not answer in time. It may be busy or stuck."
+        } else {
+            "Could not reach the server. It may be switched off, or this phone may have no network."
+        }
 }
 
 private fun describe(error: DavError): String = when (error) {

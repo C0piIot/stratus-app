@@ -65,6 +65,7 @@ make toolchain  # build the toolchain image
 make gradle ARGS=build
 make test       # shared tests, native and fast
 make conformance # the same client against a real stratus-backend
+make e2e        # the whole app on an emulator, against a real stratus-backend
 ```
 
 `make test` is the loop you live in. It runs `core`'s JVM tests in a plain JDK
@@ -76,6 +77,13 @@ seconds against five minutes through the full toolchain. Reach for
 is too large to live in the toolchain image, so it is downloaded on first use
 and kept under `.cache/` — about eight gigabytes of it, which `make clean`
 discards along with everything else.
+
+`make e2e` drives the whole app through its screens on that same emulator,
+against a backend container the script starts and stops: signing in, browsing,
+renaming and deleting, several servers, the permission dialogs, a backup
+reaching the server, and the server going away mid-way — switched off, wedged,
+cut halfway through an upload or a download, or the phone losing its network.
+It needs KVM and an x86_64 host, so on an ARM machine it runs in CI only.
 
 Three modules: `core` holds the protocol layer and its tests, `ui` holds the
 Compose Multiplatform interface and produces the framework Xcode will embed, and

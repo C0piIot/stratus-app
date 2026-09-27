@@ -5,6 +5,9 @@ import dev.stratus.core.dav.DavError
 import dev.stratus.core.dav.DavResource
 import dev.stratus.core.share.ShareLife
 import dev.stratus.core.share.Sharing
+import io.ktor.client.network.sockets.SocketTimeoutException
+import io.ktor.client.plugins.HttpRequestTimeoutException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,8 +62,15 @@ class BrowserController(
         running = scope.launch {
             try {
                 mutable.value = mutable.value.copy(entries = dav.list(path).sortedForPeople(), busy = false)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: DavError) {
                 mutable.value = mutable.value.copy(busy = false, entries = emptyList(), failure = BrowserFailure.Listing(e))
+            } catch (e: Exception) {
+                // Cleared like any failed listing: the path has already moved,
+                // and the previous folder's rows under this one's name would be
+                // a listing of somewhere else.
+                mutable.value = mutable.value.copy(busy = false, entries = emptyList(), failure = unreachable(e))
             }
         }
     }
@@ -81,6 +91,8 @@ class BrowserController(
                     dav.read(entry.path) { channel -> channel.writeTo(sink) }
                 }
                 mutable.value = mutable.value.copy(busy = false)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 mutable.value = mutable.value.copy(busy = false, failure = BrowserFailure.Transfer(entry.name))
             }
@@ -113,7 +125,17 @@ class BrowserController(
         val sharing = sharing ?: return
         mutable.value = mutable.value.copy(pending = null)
         scope.launch {
-            if (!sharing.offer(target, life)) {
+            // Whether links work is asked of the server, anonymously, so a
+            // server that is not there is an answer here too.
+            val offered = try {
+                sharing.offer(target, life)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                mutable.value = mutable.value.copy(failure = unreachable(e))
+                return@launch
+            }
+            if (!offered) {
                 mutable.value = mutable.value.copy(failure = BrowserFailure.TheServerDoesNotDoLinks)
             }
         }
@@ -136,11 +158,19 @@ class BrowserController(
             try {
                 work()
                 refresh()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: DavError) {
                 mutable.value = mutable.value.copy(busy = false, failure = classify(e, target))
+            } catch (e: Exception) {
+                mutable.value = mutable.value.copy(busy = false, failure = unreachable(e))
             }
         }
     }
+
+    private fun unreachable(e: Exception) = BrowserFailure.Unreachable(
+        timedOut = e is HttpRequestTimeoutException || e is SocketTimeoutException,
+    )
 
     /**
      * A 409 on a directory is the server saying it cannot move one that still has

@@ -58,7 +58,12 @@ fun BrowserScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            state.failure?.let { Text(explain(it), Modifier.padding(16.dp)) }
+            state.failure?.let {
+                Text(explain(it), Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
+                // Without it, the only way to ask again after a server came back
+                // was to walk somewhere else and back.
+                TextButton(onClick = controller::refresh, Modifier.padding(horizontal = 8.dp)) { Text("Try again") }
+            }
 
             if (cast != null) CastBar(cast)
 

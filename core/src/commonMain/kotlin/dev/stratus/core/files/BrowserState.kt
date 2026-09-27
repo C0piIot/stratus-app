@@ -43,6 +43,17 @@ sealed interface BrowserFailure {
     data class Transfer(val name: String) : BrowserFailure
 
     /**
+     * No answer at all: the server is off, the phone has no network, or it
+     * accepted the connection and then said nothing until the timeout.
+     *
+     * Its own case rather than a [DavError], because nothing reached the
+     * WebDAV layer to be an error in it -- and until it had one, a server
+     * switched off while somebody browsed was an exception out of a coroutine,
+     * which is a crash (stratus-app#78).
+     */
+    data class Unreachable(val timedOut: Boolean) : BrowserFailure
+
+    /**
      * The link was signed and the server did not know what it was.
      *
      * A signed link is Stratus's, and this app works against any WebDAV server,

@@ -131,6 +131,23 @@ class TusTransportTest {
         assertEquals(UploadOutcome.Interrupted(Resume("http://host/tus/abc", 6)), outcome)
     }
 
+    // stratus-app#78: the connection dropping mid-PATCH lost the handle, so
+    // every retry of a large video was a new upload from byte zero.
+    @Test
+    fun aPatchCutHalfwayKeepsTheUploadToResume() = runTest {
+        val engine = MockEngine { request ->
+            when (request.method.value) {
+                "POST" -> respond("", HttpStatusCode.Created, headersOf("Location", "/tus/abc"))
+                else -> throw kotlinx.io.IOException("unexpected end of stream")
+            }
+        }
+        val transport = TusTransport(HttpClient(engine), "http://host/tus/") { "the-etag" }
+
+        val outcome = transport.send(target, null, ::bytes)
+
+        assertEquals(UploadOutcome.Interrupted(Resume("http://host/tus/abc", 0)), outcome)
+    }
+
     @Test
     fun rejectedCredentialsAreNotWorthRetrying() = runTest {
         val transport = transport { request ->

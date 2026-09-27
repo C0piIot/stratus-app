@@ -84,7 +84,9 @@ class UploadQueue(
         // Resuming asks the transport to continue, never the local offset alone:
         // a client can believe it is somewhere the server does not agree with,
         // which is exactly what Stratus answers with a 409.
-        val resume = if (transport.resumable && upload.offset > 0) {
+        // The handle and not the offset: a transfer cut before its first
+        // acknowledged byte still has an upload on the server to ask about.
+        val resume = if (transport.resumable && upload.handle != null) {
             Resume(upload.handle, upload.offset)
         } else {
             null

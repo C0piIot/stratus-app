@@ -38,19 +38,30 @@ class AndroidFileHandoff(private val context: Context) : FileHandoff {
         )
     }
 
-    override suspend fun save(name: String, contentType: String?, body: suspend (Sink) -> Unit) =
+    override suspend fun save(name: String, contentType: String?, body: suspend (Sink) -> Unit): Unit =
         withContext(Dispatchers.IO) {
+            // Pending until the last byte is in, and deleted if it never is: a
+            // download cut halfway would otherwise sit in Downloads with the
+            // right name and half the bytes, looking like the file
+            // (stratus-app#78).
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, name.sanitised())
                 if (contentType != null) put(MediaStore.Downloads.MIME_TYPE, contentType)
+                put(MediaStore.Downloads.IS_PENDING, 1)
             }
             val resolver = context.contentResolver
             val uri = requireNotNull(
                 resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values),
             ) { "Downloads refused a new file" }
-            resolver.openOutputStream(uri).use { stream ->
-                requireNotNull(stream) { "Downloads gave nothing to write to" }
-                body(stream.asSink().buffered())
+            try {
+                resolver.openOutputStream(uri).use { stream ->
+                    requireNotNull(stream) { "Downloads gave nothing to write to" }
+                    body(stream.asSink().buffered())
+                }
+                resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+            } catch (e: Throwable) {
+                resolver.delete(uri, null, null)
+                throw e
             }
         }
 
