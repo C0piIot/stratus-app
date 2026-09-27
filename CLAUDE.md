@@ -333,6 +333,27 @@ What it buys, in descending order of how much of the app it covers:
 - **Android instrumented tests on an emulator**, on the ubuntu runner, only where
   the platform API is the thing under test: media enumeration, permissions, the
   foreground service surviving what Android does to it.
+- **The whole app, end to end, on the same emulator** (stratus-app#78), against
+  a backend container `scripts/e2e.sh` starts. Compose's test rule drives the
+  screens and UiAutomator the system dialogs. Every test starts from an app that
+  has never run, because the orchestrator clears its data between them.
+
+  **What makes it worth running is `FaultyLink`**, a TCP proxy inside the test
+  process that sits between the app and the server. The app signs in to it, so
+  a server that is switched off, accepts and never answers, or drops a transfer
+  halfway is a method call rather than a container somebody outside has to
+  stop. Its first run against the app as it was found five bugs no other layer
+  could see: a lost server was an uncaught exception, and so a crash; a shared
+  SQLite connection used from two threads was a SIGSEGV; a tus upload cut
+  halfway lost its handle and started from zero; a cut download stayed in
+  Downloads as half a file; and an intent nothing handled was a crash on a
+  build with no settings app. Each fix has a JVM test beside it as well, so the
+  fast loop keeps the property and the emulator keeps the flow.
+
+  Two things it cannot tell apart from the outside, and both cost a run: an
+  instrumented test runs in the app's own process, so a crash there is reported
+  as the test's exception; and Android's `InetAddress.getLoopbackAddress()` is
+  `::1`, so a listener bound to it refuses the `127.0.0.1` everybody types.
 - **iOS: compile the framework and run the shared tests on a simulator**, on the
   macOS runner. Everything in `commonTest` runs there as well as on the JVM, for
   nothing, which is worth remembering when deciding where a piece of logic lives.
