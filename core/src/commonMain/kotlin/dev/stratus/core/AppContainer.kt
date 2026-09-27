@@ -21,6 +21,7 @@ import dev.stratus.core.share.LinkSharing
 import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLinks
 import dev.stratus.core.share.Sharing
+import dev.stratus.core.session.SignedInController
 import dev.stratus.core.signin.SignInController
 import dev.stratus.core.store.ConsentStore
 import dev.stratus.core.store.ReportingConsent
@@ -84,6 +85,9 @@ class AppContainer(
         trust = trust,
         scope = scope,
     )
+
+    fun signedIn(askForAccess: (() -> Unit)?, reportingChanged: (Boolean) -> Unit) =
+        SignedInController(instances, backup, reporting, ::forget, askForAccess, reportingChanged)
 
     suspend fun instances(): List<Instance> = instances.all()
 

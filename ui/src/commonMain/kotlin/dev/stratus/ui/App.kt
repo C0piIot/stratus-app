@@ -22,16 +22,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import dev.stratus.core.AppContainer
-import dev.stratus.core.backup.BackupState
 import dev.stratus.core.cast.CastController
-import dev.stratus.core.backup.MediaAccess
-import dev.stratus.core.backup.MediaSource
 import dev.stratus.core.files.BrowserController
-import dev.stratus.core.instance.Instance
 import dev.stratus.core.signin.SignInState
 import dev.stratus.ui.backup.BackupScreen
 import dev.stratus.ui.backup.BackupStrip
-import dev.stratus.ui.backup.InstanceStatus
 import dev.stratus.ui.files.BrowserScreen
 import dev.stratus.ui.servers.ServersScreen
 import dev.stratus.ui.servers.SourcesScreen
@@ -107,34 +102,20 @@ private fun SignedIn(
     onInstancesChanged: suspend () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val signedIn = remember {
+        container.signedIn(onRequestAccess) { on -> if (on) CrashReports.start() else CrashReports.stop() }
+    }
+    val state by signedIn.state.collectAsState()
     var screen by remember { mutableStateOf<Screen>(Screen.Browser) }
     var browser by remember { mutableStateOf<BrowserController?>(null) }
     var cast by remember { mutableStateOf<CastController?>(null) }
-    var servers by remember { mutableStateOf(emptyList<Instance>()) }
-    var currentId by remember { mutableStateOf<String?>(null) }
-    var overall by remember { mutableStateOf<BackupState>(BackupState.NeverRun) }
-    var statuses by remember { mutableStateOf(emptyList<InstanceStatus>()) }
-    var folders by remember { mutableStateOf(emptyList<MediaSource>()) }
-    var access by remember { mutableStateOf(MediaAccess.None) }
-    var reload by remember { mutableStateOf(0) }
-    var reporting by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { reporting = container.reporting.granted() }
+    LaunchedEffect(Unit) { signedIn.start() }
 
-    LaunchedEffect(baseUrl, reload) {
+    // Rebuilt when the server being looked at changes, and only then.
+    LaunchedEffect(baseUrl, state.currentId) {
         browser = container.browser(scope)?.also { it.start() }
         cast = container.cast(scope)
-        currentId = container.current()?.id
-        folders = container.backup.sources()
-        access = container.backup.access()
-    }
-
-    suspend fun rereadAccess() {
-        val now = container.backup.access()
-        if (now != access) {
-            access = now
-            folders = container.backup.sources()
-        }
     }
 
     // Polled rather than pushed: the backup runs in another process, and reading
@@ -143,27 +124,22 @@ private fun SignedIn(
     //
     // Only while the app is in front. A LaunchedEffect outlives the activity
     // being stopped, so without this it went on polling every second for as
-    // long as the process lived.
+    // long as the process lived. Coming back is also when a permission can have
+    // changed -- in the system settings, or the dialog, which pauses the app
+    // while it is up -- which is what resumed() is for (stratus-app#75).
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(reload) {
+    LaunchedEffect(Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            // Coming back is when a permission can have changed: from the
-            // system settings, or the dialog, which pauses the app while it is
-            // up. Nothing else tells this screen (stratus-app#75).
-            rereadAccess()
+            signedIn.resumed()
             while (true) {
-                servers = container.instances()
-                overall = container.backup.status.across(servers)
-                statuses = servers.map {
-                    InstanceStatus(it, container.backup.status.of(it), container.backup.failures(it.id))
-                }
                 delay(1_000)
+                signedIn.refresh()
             }
         }
     }
 
     DisposableEffect(screen, browser) {
-        back.onBack = when (val here = screen) {
+        back.onBack = when (screen) {
             is Screen.Browser -> browser?.let { { it.goUp() } } ?: { false }
             is Screen.Sources -> { { screen = Screen.Servers; true } }
             else -> { { screen = Screen.Browser; true } }
@@ -173,54 +149,40 @@ private fun SignedIn(
 
     when (val here = screen) {
         is Screen.Backup -> BackupScreen(
-            statuses = statuses,
+            statuses = state.statuses,
             onBackUpNow = onBackUpNow,
             onClose = { screen = Screen.Browser },
         )
 
         is Screen.Servers -> ServersScreen(
-            servers = servers,
-            currentId = currentId,
-            onLookAt = { id -> scope.launch { container.switchTo(id); reload++ } },
-            onEnableBackup = { id, on ->
-                // The moment the library is needed is the moment to ask for it.
-                if (on && access == MediaAccess.None) onRequestAccess?.invoke()
-                scope.launch { container.backup.setEnabled(id, on); reload++ }
-            },
+            servers = state.servers,
+            currentId = state.currentId,
+            onLookAt = { id -> scope.launch { signedIn.lookAt(id) } },
+            onEnableBackup = { id, on -> scope.launch { signedIn.enableBackup(id, on) } },
             onChooseSources = { screen = Screen.Sources(it) },
             onSignOut = { id ->
                 scope.launch {
-                    container.forget(id)
+                    signedIn.signOut(id)
                     onInstancesChanged()
-                    reload++
                     screen = Screen.Browser
                 }
             },
             onAddAnother = onAddAnother,
-            reporting = reporting.takeIf { CrashReports.available },
-            onReporting = { on ->
-                scope.launch {
-                    container.reporting.set(on)
-                    if (on) CrashReports.start() else CrashReports.stop()
-                    reporting = on
-                }
-            },
+            reporting = state.reporting.takeIf { CrashReports.available },
+            onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
             onClose = { screen = Screen.Browser },
         )
 
         is Screen.Sources -> {
-            // Opening the screen is when the answer is needed, whatever the
-            // poll above last saw.
-            LaunchedEffect(Unit) { rereadAccess() }
+            LaunchedEffect(Unit) { signedIn.openingFolders() }
             SourcesScreen(
-                available = folders,
-                access = access,
+                available = state.folders,
+                access = state.access,
                 onRequestAccess = onRequestAccess,
-                chosen = servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
+                chosen = state.servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
                 onSave = { chosen ->
                     scope.launch {
-                        container.backup.setSources(here.instanceId, chosen)
-                        reload++
+                        signedIn.chooseSources(here.instanceId, chosen)
                         screen = Screen.Servers
                     }
                 },
@@ -231,7 +193,7 @@ private fun SignedIn(
         is Screen.Browser -> {
             val open = browser ?: return
             Column {
-                BackupStrip(overall) { screen = Screen.Backup }
+                BackupStrip(state.overall) { screen = Screen.Backup }
                 BrowserScreen(open, cast, onOpenServers = { screen = Screen.Servers })
             }
         }
