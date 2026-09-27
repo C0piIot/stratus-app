@@ -18,6 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import dev.stratus.core.AppContainer
 import dev.stratus.core.backup.BackupState
 import dev.stratus.core.cast.CastController
@@ -126,25 +129,36 @@ private fun SignedIn(
         access = container.backup.access()
     }
 
+    suspend fun rereadAccess() {
+        val now = container.backup.access()
+        if (now != access) {
+            access = now
+            folders = container.backup.sources()
+        }
+    }
+
     // Polled rather than pushed: the backup runs in another process, and reading
     // the same tables it writes is the only way this cannot end up claiming
     // something the queue would disagree with.
+    //
+    // Only while the app is in front. A LaunchedEffect outlives the activity
+    // being stopped, so without this it went on polling every second for as
+    // long as the process lived.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(reload) {
-        while (true) {
-            servers = container.instances()
-            // Re-read here and not only on reload: a permission granted from
-            // the system settings changes nothing this screen hears about, and
-            // the folders read while it was missing were none (stratus-app#75).
-            val now = container.backup.access()
-            if (now != access) {
-                access = now
-                folders = container.backup.sources()
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Coming back is when a permission can have changed: from the
+            // system settings, or the dialog, which pauses the app while it is
+            // up. Nothing else tells this screen (stratus-app#75).
+            rereadAccess()
+            while (true) {
+                servers = container.instances()
+                overall = container.backup.status.across(servers)
+                statuses = servers.map {
+                    InstanceStatus(it, container.backup.status.of(it), container.backup.failures(it.id))
+                }
+                delay(1_000)
             }
-            overall = container.backup.status.across(servers)
-            statuses = servers.map {
-                InstanceStatus(it, container.backup.status.of(it), container.backup.failures(it.id))
-            }
-            delay(1_000)
         }
     }
 
@@ -194,20 +208,25 @@ private fun SignedIn(
             onClose = { screen = Screen.Browser },
         )
 
-        is Screen.Sources -> SourcesScreen(
-            available = folders,
-            access = access,
-            onRequestAccess = onRequestAccess,
-            chosen = servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
-            onSave = { chosen ->
-                scope.launch {
-                    container.backup.setSources(here.instanceId, chosen)
-                    reload++
-                    screen = Screen.Servers
-                }
-            },
-            onClose = { screen = Screen.Servers },
-        )
+        is Screen.Sources -> {
+            // Opening the screen is when the answer is needed, whatever the
+            // poll above last saw.
+            LaunchedEffect(Unit) { rereadAccess() }
+            SourcesScreen(
+                available = folders,
+                access = access,
+                onRequestAccess = onRequestAccess,
+                chosen = servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
+                onSave = { chosen ->
+                    scope.launch {
+                        container.backup.setSources(here.instanceId, chosen)
+                        reload++
+                        screen = Screen.Servers
+                    }
+                },
+                onClose = { screen = Screen.Servers },
+            )
+        }
 
         is Screen.Browser -> {
             val open = browser ?: return

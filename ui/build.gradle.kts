@@ -54,6 +54,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.lifecycle.runtime.compose)
             // Two halves of it are left out of the APK; see androidApp.
             implementation(libs.sentry)
         }
