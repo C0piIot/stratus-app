@@ -5,6 +5,8 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -36,13 +38,31 @@ abstract class E2E {
 
     // Said once and plainly, rather than as twenty tests each failing to find
     // a dialog that only appears once a server has answered.
+    //
+    // Retried for a while, because the first test of a run starts on an
+    // emulator whose network may not be up yet: ENETUNREACH, not a server.
     @Before
     fun theServerIsThere() {
-        try {
-            Stratus.exists("/")
-        } catch (e: Exception) {
-            throw AssertionError("the backend is not reachable at ${Stratus.upstream} from the emulator", e)
+        var last: Exception? = null
+        repeat(30) {
+            try {
+                Stratus.exists("/")
+                return
+            } catch (e: Exception) {
+                last = e
+                Thread.sleep(1_000)
+            }
         }
+        throw AssertionError("the backend is not reachable at ${Stratus.upstream} from the emulator", last)
+    }
+
+    /** Everything on screen, for a failure to say what it saw instead. */
+    fun screen(): String = try {
+        ui.onAllNodes(isRoot()).fetchSemanticsNodes().indices.joinToString("\n") {
+            ui.onAllNodes(isRoot())[it].printToString()
+        }
+    } catch (e: Exception) {
+        "(no screen: ${e.message})"
     }
 
     fun launch() {
@@ -62,7 +82,7 @@ abstract class E2E {
                 ui.onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().isNotEmpty()
             }
         } catch (e: ComposeTimeoutException) {
-            throw AssertionError("never saw \"$text\" on screen", e)
+            throw AssertionError("never saw \"$text\" on screen. It showed:\n${screen()}", e)
         }
         return ui.onAllNodes(hasText(text, substring = substring))[0]
     }
@@ -77,7 +97,7 @@ abstract class E2E {
         try {
             ui.waitUntil(timeoutMs) { ui.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         } catch (e: ComposeTimeoutException) {
-            throw AssertionError("nothing to press saying \"$text\"", e)
+            throw AssertionError("nothing to press saying \"$text\". The screen showed:\n${screen()}", e)
         }
         ui.onAllNodes(button)[0].performClick()
     }

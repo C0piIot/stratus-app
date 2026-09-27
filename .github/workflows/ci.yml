@@ -225,7 +225,7 @@ jobs:
               for case in root.iter("testcase"):
                   for problem in list(case.iter("failure")) + list(case.iter("error")):
                       print(f"== {case.get('classname')}.{case.get('name')}")
-                      print((problem.text or problem.get("message") or "")[:2000])
+                      print((problem.text or problem.get("message") or "")[:6000])
           PY
 
       # A crash is in logcat and nowhere else.
