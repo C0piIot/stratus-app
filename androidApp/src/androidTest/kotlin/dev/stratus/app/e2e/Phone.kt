@@ -56,11 +56,15 @@ object Phone {
         } else {
             listOf("permission_deny_button", "permission_deny_and_dont_ask_again_button")
         }
-        repeat(4) {
+        repeat(6) {
             val button = ids.firstNotNullOfOrNull { id ->
                 device.wait(Until.findObject(By.res(CONTROLLER, id)), 1_500)
             } ?: return
-            button.click()
+            // Found as one dialog was giving way to the next: look again.
+            try {
+                button.click()
+            } catch (_: androidx.test.uiautomator.StaleObjectException) {
+            }
             device.waitForIdle()
         }
     }
