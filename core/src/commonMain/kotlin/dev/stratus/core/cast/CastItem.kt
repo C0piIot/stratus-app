@@ -4,8 +4,16 @@ import dev.stratus.core.dav.DavResource
 import dev.stratus.core.share.ShareLife
 import dev.stratus.core.share.ShareLinks
 
-/** A URL a television can fetch, and what it will find there. */
-data class CastItem(val url: String, val contentType: String, val title: String)
+/**
+ * A URL a television can fetch, and what it will find there -- and, for a film,
+ * the file itself to fall back on when the server does not offer it as HLS.
+ */
+data class CastItem(
+    val url: String,
+    val contentType: String,
+    val title: String,
+    val fallback: CastItem? = null,
+)
 
 /**
  * What to send a Chromecast for a file, or null when there is nothing it could
@@ -21,10 +29,16 @@ data class CastItem(val url: String, val contentType: String, val title: String)
  * show nothing at all. `/thumb/` already turns one into a JPEG, and asking for
  * the large size gets a picture worth putting on a television.
  *
- * Video goes as it is. There is no transcoding at either end, so H.264 plays and
- * an iPhone's HEVC will not unless the device is a 4K one -- see
- * stratus-backend#50. Sending it anyway is right: the failure is the television's
- * to report, and refusing here would also refuse everything that does work.
+ * A film is sent as HLS, `?hls=index.m3u8` on the same link, which Stratus
+ * remuxes -- and re-encodes, where the picture needs it -- as it is watched
+ * (stratus-backend#50). Always, and not only for what a Chromecast cannot take:
+ * WebDAV says nothing about codecs, so the app cannot tell an iPhone's HEVC,
+ * which most of them do not decode, from an H.264 they do, and the master
+ * playlist declares both for the receiver to choose between. The file itself is
+ * the fallback, for a server that does not do HLS, and there a film the
+ * television cannot decode is the television's to report.
+ *
+ * Audio goes as it is: every receiver decodes what a phone records.
  */
 fun castItemFor(entry: DavResource, links: ShareLinks, nowEpochSeconds: Long): CastItem? {
     if (entry.isDirectory) return null
@@ -36,11 +50,18 @@ fun castItemFor(entry: DavResource, links: ShareLinks, nowEpochSeconds: Long): C
             title = entry.name,
         )
 
-        "video", "audio" -> CastItem(
-            url = links.link(entry.path, isDirectory = false, life = ShareLife.ADay, nowEpochSeconds = nowEpochSeconds),
-            contentType = entry.contentType,
-            title = entry.name,
-        )
+        "video", "audio" -> {
+            val direct = CastItem(
+                url = links.link(entry.path, isDirectory = false, life = ShareLife.ADay, nowEpochSeconds = nowEpochSeconds),
+                contentType = entry.contentType,
+                title = entry.name,
+            )
+            if (kind == "audio") {
+                direct
+            } else {
+                CastItem(url = "${direct.url}&$HLS_PLAYLIST", contentType = HLS_TYPE, title = entry.name, fallback = direct)
+            }
+        }
 
         else -> null
     }
@@ -48,3 +69,8 @@ fun castItemFor(entry: DavResource, links: ShareLinks, nowEpochSeconds: Long): C
 
 /** The larger of the two sizes the server makes, and the only one worth a screen. */
 private const val TELEVISION_WIDTH = 1200
+
+private const val HLS_PLAYLIST = "hls=index.m3u8"
+
+/** What Stratus sends a playlist as, and what a receiver is told to expect. */
+const val HLS_TYPE = "application/vnd.apple.mpegurl"

@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.CastMediaControlIntent
+import com.google.android.gms.cast.HlsSegmentFormat
+import com.google.android.gms.cast.HlsVideoSegmentFormat
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
@@ -71,6 +73,14 @@ class AndroidCaster(private val context: Context) : Caster {
         val media = MediaInfo.Builder(item.url)
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
             .setContentType(item.contentType)
+            .apply {
+                // Stratus cuts MPEG-TS, and the receiver assumes packed audio
+                // unless told otherwise.
+                if (item.contentType == HLS_TYPE) {
+                    setHlsSegmentFormat(HlsSegmentFormat.TS)
+                    setHlsVideoSegmentFormat(HlsVideoSegmentFormat.MPEG2_TS)
+                }
+            }
             .setMetadata(
                 MediaMetadata(MediaMetadata.MEDIA_TYPE_GENERIC).apply {
                     putString(MediaMetadata.KEY_TITLE, item.title)

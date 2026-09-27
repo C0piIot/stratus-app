@@ -2,6 +2,7 @@ package dev.stratus.core.share
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.head
+import io.ktor.http.HttpHeaders
 
 /**
  * Whether this server honours the links this app signs.
@@ -26,6 +27,17 @@ class LinkSupport(private val http: HttpClient) {
 
     /** False once a server has been found not to do this. */
     val offered: Boolean get() = !refused
+
+    /**
+     * Whether a link answers as [contentType], without deciding anything about
+     * links in general: a server that signs links and does not do HLS is still
+     * one that signs links. The type is the test and not the status, because a
+     * server that ignores the query hands back the file itself.
+     */
+    suspend fun serves(link: String, contentType: String): Boolean = runCatching {
+        val response = http.head(link)
+        response.status.value == 200 && response.headers[HttpHeaders.ContentType]?.startsWith(contentType) == true
+    }.getOrDefault(false)
 
     suspend fun honours(link: String): Boolean {
         val worked = runCatching { http.head(link).status.value == 200 }.getOrDefault(false)

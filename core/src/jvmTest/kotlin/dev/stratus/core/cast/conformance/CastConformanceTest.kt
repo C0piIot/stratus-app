@@ -1,5 +1,6 @@
 package dev.stratus.core.cast.conformance
 
+import dev.stratus.core.cast.HLS_TYPE
 import dev.stratus.core.cast.castItemFor
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
@@ -9,9 +10,14 @@ import dev.stratus.core.share.ShareLinks
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -72,6 +78,51 @@ class CastConformanceTest {
         // JPEG's own two first bytes, because a content type is a claim.
         val bytes = response.readRawBytes()
         assertEquals(listOf(0xFF, 0xD8), bytes.take(2).map { it.toInt() and 0xff })
+    }
+
+    /**
+     * A film cast the way a Chromecast plays it: the playlist and then a
+     * segment, both from nothing but the signature the playlist was fetched
+     * with. A Matroska file with AC-3 sound, the commonest film a receiver
+     * cannot take as it is, and the server's own fixture for it.
+     */
+    @Test
+    fun aFilmIsFetchedAsHlsBySomethingWithNoAccount() = runTest {
+        try {
+            dav.makeCollection(root)
+        } catch (_: DavError.Conflict) {
+            // Already there.
+        }
+        val film = requireNotNull(javaClass.getResourceAsStream("/film.mkv")).readBytes()
+        dav.put("$root/film.mkv", film)
+
+        val entry = dav.stat("$root/film.mkv")
+        val item = requireNotNull(castItemFor(entry, links, System.currentTimeMillis() / 1000)) {
+            "the server called it ${entry.contentType}, which nothing here casts"
+        }
+        assertEquals(HLS_TYPE, item.contentType)
+
+        // The playlist needs the film to have been read, which the upload
+        // starts and does not wait for.
+        val playlist = withContext(Dispatchers.IO) {
+            withTimeout(60_000) {
+                var answer = television.get(item.url)
+                while (answer.status.value != 200) {
+                    delay(250)
+                    answer = television.get(item.url)
+                }
+                answer.bodyAsText()
+            }
+        }
+        val segment = requireNotNull(playlist.lines().firstOrNull { it.startsWith("?hls=") }) {
+            "no segment in:\n$playlist"
+        }
+        assertTrue(segment.contains("&k="), "a segment the television could not fetch: $segment")
+
+        val response = television.get(item.url.substringBefore('?') + segment)
+        assertEquals(200, response.status.value, "the television would have been given nothing")
+        // MPEG-TS's sync byte, because a content type is a claim.
+        assertEquals(0x47, response.readRawBytes().first().toInt() and 0xff)
     }
 }
 
