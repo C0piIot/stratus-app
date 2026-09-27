@@ -1,7 +1,11 @@
 package dev.stratus.core.backup
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -20,6 +24,26 @@ class PendingStoreTest {
     private suspend fun PendingStore.queue(path: String, size: Long = 100) = add(
         PendingUpload(path, "local", AssetPart.Still, size, null, takenAt = path),
     )
+
+    // The status poll, a resume and the backup all read at once from real
+    // threads. Sharing the connection across them was a SIGSEGV on a phone
+    // (stratus-app#78); this is that, a few hundred times over.
+    @Test
+    fun survivesBeingAskedFromManyThreadsAtOnce() = runTest {
+        val pending = store()
+        withContext(Dispatchers.Default) {
+            coroutineScope {
+                repeat(200) { n ->
+                    launch {
+                        pending.queue("/p$n")
+                        pending.summary(now)
+                        pending.failures(5)
+                    }
+                }
+            }
+        }
+        assertEquals(200, pending.summary(now).total)
+    }
 
     @Test
     fun countsTheWholePictureInOneAnswer() = runTest {

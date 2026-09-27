@@ -310,3 +310,79 @@ class BrowserControllerTest {
         assertNull(check.headers["Authorization"])
     }
 }
+
+/**
+ * The server going away, which used to be an exception out of a coroutine and
+ * therefore a crash (stratus-app#78). The engine throwing is what a refused
+ * connection or a timeout looks like from here.
+ */
+class BrowserWithoutAServerTest {
+
+    private var failing: Throwable? = null
+
+    private val listing = """<multistatus xmlns="DAV:"><response><href>/dav/a.txt</href>""" +
+        """<propstat><prop><resourcetype/></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"""
+
+    private fun controller(scope: TestScope) = BrowserController(
+        DavClient(
+            HttpClient(
+                MockEngine { request ->
+                    failing?.let { throw it }
+                    if (request.method.value == "DELETE") respond("", HttpStatusCode.NoContent)
+                    else respond(listing, HttpStatusCode.MultiStatus)
+                },
+            ),
+            "http://host/dav/",
+        ),
+        RecordingHandoff(),
+        scope,
+    )
+
+    private suspend fun BrowserController.settled(): BrowserState = state.first { !it.busy }
+
+    @Test
+    fun aServerThatIsOffIsAFailureOnScreenAndNotACrash() = runTest {
+        failing = kotlinx.io.IOException("Connection refused")
+        val browser = controller(this)
+        browser.start()
+
+        assertEquals(BrowserFailure.Unreachable(timedOut = false), browser.settled().failure)
+    }
+
+    @Test
+    fun aServerThatNeverAnswersIsSaidToHaveTimedOut() = runTest {
+        failing = io.ktor.client.network.sockets.SocketTimeoutException("read timed out")
+        val browser = controller(this)
+        browser.start()
+
+        assertEquals(BrowserFailure.Unreachable(timedOut = true), browser.settled().failure)
+    }
+
+    @Test
+    fun tryingAgainOnceItIsBackListsTheFolder() = runTest {
+        failing = kotlinx.io.IOException("Connection refused")
+        val browser = controller(this)
+        browser.start()
+        browser.settled()
+
+        failing = null
+        browser.refresh()
+
+        val after = browser.settled()
+        assertNull(after.failure)
+        assertEquals(listOf("a.txt"), after.entries.map { it.name })
+    }
+
+    @Test
+    fun aDeleteThatCannotReachTheServerIsSaidAndNotACrash() = runTest {
+        val browser = controller(this)
+        browser.start()
+        val target = browser.settled().entries.single()
+
+        failing = kotlinx.io.IOException("Connection reset")
+        browser.ask(Confirmation.Delete(target))
+        browser.confirmDelete()
+
+        assertEquals(BrowserFailure.Unreachable(timedOut = false), browser.settled().failure)
+    }
+}

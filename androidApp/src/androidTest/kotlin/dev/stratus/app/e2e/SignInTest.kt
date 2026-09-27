@@ -9,7 +9,8 @@ class SignInTest : E2E() {
         launch()
         signIn()
         see("Servers")
-        see("Backup has not run yet")
+        // No photo permission yet, and the strip says that before anything else.
+        see("cannot read your photographs")
     }
 
     @Test

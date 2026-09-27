@@ -1,5 +1,6 @@
 package dev.stratus.app
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -23,9 +24,16 @@ class MainActivity : ComponentActivity() {
     // it is the only place left where somebody can say yes.
     private val askForPhotos = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (granted.values.none { it } && photos.none { shouldShowRequestPermissionRationale(it) }) {
-            startActivity(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
-            )
+            // Caught rather than resolved first, since package visibility can
+            // hide the settings app from the question: a build of Android with
+            // no settings app is real -- the emulator image the tests run on is
+            // one -- and starting what nothing handles is a crash.
+            try {
+                startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+                )
+            } catch (_: ActivityNotFoundException) {
+            }
         }
     }
 

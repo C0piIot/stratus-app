@@ -80,16 +80,24 @@ class BackupTest : E2E() {
 
         link.cutUploadAfter(2_000_000)
         openBackupAndRun()
-        see("waiting", timeoutMs = 90_000)
-        val firstPass = link.sent.get()
-
-        tap("Back up now")
+        // Resumed within the pass or on the next one, whichever the queue
+        // decides; a second tap is harmless if the first already finished it.
+        if (Stratus.backedUp("$unique.jpg") == null) {
+            ui.waitUntil(90_000) {
+                Stratus.backedUp("$unique.jpg") != null ||
+                    ui.onAllNodes(hasText("waiting", substring = true)).fetchSemanticsNodes().isNotEmpty()
+            }
+            if (Stratus.backedUp("$unique.jpg") == null) tap("Back up now")
+        }
         val (_, size) = waitForTheServer("$unique.jpg", timeoutMs = 120_000)
         assertEquals(bytes.size.toLong(), size)
-        val secondPass = link.sent.get() - firstPass
+
+        // Two million bytes before the cut and the rest after it is about the
+        // file once; starting over would be the two million plus all of it.
+        val sent = link.sent.get()
         assertTrue(
-            secondPass < bytes.size,
-            "the second pass sent $secondPass bytes of a ${bytes.size}-byte file: it started again",
+            sent < bytes.size * 1.15,
+            "$sent bytes went out for a ${bytes.size}-byte file cut at two million: it started again",
         )
     }
 }

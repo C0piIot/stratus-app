@@ -44,10 +44,11 @@ object Phone {
         requireNotNull(button) { "no allow button on the permission dialog" }.click()
     }
 
+    /** The second time it asks, Android offers "don't ask again" under another id. */
     fun deny() {
-        requireNotNull(device.wait(Until.findObject(By.res(CONTROLLER, "permission_deny_button")), 5_000)) {
-            "no deny button on the permission dialog"
-        }.click()
+        val button = device.wait(Until.findObject(By.res(CONTROLLER, "permission_deny_button")), 5_000)
+            ?: device.wait(Until.findObject(By.res(CONTROLLER, "permission_deny_and_dont_ask_again_button")), 2_000)
+        requireNotNull(button) { "no deny button on the permission dialog" }.click()
     }
 
     fun inFront(): String = device.currentPackageName
@@ -100,16 +101,33 @@ object Phone {
         return uri
     }
 
-    /** What Downloads holds under this name, and how big each copy is. */
+    /**
+     * What Downloads holds under this name, and how many bytes are really in
+     * each copy -- read, because the SIZE column says 0 until the scanner has
+     * been, which is not the question.
+     */
     fun downloads(name: String): List<Long> {
-        val sizes = mutableListOf<Long>()
-        context.contentResolver.query(
+        val resolver = context.contentResolver
+        val ids = mutableListOf<Long>()
+        resolver.query(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Downloads.SIZE),
+            arrayOf(MediaStore.Downloads._ID),
             "${MediaStore.Downloads.DISPLAY_NAME} LIKE ?",
             arrayOf("${name.substringBeforeLast('.')}%"),
             null,
-        )?.use { while (it.moveToNext()) sizes += it.getLong(0) }
-        return sizes
+        )?.use { while (it.moveToNext()) ids += it.getLong(0) }
+        return ids.map { id ->
+            val uri = android.content.ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+            resolver.openInputStream(uri)?.use { stream ->
+                var total = 0L
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val n = stream.read(buffer)
+                    if (n < 0) break
+                    total += n
+                }
+                total
+            } ?: -1
+        }
     }
 }
