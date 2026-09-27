@@ -23,6 +23,7 @@ import dev.stratus.core.share.ShareLinks
 import dev.stratus.core.share.Sharing
 import dev.stratus.core.signin.SignInController
 import dev.stratus.core.store.ConsentStore
+import dev.stratus.core.store.ReportingConsent
 import dev.stratus.core.store.SecureStore
 import dev.stratus.core.store.TrustStore
 import io.ktor.client.engine.HttpClientEngine
@@ -72,6 +73,9 @@ class AppContainer(
     }
 
     val backup: Backup by lazy { Backup(instances, database, assets, connections) }
+
+    /** Whether crash reports may be sent, which the platform reads before anything else runs. */
+    val reporting = ReportingConsent(secure)
 
     fun signIn(scope: CoroutineScope): SignInController = SignInController(
         prober = DavProber { creds, policy -> stratusHttpClient(engine(policy), creds) },

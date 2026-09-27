@@ -39,6 +39,9 @@ fun ServersScreen(
     onChooseSources: (String) -> Unit,
     onSignOut: (String) -> Unit,
     onAddAnother: () -> Unit,
+    /** Whether crash reports are on, or null in a build that cannot send any. */
+    reporting: Boolean?,
+    onReporting: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
     var signingOutOf by remember { mutableStateOf<Instance?>(null) }
@@ -89,6 +92,31 @@ fun ServersScreen(
                     }
                 }
                 Divider()
+            }
+
+            // Here rather than on a screen of its own: it is one switch, and
+            // the menu is the third of the three surfaces this app has.
+            if (reporting != null) {
+                item(key = "reporting") {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Send crash reports")
+                            Switch(checked = reporting, onCheckedChange = onReporting)
+                        }
+                        // What leaves the phone, said before the switch is on.
+                        Text(
+                            "When the app crashes, the error and which phone it was on go " +
+                                "to Sentry, a service that is not your server. Never a " +
+                                "photograph or a password, but an error can name a server " +
+                                "address or a file.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             }
         }
     }

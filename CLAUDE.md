@@ -524,6 +524,41 @@ blob in an ordinary file. "Never in ordinary preferences" is satisfied in
 substance, since the file holds ciphertext undecryptable without a key the app
 cannot export, but not in letter.
 
+## Crash reports
+
+**Sentry's Kotlin Multiplatform SDK, off until somebody switches it on**
+(stratus-app#73). A report leaves for a service that is not their server, from
+an app whose whole point is keeping photographs on hardware they own, so the
+consent is theirs and the default is no; it is a `SecureStore` record like the
+others, read before anything else runs -- `StratusApplication` on Android,
+because the backup runs from WorkManager with no activity, and the framework's
+entry point on iOS.
+
+It lives in `:ui` and not in `:core`, and that is what keeps `:core`'s iOS
+tests linking: a test executable would need Sentry Cocoa to link, while `:ui`
+is a static framework and links nothing. The app links Cocoa instead, from
+`project.yml`, at the version the Kotlin SDK was built against -- the two
+numbers in `libs.versions.toml` have to move together. 0.28 would install it
+through a Gradle plugin and SwiftPM; this was the smaller thing to do while
+that is a beta.
+
+Two halves of `sentry-android` are excluded from the APK. Session replay
+records the screen, which here is somebody's photographs, and the NDK handler
+is for native code this app has none of. Screenshots and the view hierarchy are
+the SDK's default off and set off by name, so nobody turns them on by accident.
+
+**The DSN is the build's, never the source's**: `SENTRY_DSN` in the environment
+becomes a generated constant, and without one there is no switch at all. A fork
+cannot report to us, and nobody is asked to consent to something that goes
+nowhere.
+
+Symbols are an iOS problem only: the Android build is not minified, so its
+stack traces arrive readable. The Kotlin framework is static, so its debug
+information is in the app's dSYM, which CI uploads with
+`scripts/upload-symbols.sh` -- from a simulator build, because that is the only
+one there is until #5. The organisation and project are the ids in the DSN, so
+the token is the one secret it needs.
+
 ## Still open
 
 Decided later, deliberately not guessed at here: whether Nextcloud's chunked
