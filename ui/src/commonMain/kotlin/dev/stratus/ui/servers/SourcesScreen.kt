@@ -42,6 +42,7 @@ import dev.stratus.core.backup.MediaSource
 fun SourcesScreen(
     available: List<MediaSource>,
     access: MediaAccess,
+    onRequestAccess: (() -> Unit)?,
     chosen: Set<String>,
     onSave: (Set<String>) -> Unit,
     onClose: () -> Unit,
@@ -72,8 +73,11 @@ fun SourcesScreen(
                     "Stratus cannot read your photographs on this device yet, so " +
                         "there are no folders to choose from. On iOS the photo library " +
                         "is not wired up at all; on Android this means the permission " +
-                        "was refused.",
+                        "has not been given.",
                 )
+                if (onRequestAccess != null) {
+                    TextButton(onClick = onRequestAccess) { Text("Allow access to photos") }
+                }
                 return@Column
             }
 

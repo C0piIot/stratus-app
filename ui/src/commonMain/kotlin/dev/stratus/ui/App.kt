@@ -49,6 +49,8 @@ fun App(
     container: AppContainer,
     back: BackRequests = BackRequests(),
     onBackUpNow: (() -> Unit)? = null,
+    /** Asks the system for the photo library; null where nothing can ask yet. */
+    onRequestAccess: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val signIn = remember { container.signIn(scope) }
@@ -77,6 +79,7 @@ fun App(
                     container = container,
                     back = back,
                     onBackUpNow = onBackUpNow,
+                    onRequestAccess = onRequestAccess,
                     baseUrl = current.baseUrl,
                     // Adding a server is the same screen as the first sign-in,
                     // reached by putting the controller back where it starts.
@@ -95,6 +98,7 @@ private fun SignedIn(
     container: AppContainer,
     back: BackRequests,
     onBackUpNow: (() -> Unit)?,
+    onRequestAccess: (() -> Unit)?,
     baseUrl: String,
     onAddAnother: () -> Unit,
     onInstancesChanged: suspend () -> Unit,
@@ -128,6 +132,14 @@ private fun SignedIn(
     LaunchedEffect(reload) {
         while (true) {
             servers = container.instances()
+            // Re-read here and not only on reload: a permission granted from
+            // the system settings changes nothing this screen hears about, and
+            // the folders read while it was missing were none (stratus-app#75).
+            val now = container.backup.access()
+            if (now != access) {
+                access = now
+                folders = container.backup.sources()
+            }
             overall = container.backup.status.across(servers)
             statuses = servers.map {
                 InstanceStatus(it, container.backup.status.of(it), container.backup.failures(it.id))
@@ -156,7 +168,11 @@ private fun SignedIn(
             servers = servers,
             currentId = currentId,
             onLookAt = { id -> scope.launch { container.switchTo(id); reload++ } },
-            onEnableBackup = { id, on -> scope.launch { container.backup.setEnabled(id, on); reload++ } },
+            onEnableBackup = { id, on ->
+                // The moment the library is needed is the moment to ask for it.
+                if (on && access == MediaAccess.None) onRequestAccess?.invoke()
+                scope.launch { container.backup.setEnabled(id, on); reload++ }
+            },
             onChooseSources = { screen = Screen.Sources(it) },
             onSignOut = { id ->
                 scope.launch {
@@ -181,6 +197,7 @@ private fun SignedIn(
         is Screen.Sources -> SourcesScreen(
             available = folders,
             access = access,
+            onRequestAccess = onRequestAccess,
             chosen = servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
             onSave = { chosen ->
                 scope.launch {

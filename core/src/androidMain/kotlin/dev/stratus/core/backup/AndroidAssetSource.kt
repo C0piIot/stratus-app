@@ -108,6 +108,23 @@ class AndroidAssetSource(private val context: Context) : AssetSource {
             stream.asSource()
         }
 
+    /**
+     * What to ask for so that [access] can answer [MediaAccess.Full], kept
+     * beside it so the two cannot disagree about which permission means what.
+     */
+    fun permissions(): Array<String> = when {
+        Build.VERSION.SDK_INT < 33 -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        // Asking for the selected-photos one too is what lets Android 14 offer
+        // "a selection" instead of only all or nothing; without it the choice
+        // is taken away rather than defaulting to everything.
+        Build.VERSION.SDK_INT >= 34 -> arrayOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
+            READ_MEDIA_VISUAL_USER_SELECTED,
+        )
+        else -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
+    }
+
     private fun has(permission: String) =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
