@@ -38,7 +38,7 @@ class AndroidFileHandoff(private val context: Context) : FileHandoff {
         )
     }
 
-    override suspend fun save(name: String, contentType: String?, body: suspend (Sink) -> Unit) =
+    override suspend fun save(name: String, contentType: String?, body: suspend (Sink) -> Unit): Unit =
         withContext(Dispatchers.IO) {
             // Pending until the last byte is in, and deleted if it never is: a
             // download cut halfway would otherwise sit in Downloads with the
