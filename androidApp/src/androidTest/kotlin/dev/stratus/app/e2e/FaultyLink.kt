@@ -25,6 +25,10 @@ class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
 
     private companion object {
         const val TAG = "FaultyLink"
+
+        // Named, because Android's getLoopbackAddress() is ::1 -- a listener
+        // there refuses the 127.0.0.1 that [address] hands out.
+        val LOOPBACK: InetAddress = InetAddress.getByName("127.0.0.1")
     }
 
     val port: Int
@@ -44,7 +48,7 @@ class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
     private val downloadBudget = AtomicLong(-1)
 
     init {
-        listener = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
+        listener = ServerSocket(0, 50, LOOPBACK)
         port = listener.localPort
         serve(listener)
     }
@@ -61,7 +65,7 @@ class FaultyLink(private val upstream: InetSocketAddress) : Closeable {
         if (!listener.isClosed) return
         listener = ServerSocket().apply {
             reuseAddress = true
-            bind(InetSocketAddress(InetAddress.getLoopbackAddress(), port))
+            bind(InetSocketAddress(LOOPBACK, port))
         }
         serve(listener)
     }
