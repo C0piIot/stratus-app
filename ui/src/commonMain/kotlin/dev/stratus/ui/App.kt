@@ -54,6 +54,8 @@ fun App(
     val scope = rememberCoroutineScope()
     val signIn = remember { container.signIn(scope) }
     val state by signIn.state.collectAsState()
+    val editing by signIn.editing.collectAsState()
+    val canGoBack by signIn.canGoBack.collectAsState()
 
     LaunchedEffect(Unit) { signIn.restore() }
 
@@ -82,11 +84,27 @@ fun App(
                     baseUrl = current.baseUrl,
                     // Adding a server is the same screen as the first sign-in,
                     // reached by putting the controller back where it starts.
-                    onAddAnother = signIn::cancel,
+                    onAddAnother = signIn::addAnother,
+                    onEdit = { id -> scope.launch { signIn.edit(id) } },
                     onInstancesChanged = { signIn.restore() },
                 )
 
-                else -> SignInScreen(current, onSubmit = signIn::submit, onAnswer = signIn::answer)
+                else -> {
+                    // Opened from inside the app -- editing a server, or adding
+                    // one more -- the form has a way back, the system gesture
+                    // included.
+                    DisposableEffect(canGoBack) {
+                        back.onBack = if (canGoBack) { { scope.launch { signIn.back() }; true } } else null
+                        onDispose { back.onBack = null }
+                    }
+                    SignInScreen(
+                        current,
+                        onSubmit = signIn::submit,
+                        onAnswer = signIn::answer,
+                        initial = editing?.form,
+                        onBack = if (canGoBack) { { scope.launch { signIn.back() } } } else null,
+                    )
+                }
             }
         }
     }
@@ -100,6 +118,7 @@ private fun SignedIn(
     onAsk: ((Set<Ask>) -> Unit)?,
     baseUrl: String,
     onAddAnother: () -> Unit,
+    onEdit: (String) -> Unit,
     onInstancesChanged: suspend () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -175,6 +194,7 @@ private fun SignedIn(
             onAddAnother = onAddAnother,
             reporting = state.reporting.takeIf { CrashReports.available },
             onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
+            onEdit = onEdit,
             onClose = { screen = Screen.Browser },
         )
 
@@ -199,7 +219,12 @@ private fun SignedIn(
             val open = browser ?: return
             Column {
                 BackupStrip(state.overall) { screen = Screen.Backup }
-                BrowserScreen(open, cast, onOpenServers = { screen = Screen.Servers })
+                BrowserScreen(
+                    open,
+                    cast,
+                    onOpenServers = { screen = Screen.Servers },
+                    onEditServer = { state.currentId?.let(onEdit) },
+                )
             }
         }
     }

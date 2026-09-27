@@ -38,6 +38,51 @@ class SignInController(
     private var running: Job? = null
 
     /**
+     * The instance being edited, if the form is open on one rather than on a
+     * new server -- and what to fill it with (stratus-app#87).
+     */
+    private val editingFlow = MutableStateFlow<Editing?>(null)
+    val editing: StateFlow<Editing?> = editingFlow.asStateFlow()
+
+    private val backable = MutableStateFlow(false)
+
+    /** Whether the form was opened from inside the app, so there is somewhere to go back to. */
+    val canGoBack: StateFlow<Boolean> = backable.asStateFlow()
+
+    /**
+     * Opens the form on an instance that exists, filled with what it has now.
+     *
+     * Everything is editable -- address, username, password -- and all of it is
+     * proved again the way a first sign-in is, because a new address may be a
+     * new certificate or a first time over plain http. What does not change is
+     * the id: a server moved to a new domain is the same server, and its backup
+     * history follows it there.
+     */
+    suspend fun edit(id: String) {
+        val instance = instances.instance(id) ?: return
+        val credentials = instances.credentials(id) ?: return
+        running?.cancel()
+        editingFlow.value = Editing(id, SignInForm(instance.baseUrl, instance.username, credentials.password))
+        backable.value = true
+        mutable.value = SignInState.Idle
+    }
+
+    /** Opens an empty form for one more server, with a way back. */
+    fun addAnother() {
+        cancel()
+        editingFlow.value = null
+        backable.value = true
+    }
+
+    /** Leaves the form without changing anything. */
+    suspend fun back() {
+        running?.cancel()
+        editingFlow.value = null
+        backable.value = false
+        restore()
+    }
+
+    /**
      * Reads the state back out of storage: which instance is being looked at, or
      * none. Called at startup and after anything that adds or forgets one, so
      * there is a single way for the screen to learn what is true.
@@ -80,14 +125,16 @@ class SignInController(
 
             is SignInEffect.Pin -> trust.pin(effect.hostPort, effect.fingerprint)
 
-            is SignInEffect.Store -> instances.put(
-                Instance(
-                    id = mintId(),
-                    baseUrl = effect.baseUrl,
-                    username = effect.credentials.username,
-                ),
-                effect.credentials,
-            )
+            is SignInEffect.Store -> {
+                // Edited, it keeps its id and its backup settings; new, it
+                // gets both from scratch.
+                val existing = editingFlow.value?.let { instances.instance(it.id) }
+                val instance = existing?.copy(baseUrl = effect.baseUrl, username = effect.credentials.username)
+                    ?: Instance(id = mintId(), baseUrl = effect.baseUrl, username = effect.credentials.username)
+                instances.put(instance, effect.credentials)
+                editingFlow.value = null
+                backable.value = false
+            }
         }
     }
 }

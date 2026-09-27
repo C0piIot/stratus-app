@@ -38,6 +38,8 @@ fun ServersScreen(
     onEnableBackup: (String, Boolean) -> Unit,
     onChooseSources: (String) -> Unit,
     onSignOut: (String) -> Unit,
+    /** Opens the sign-in form on this server, filled in, to change any of it. */
+    onEdit: (String) -> Unit,
     onAddAnother: () -> Unit,
     /** Whether crash reports are on, or null in a build that cannot send any. */
     reporting: Boolean?,
@@ -88,7 +90,11 @@ fun ServersScreen(
                         TextButton(onClick = { onChooseSources(server.id) }) {
                             Text(if (server.sources.isEmpty()) "All folders" else "${server.sources.size} folders")
                         }
-                        TextButton(onClick = { signingOutOf = server }) { Text("Sign out") }
+                        TextButton(onClick = { onEdit(server.id) }) { Text("Edit") }
+                        // "Remove" and not "Sign out": it forgets the server and
+                        // its backup record, and was not found under the other
+                        // name when somebody looked for it (stratus-app#87).
+                        TextButton(onClick = { signingOutOf = server }) { Text("Remove") }
                     }
                 }
                 Divider()
@@ -124,7 +130,7 @@ fun ServersScreen(
     signingOutOf?.let { server ->
         AlertDialog(
             onDismissRequest = { signingOutOf = null },
-            title = { Text("Sign out of ${server.baseUrl}?") },
+            title = { Text("Remove ${server.baseUrl}?") },
             // What it actually costs, rather than a generic are-you-sure. The
             // cache is rebuildable by walking the server, which is the whole
             // point of how it was designed -- but that walk is not free.
@@ -137,7 +143,7 @@ fun ServersScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { onSignOut(server.id); signingOutOf = null }) { Text("Sign out") }
+                TextButton(onClick = { onSignOut(server.id); signingOutOf = null }) { Text("Remove") }
             },
             dismissButton = { TextButton(onClick = { signingOutOf = null }) { Text("Cancel") } },
         )
