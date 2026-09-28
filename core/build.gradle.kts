@@ -94,6 +94,9 @@ kotlin {
             // the app installs and runs there, and the button never appears.
             implementation(libs.play.services.cast)
             implementation(libs.androidx.mediarouter)
+            // Already in the APK through :ui; named here so casting can report
+            // what it did, which is the only way to see a television's side.
+            implementation(libs.sentry)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

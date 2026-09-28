@@ -60,7 +60,6 @@ class CastController(
 
     val available: Boolean get() = caster.available
     val devices: StateFlow<List<CastDevice>> get() = caster.devices
-    val lastNote: StateFlow<String?> get() = caster.lastNote
 
     /** Whether there is any point offering this at all for a given file. */
     fun canCast(entry: DavResource): Boolean =
@@ -72,7 +71,9 @@ class CastController(
      */
     fun offer(entry: DavResource) {
         val item = castItemFor(entry, links, now()) ?: return
-        caster.note("offered ${entry.path} as ${item.contentType}")
+        caster.begin()
+        caster.note("offered ${entry.path} (${entry.contentType}) as ${item.contentType} ${item.url}")
+        item.fallback?.let { caster.note("fallback ${it.contentType} ${it.url}") }
         if (certificateIsPinned) {
             // Before the link is even tried: what the warning is about is the
             // television's inability to check a certificate, and asking the
@@ -121,7 +122,8 @@ class CastController(
             offered
         }
         if (!support.honours(item.url)) {
-            caster.note("link refused (${support.lastAnswer}): ${item.url.substringBefore('?')}")
+            caster.note("link refused (${support.lastAnswer}): ${item.url}")
+            caster.report("link refused")
             mutable.value = CastState.TheServerDoesNotDoLinks
             return
         }
