@@ -90,6 +90,17 @@ class UploadQueueTest {
     }
 
     @Test
+    fun sendsEachHalfAsWhatThePlatformSaysItIs() = runTest {
+        val live = asset(3, motion = MotionPart("IMG_3.MOV", 50, "video/quicktime")).copy(mimeType = "image/heic")
+        val queue = queue()
+        queue.enqueue(listOf(live))
+        assertEquals(
+            mapOf(AssetPart.Still to "image/heic", AssetPart.Motion to "video/quicktime"),
+            queue.outstanding().associate { it.part to it.contentType },
+        )
+    }
+
+    @Test
     fun sendsThePictureSomebodyJustTookFirst() = runTest {
         // A first backup that starts in 2014 looks broken for days.
         val queue = queue()

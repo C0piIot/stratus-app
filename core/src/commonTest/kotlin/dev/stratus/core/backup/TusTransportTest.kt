@@ -68,6 +68,18 @@ class TusTransportTest {
         assertEquals("1.0.0", seen.first().headers["Tus-Resumable"])
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun saysWhatTheFileIsWhenItKnows() {
+        // A tus upload has no bytes yet when it is created, so the type is the
+        // server's only way to know what it is holding.
+        assertEquals(
+            "filename " + Base64.encode("Photos/2026/09/IMG_1.HEIC".encodeToByteArray()) +
+                ",filetype " + Base64.encode("image/heic".encodeToByteArray()),
+            metadataOf(UploadTarget("/Photos/2026/09/IMG_1.HEIC", 10, "image/heic")),
+        )
+    }
+
     @Test
     fun carriesOnFromWhereTheServerSaysItGotTo() = runTest {
         val transport = transport { request ->

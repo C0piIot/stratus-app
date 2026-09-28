@@ -21,9 +21,14 @@ data class Asset(
     val sizeBytes: Long,
     /** The movie half of a Live Photo. Only a Live Photo with it, so they travel together. */
     val motion: MotionPart? = null,
+    /**
+     * What the platform says it is. Sent with the upload so that a server has
+     * no need to guess -- which tus, unlike a PUT, gives it nothing to guess from.
+     */
+    val mimeType: String? = null,
 )
 
-data class MotionPart(val originalName: String, val sizeBytes: Long)
+data class MotionPart(val originalName: String, val sizeBytes: Long, val mimeType: String? = null)
 
 /** Which half of an asset. A Live Photo has both; everything else has a still. */
 enum class AssetPart { Still, Motion }

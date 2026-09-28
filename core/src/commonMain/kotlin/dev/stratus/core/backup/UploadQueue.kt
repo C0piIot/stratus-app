@@ -43,10 +43,10 @@ class UploadQueue(
         var added = 0
         for (asset in assets) {
             val parts = buildList {
-                add(Triple(AssetPart.Still, layout.pathFor(asset), asset.sizeBytes))
-                asset.motion?.let { add(Triple(AssetPart.Motion, layout.motionPathFor(asset)!!, it.sizeBytes)) }
+                add(Part(AssetPart.Still, layout.pathFor(asset), asset.sizeBytes, asset.mimeType))
+                asset.motion?.let { add(Part(AssetPart.Motion, layout.motionPathFor(asset)!!, it.sizeBytes, it.mimeType)) }
             }
-            for ((part, path, size) in parts) {
+            for ((part, path, size, type) in parts) {
                 if (path in known) continue
                 pending.add(
                     PendingUpload(
@@ -54,7 +54,7 @@ class UploadQueue(
                         localId = asset.localId,
                         part = part,
                         size = size,
-                        contentType = null,
+                        contentType = type,
                         takenAt = stampOf(asset),
                     ),
                 )
@@ -160,3 +160,5 @@ class UploadQueue(
         const val NEVER = Long.MAX_VALUE
     }
 }
+
+private data class Part(val part: AssetPart, val path: String, val size: Long, val type: String?)
