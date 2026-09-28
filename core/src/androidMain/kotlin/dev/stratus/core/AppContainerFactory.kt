@@ -16,12 +16,24 @@ import com.google.android.gms.common.GoogleApiAvailability
 import io.ktor.client.engine.okhttp.OkHttp
 import javax.net.ssl.HttpsURLConnection
 
+@Volatile private var shared: AppContainer? = null
+
 /**
  * Assembled here rather than in `:ui` so the engine, the keystore and the
  * Android file APIs stay out of the interface module entirely.
+ *
+ * One per process, because the application, the activity and the backup worker
+ * all ask: three containers were three connections to one database file, and
+ * the status poll met the worker's writes as `database is locked`
+ * (STRATUS-APP-1). The single-thread dispatcher in
+ * [dev.stratus.core.backup.BackupDatabase] only serialises one connection.
  */
-fun appContainer(context: Context): AppContainer {
-    val application = context.applicationContext
+fun appContainer(context: Context): AppContainer =
+    shared ?: synchronized(AppContainer::class) {
+        shared ?: build(context.applicationContext).also { shared = it }
+    }
+
+private fun build(application: Context): AppContainer {
     return AppContainer(
         engine = { policy ->
             OkHttp.create {
