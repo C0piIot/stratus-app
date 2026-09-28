@@ -53,11 +53,13 @@ class AndroidCaster(private val context: Context) : Caster {
     private var loaded = false
     private var attempt = 0
 
-    override fun begin() = synchronized(trail) {
-        trail.clear()
-        reported = false
-        loaded = false
-        attempt++
+    override fun begin() {
+        synchronized(trail) {
+            trail.clear()
+            reported = false
+            loaded = false
+            attempt++
+        }
     }
 
     // Whole URLs, token and all, so a failed one can be fetched by hand. They
