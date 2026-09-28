@@ -25,6 +25,10 @@ class LinkSupport(private val http: HttpClient) {
 
     private var refused = false
 
+    /** What the last check was answered with: a status and a type, or the exception. */
+    var lastAnswer: String? = null
+        private set
+
     /** False once a server has been found not to do this. */
     val offered: Boolean get() = !refused
 
@@ -36,11 +40,16 @@ class LinkSupport(private val http: HttpClient) {
      */
     suspend fun serves(link: String, contentType: String): Boolean = runCatching {
         val response = http.head(link)
+        lastAnswer = "${response.status.value} ${response.headers[HttpHeaders.ContentType]}"
         response.status.value == 200 && response.headers[HttpHeaders.ContentType]?.startsWith(contentType) == true
-    }.getOrDefault(false)
+    }.onFailure { lastAnswer = it.toString() }.getOrDefault(false)
 
     suspend fun honours(link: String): Boolean {
-        val worked = runCatching { http.head(link).status.value == 200 }.getOrDefault(false)
+        val worked = runCatching {
+            val response = http.head(link)
+            lastAnswer = "${response.status.value} ${response.headers[HttpHeaders.ContentType]}"
+            response.status.value == 200
+        }.onFailure { lastAnswer = it.toString() }.getOrDefault(false)
         refused = !worked
         return worked
     }
