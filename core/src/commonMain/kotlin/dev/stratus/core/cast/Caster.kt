@@ -28,15 +28,13 @@ interface Caster {
     suspend fun stop()
 
     /**
-     * What casting last did or ran into, for somebody trying it on a real
-     * television: every step of it fails in silence otherwise, at the far end.
+     * A trail of one attempt, sent as a single crash-reports event when it
+     * ends: every step of casting fails in silence otherwise, at the far end.
      */
-    val lastNote: StateFlow<String?> get() = SILENT
-
+    fun begin() = Unit
     fun note(message: String) = Unit
+    fun report(outcome: String) = Unit
 }
-
-private val SILENT: StateFlow<String?> = MutableStateFlow(null)
 
 /** What a phone without Play Services gets, and iOS until it has a sender. */
 class NoCaster : Caster {

@@ -247,14 +247,13 @@ private fun label(life: ShareLife) = when (life) {
 private fun CastBar(cast: CastController) {
     val state by cast.state.collectAsState()
     val devices by cast.devices.collectAsState()
-    val note by cast.lastNote.collectAsState()
 
     when (val here = state) {
         CastState.Idle -> {}
 
         is CastState.Playing -> ListItem(
             headlineContent = { Text("Playing on ${here.device.name}") },
-            supportingContent = { Text(listOfNotNull(here.item.title, note).joinToString("\n")) },
+            supportingContent = { Text(here.item.title) },
             trailingContent = { TextButton(onClick = cast::stop) { Text("Stop") } },
         )
 
@@ -283,8 +282,7 @@ private fun CastBar(cast: CastController) {
             text = {
                 Text(
                     "A Chromecast fetches the file itself and cannot sign in, so it needs a link " +
-                        "that carries its own permission. Stratus makes those; this server does not." +
-                        note?.let { "\n\n$it" }.orEmpty(),
+                        "that carries its own permission. Stratus makes those; this server does not.",
                 )
             },
             confirmButton = { TextButton(onClick = cast::stop) { Text("Close") } },
@@ -302,7 +300,6 @@ private fun CastBar(cast: CastController) {
                             TextButton(onClick = { cast.playOn(device) }) { Text(device.name) }
                         }
                     }
-                    note?.let { Text(it) }
                 }
             },
             confirmButton = {},

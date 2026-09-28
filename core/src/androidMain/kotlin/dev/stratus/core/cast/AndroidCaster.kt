@@ -1,6 +1,7 @@
 package dev.stratus.core.cast
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
@@ -17,7 +18,10 @@ import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import io.sentry.Sentry
+import io.sentry.SentryLevel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -43,14 +47,51 @@ class AndroidCaster(private val context: Context) : Caster {
     private val mutable = MutableStateFlow(emptyList<CastDevice>())
     override val devices = mutable.asStateFlow()
 
-    private val notes = MutableStateFlow<String?>(null)
-    override val lastNote = notes.asStateFlow()
+    // Touched from the main thread and from the controller's coroutines alike.
+    private val trail = mutableListOf<String>()
+    private var reported = false
+    private var loaded = false
+    private var attempt = 0
 
-    // Logcat carries the whole URL, token and all, so it can be fetched by hand;
-    // the screen gets the line without it.
+    override fun begin() = synchronized(trail) {
+        trail.clear()
+        reported = false
+        loaded = false
+        attempt++
+    }
+
+    // Whole URLs, token and all, so a failed one can be fetched by hand. They
+    // go only to crash reports somebody switched on, and the token lives a day.
     override fun note(message: String) {
         Log.i(TAG, message)
-        notes.value = message
+        synchronized(trail) {
+            if (trail.lastOrNull()?.substringAfter(' ') != message) trail += "+${elapsed()}ms $message"
+        }
+    }
+
+    /**
+     * One event per attempt, at the first outcome: grouped by outcome, so a
+     * television that never answers and one that refuses the URL are two issues.
+     */
+    override fun report(outcome: String) {
+        val lines = synchronized(trail) {
+            if (reported) return
+            reported = true
+            trail.toList()
+        }
+        Log.i(TAG, "outcome: $outcome")
+        Sentry.captureMessage("Cast: $outcome", SentryLevel.INFO) { scope ->
+            scope.fingerprint = listOf("cast", outcome)
+            scope.setTag("cast.outcome", outcome)
+            scope.setExtra("trail", lines.joinToString("\n"))
+        }
+    }
+
+    private var started = 0L
+    private fun elapsed(): Long {
+        val now = SystemClock.elapsedRealtime()
+        if (trail.isEmpty()) started = now
+        return now - started
     }
 
     /** What the receiver says after the load was accepted, which is where a fetch fails. */
@@ -58,11 +99,18 @@ class AndroidCaster(private val context: Context) : Caster {
         override fun onStatusUpdated() {
             val status = client?.mediaStatus ?: return
             val idle = if (status.playerState == MediaStatus.PLAYER_STATE_IDLE) " idle=${idleReason(status.idleReason)}" else ""
-            note("receiver: ${playerState(status.playerState)}$idle")
+            note("receiver: ${playerState(status.playerState)}$idle, media ${status.mediaInfo?.contentId}")
+            when {
+                status.playerState == MediaStatus.PLAYER_STATE_PLAYING -> report("playing")
+                status.playerState == MediaStatus.PLAYER_STATE_PAUSED -> report("playing")
+                status.playerState == MediaStatus.PLAYER_STATE_IDLE && status.idleReason == MediaStatus.IDLE_REASON_ERROR ->
+                    report("receiver error")
+            }
         }
 
         override fun onMediaError(error: MediaError) {
-            note("receiver error: ${error.type} ${error.reason} detailed=${error.detailedErrorCode}")
+            note("receiver error: type=${error.type} reason=${error.reason} detailed=${error.detailedErrorCode} data=${error.customData}")
+            report("receiver error")
         }
     }
 
@@ -100,13 +148,23 @@ class AndroidCaster(private val context: Context) : Caster {
         val route = router.routes.firstOrNull { it.id == device.id }
         if (route == null) {
             note("route ${device.name} is gone")
+            report("route gone")
             return@withContext
         }
         note("selecting ${device.name}")
         router.selectRoute(route)
 
-        val session = awaitSession() ?: return@withContext
-        note("session with ${session.castDevice?.friendlyName}, app ${session.applicationMetadata?.applicationId}")
+        val session = awaitSession()
+        if (session == null) {
+            report("no session")
+            return@withContext
+        }
+        val screen = session.castDevice
+        note(
+            "session with ${screen?.friendlyName} (${screen?.modelName}, version ${screen?.deviceVersion}), " +
+                "receiver ${session.applicationMetadata?.applicationId} " +
+                "${session.applicationMetadata?.name}, status ${session.applicationStatus}",
+        )
         val media = MediaInfo.Builder(item.url)
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
             .setContentType(item.contentType)
@@ -128,21 +186,31 @@ class AndroidCaster(private val context: Context) : Caster {
         val remote = session.remoteMediaClient
         if (remote == null) {
             note("session has no media client")
+            report("no media client")
             return@withContext
         }
         client?.unregisterCallback(receiver)
         client = remote.also { it.registerCallback(receiver) }
-        Log.i(TAG, "loading ${item.contentType} ${item.url}")
-        note("loading ${item.contentType} ${item.url.substringBefore('?')}")
+        note("loading ${item.contentType} ${item.url}")
+        val mine = synchronized(trail) { loaded = true; attempt }
         remote.load(MediaLoadRequestData.Builder().setMediaInfo(media).setAutoplay(true).build())
             .setResultCallback { result ->
                 val code = result.status.statusCode
-                note("load answered ${CastStatusCodes.getStatusCodeString(code)} ($code) ${result.status.statusMessage.orEmpty()}")
+                note(
+                    "load answered ${CastStatusCodes.getStatusCodeString(code)} ($code) " +
+                        "${result.status.statusMessage.orEmpty()} ${result.customData ?: ""}",
+                )
+                if (!result.status.isSuccess) report("load refused")
             }
-        Unit
+        // A receiver that accepts the load and then fetches nothing says nothing
+        // either; whatever it has said by now is the answer.
+        delay(ANSWER_WAIT_MS)
+        if (synchronized(trail) { attempt == mine }) report("no answer from the receiver")
     }
 
     override suspend fun stop() = withContext(Dispatchers.Main) {
+        note("stopped")
+        if (synchronized(trail) { loaded }) report("stopped before an answer")
         CastContext.getSharedInstance(context).sessionManager.endCurrentSession(true)
     }
 
@@ -200,7 +268,7 @@ class AndroidCaster(private val context: Context) : Caster {
     }
 
     private fun refresh() {
-        Log.i(TAG, "routes: " + router.routes.joinToString { "${it.name} cast=${it.matchesSelector(selector)} default=${it.isDefault} bt=${it.isBluetooth}" })
+        note("routes: " + router.routes.joinToString { "${it.name} cast=${it.matchesSelector(selector)} default=${it.isDefault} bt=${it.isBluetooth}" })
         mutable.value = router.routes
             .filter { it.matchesSelector(selector) && !it.isDefaultOrBluetooth }
             .map { CastDevice(it.id, it.name) }
@@ -230,5 +298,6 @@ class AndroidCaster(private val context: Context) : Caster {
     private companion object {
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val TAG = "StratusCast"
+        const val ANSWER_WAIT_MS = 30_000L
     }
 }
