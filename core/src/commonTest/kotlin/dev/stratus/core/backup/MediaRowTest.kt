@@ -41,4 +41,10 @@ class MediaRowTest {
         // Android has no Live Photos, so there is never a second half here.
         assertEquals(null, asset.motion)
     }
+
+    @Test
+    fun keepsWhatTheLibrarySaysItIs() {
+        assertEquals("image/heic", assetOf(row().copy(mimeType = "image/heic")).mimeType)
+        assertEquals(null, assetOf(row().copy(mimeType = "")).mimeType)
+    }
 }

@@ -72,7 +72,7 @@ class AndroidAssetSource(private val context: Context) : AssetSource {
 
             val found = mutableListOf<Asset>()
             query(
-                projection = arrayOf(ID, NAME, SIZE, BUCKET_ID, DATE_TAKEN, DATE_ADDED),
+                projection = arrayOf(ID, NAME, SIZE, BUCKET_ID, DATE_TAKEN, DATE_ADDED, MIME_TYPE),
                 selection = conditions.joinToString(" AND "),
                 arguments = arguments.toTypedArray(),
                 order = "$DATE_ADDED DESC",
@@ -85,6 +85,7 @@ class AndroidAssetSource(private val context: Context) : AssetSource {
                         bucketId = cursor.getString(3),
                         takenEpochMs = if (cursor.isNull(4)) null else cursor.getLong(4),
                         addedEpochSeconds = cursor.getLong(5),
+                        mimeType = if (cursor.isNull(6)) null else cursor.getString(6),
                     ),
                 )
             }
@@ -150,6 +151,7 @@ class AndroidAssetSource(private val context: Context) : AssetSource {
         const val BUCKET_NAME = MediaStore.Files.FileColumns.BUCKET_DISPLAY_NAME
         const val DATE_TAKEN = MediaStore.Files.FileColumns.DATE_TAKEN
         const val DATE_ADDED = MediaStore.Files.FileColumns.DATE_ADDED
+        const val MIME_TYPE = MediaStore.Files.FileColumns.MIME_TYPE
 
         // Pictures and video, and nothing else a file provider happens to hold.
         const val MEDIA_SELECTION = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"

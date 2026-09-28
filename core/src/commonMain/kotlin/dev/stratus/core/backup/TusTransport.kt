@@ -71,7 +71,6 @@ class TusTransport(
     }
 
     /** Creates the upload and returns where to send it, from the `Location`. */
-    @OptIn(ExperimentalEncodingApi::class)
     private suspend fun begin(target: UploadTarget): String? {
         val response = http.request(endpoint) {
             method = HttpMethod.Post
@@ -79,7 +78,7 @@ class TusTransport(
             header("Upload-Length", target.size.toString())
             // The destination is a path, and its folder has to exist -- which is
             // why the queue makes the month's directory before every attempt.
-            header("Upload-Metadata", "filename " + Base64.encode(target.path.trimStart('/').encodeToByteArray()))
+            header("Upload-Metadata", metadataOf(target))
         }
         if (response.status.value != 201) return null
         return response.headers[HttpHeaders.Location]?.let { absolute(it) }
@@ -180,3 +179,9 @@ suspend fun negotiateTus(http: HttpClient, baseUrl: String): String? {
         null
     }
 }
+
+@OptIn(ExperimentalEncodingApi::class)
+internal fun metadataOf(target: UploadTarget): String = buildList {
+    add("filename " + Base64.encode(target.path.trimStart('/').encodeToByteArray()))
+    target.contentType?.let { add("filetype " + Base64.encode(it.encodeToByteArray())) }
+}.joinToString(",")

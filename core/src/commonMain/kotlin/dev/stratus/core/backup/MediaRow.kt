@@ -14,6 +14,7 @@ data class MediaRow(
     val bucketId: String?,
     val takenEpochMs: Long?,
     val addedEpochSeconds: Long,
+    val mimeType: String? = null,
 )
 
 /**
@@ -33,4 +34,5 @@ fun assetOf(row: MediaRow): Asset = Asset(
     // dropped, and the digest keeps it from colliding with the next one.
     originalName = row.displayName?.takeIf { it.isNotBlank() } ?: "untitled",
     sizeBytes = row.sizeBytes,
+    mimeType = row.mimeType?.takeIf { it.isNotBlank() },
 )
