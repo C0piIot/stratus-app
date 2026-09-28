@@ -26,7 +26,17 @@ interface Caster {
 
     suspend fun play(device: CastDevice, item: CastItem)
     suspend fun stop()
+
+    /**
+     * What casting last did or ran into, for somebody trying it on a real
+     * television: every step of it fails in silence otherwise, at the far end.
+     */
+    val lastNote: StateFlow<String?> get() = SILENT
+
+    fun note(message: String) = Unit
 }
+
+private val SILENT: StateFlow<String?> = MutableStateFlow(null)
 
 /** What a phone without Play Services gets, and iOS until it has a sender. */
 class NoCaster : Caster {
