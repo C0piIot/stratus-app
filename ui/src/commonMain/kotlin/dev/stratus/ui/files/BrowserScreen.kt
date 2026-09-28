@@ -288,6 +288,13 @@ private fun CastBar(cast: CastController) {
             confirmButton = { TextButton(onClick = cast::stop) { Text("Close") } },
         )
 
+        CastState.TheServerDidNotAnswer -> AlertDialog(
+            onDismissRequest = cast::stop,
+            title = { Text("The server did not answer") },
+            text = { Text("It may be restarting or out of reach. Try again in a moment.") },
+            confirmButton = { TextButton(onClick = cast::stop) { Text("Close") } },
+        )
+
         is CastState.Choosing -> AlertDialog(
             onDismissRequest = cast::stop,
             title = { Text("Cast \"${here.item.title}\"") },

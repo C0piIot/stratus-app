@@ -1,6 +1,7 @@
 package dev.stratus.core.cast
 
 import dev.stratus.core.dav.DavResource
+import dev.stratus.core.share.LinkAnswer
 import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLinks
 import io.ktor.util.date.getTimeMillis
@@ -33,6 +34,9 @@ sealed interface CastState {
      * watching one that will never start.
      */
     data object TheServerDoesNotDoLinks : CastState
+
+    /** Asked whether the link works and got no answer, which is not a no. */
+    data object TheServerDidNotAnswer : CastState
     data class Playing(val device: CastDevice, val item: CastItem) : CastState
 }
 
@@ -121,11 +125,20 @@ class CastController(
         } else {
             offered
         }
-        if (!support.honours(item.url)) {
-            caster.note("link refused (${support.lastAnswer}): ${item.url}")
-            caster.report("link refused")
-            mutable.value = CastState.TheServerDoesNotDoLinks
-            return
+        when (support.honours(item.url)) {
+            LinkAnswer.Honoured -> Unit
+            LinkAnswer.Refused -> {
+                caster.note("link refused (${support.lastAnswer}): ${item.url}")
+                caster.report("link refused")
+                mutable.value = CastState.TheServerDoesNotDoLinks
+                return
+            }
+            LinkAnswer.NoAnswer -> {
+                caster.note("no answer about the link (${support.lastAnswer}): ${item.url}")
+                caster.report("no answer about the link")
+                mutable.value = CastState.TheServerDidNotAnswer
+                return
+            }
         }
         caster.note("link answers (${support.lastAnswer}), looking for screens")
         caster.startDiscovery()

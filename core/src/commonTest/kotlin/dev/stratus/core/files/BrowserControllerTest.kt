@@ -294,6 +294,22 @@ class BrowserControllerTest {
     }
 
     @Test
+    fun aServerThatFailsToAnswerAboutALinkIsNotTakenForARefusal() = runTest {
+        // A restart behind a proxy answers 502, which says nothing about links.
+        val browser = controller(this, links = support(HttpStatusCode.BadGateway), answer = listingOf("/dav/a.txt" to false))
+        browser.start()
+        browser.settled()
+
+        browser.ask(Confirmation.Share(browser.state.value.entries.single()))
+        browser.confirmShare(ShareLife.ADay)
+        browser.state.first { it.failure != null }
+
+        assertNull(sheet.links.value)
+        assertEquals(BrowserFailure.Unreachable(timedOut = false), browser.state.value.failure)
+        assertTrue(browser.canShare, "one failure took sharing away")
+    }
+
+    @Test
     fun theQuestionIsAskedWithoutCredentials() = runTest {
         // With them it would succeed against any server at all and prove
         // nothing: what is being asked is whether the signature was enough.
