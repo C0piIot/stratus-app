@@ -3,6 +3,7 @@ package dev.stratus.core.share
 import io.ktor.client.HttpClient
 import io.ktor.client.request.head
 import io.ktor.http.HttpHeaders
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Whether this server honours the links this app signs.
@@ -44,13 +45,28 @@ class LinkSupport(private val http: HttpClient) {
         response.status.value == 200 && response.headers[HttpHeaders.ContentType]?.startsWith(contentType) == true
     }.onFailure { lastAnswer = it.toString() }.getOrDefault(false)
 
-    suspend fun honours(link: String): Boolean {
-        val worked = runCatching {
-            val response = http.head(link)
-            lastAnswer = "${response.status.value} ${response.headers[HttpHeaders.ContentType]}"
-            response.status.value == 200
-        }.onFailure { lastAnswer = it.toString() }.getOrDefault(false)
-        refused = !worked
-        return worked
+    /**
+     * A refusal is remembered and a failure is not: a server that restarted,
+     * or a phone that lost the network, says nothing about links, and taking
+     * it for a no hid casting and sharing until the app was restarted.
+     */
+    suspend fun honours(link: String): LinkAnswer {
+        val status = try {
+            http.head(link).also {
+                lastAnswer = "${it.status.value} ${it.headers[HttpHeaders.ContentType]}"
+            }.status.value
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            lastAnswer = e.toString()
+            return LinkAnswer.NoAnswer
+        }
+        return when {
+            status == 200 -> LinkAnswer.Honoured.also { refused = false }
+            status >= 500 -> LinkAnswer.NoAnswer
+            else -> LinkAnswer.Refused.also { refused = true }
+        }
     }
 }
+
+enum class LinkAnswer { Honoured, Refused, NoAnswer }

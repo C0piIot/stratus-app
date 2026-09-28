@@ -4,6 +4,7 @@ import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.dav.DavResource
 import dev.stratus.core.share.ShareLife
+import dev.stratus.core.share.LinkAnswer
 import dev.stratus.core.share.Sharing
 import io.ktor.client.network.sockets.SocketTimeoutException
 import io.ktor.client.plugins.HttpRequestTimeoutException
@@ -127,17 +128,12 @@ class BrowserController(
         scope.launch {
             // Whether links work is asked of the server, anonymously, so a
             // server that is not there is an answer here too.
-            val offered = try {
-                sharing.offer(target, life)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                mutable.value = mutable.value.copy(failure = unreachable(e))
-                return@launch
+            val failure = when (sharing.offer(target, life)) {
+                LinkAnswer.Honoured -> return@launch
+                LinkAnswer.Refused -> BrowserFailure.TheServerDoesNotDoLinks
+                LinkAnswer.NoAnswer -> BrowserFailure.Unreachable(timedOut = false)
             }
-            if (!offered) {
-                mutable.value = mutable.value.copy(failure = BrowserFailure.TheServerDoesNotDoLinks)
-            }
+            mutable.value = mutable.value.copy(failure = failure)
         }
     }
 

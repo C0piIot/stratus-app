@@ -162,6 +162,19 @@ class CastControllerTest {
         assertTrue(!cast.canCast(file("clip.mp4", "video/mp4")))
     }
 
+    @Test
+    fun aServerThatFailsIsNotTakenForOneThatDoesNotDoLinks() = runTest {
+        // A 502 from a proxy in front of a server that is restarting, which is
+        // how this was found: it hid casting until the app was restarted.
+        val support = support(HttpStatusCode.BadGateway)
+        val cast = controller(this, support = support)
+        cast.offer(file("IMG_1.jpg", "image/jpeg"))
+        cast.state.first { it is CastState.TheServerDidNotAnswer }
+
+        assertTrue(!caster.discovering, "went looking for screens for a link nobody vouched for")
+        assertTrue(cast.canCast(file("IMG_1.jpg", "image/jpeg")), "one failure took casting away")
+    }
+
     /** What a screen would be handed, which is the decision under test. */
     private suspend fun chosenFor(scope: TestScope, name: String, type: String): CastItem {
         val cast = controller(scope)

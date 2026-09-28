@@ -24,11 +24,11 @@ class Sharing(
     /** Whether this is worth offering at all, after what a server has answered. */
     val offered: Boolean get() = support.offered
 
-    /** False when the server does not honour the link, which is worth saying. */
-    suspend fun offer(target: DavResource, life: ShareLife): Boolean {
+    /** Anything but [LinkAnswer.Honoured] leaves the sheet closed, and is worth saying. */
+    suspend fun offer(target: DavResource, life: ShareLife): LinkAnswer {
         val link = links.link(target.path, target.isDirectory, life, now())
-        if (!support.honours(link)) return false
-        sheet.offer(link, target.name)
-        return true
+        val answer = support.honours(link)
+        if (answer == LinkAnswer.Honoured) sheet.offer(link, target.name)
+        return answer
     }
 }

@@ -4,6 +4,7 @@ import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
 import dev.stratus.core.net.stratusHttpClient
+import dev.stratus.core.share.LinkAnswer
 import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLife
 import dev.stratus.core.share.ShareLinks
@@ -128,7 +129,7 @@ class ShareConformanceTest {
         val support = LinkSupport(HttpClient(CIO) { followRedirects = false })
         val link = links.link("$root/$name", false, ShareLife.Forever, now())
 
-        assertTrue(support.honours(link), "the server refused a link this app had just signed")
+        assertEquals(LinkAnswer.Honoured, support.honours(link), "the server refused a link this app had just signed")
         assertTrue(support.offered)
     }
 
