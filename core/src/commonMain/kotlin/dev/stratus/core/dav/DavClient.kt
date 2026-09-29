@@ -15,6 +15,7 @@ import io.ktor.http.Url
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
+import dev.stratus.core.net.asTransfer
 import dev.stratus.core.net.sourceBody
 import kotlinx.io.RawSource
 
@@ -82,6 +83,7 @@ class DavClient(
         range: LongRange? = null,
         block: suspend (ByteReadChannel) -> T,
     ): T = http.prepareGet(url(path)) {
+        asTransfer()
         if (range != null) header(HttpHeaders.Range, "bytes=${range.first}-${range.last}")
     }.execute { response ->
         if (!response.status.isSuccess()) throw response.toError(path)
@@ -109,6 +111,7 @@ class DavClient(
     suspend fun put(path: String, size: Long, body: RawSource, contentType: String? = null): String? {
         val response = http.request(url(path)) {
             method = HttpMethod.Put
+            asTransfer()
             if (contentType != null) header(HttpHeaders.ContentType, contentType)
             setBody(sourceBody(size, body))
         }

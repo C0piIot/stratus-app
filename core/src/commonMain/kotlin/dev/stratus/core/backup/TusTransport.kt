@@ -1,5 +1,6 @@
 package dev.stratus.core.backup
 
+import dev.stratus.core.net.asTransfer
 import dev.stratus.core.net.originOf
 import dev.stratus.core.net.sourceBody
 import io.ktor.client.HttpClient
@@ -111,6 +112,7 @@ class TusTransport(
         val response = try {
             http.request(handle) {
                 method = HttpMethod.Patch
+                asTransfer()
                 header(TUS_VERSION_HEADER, TUS_VERSION)
                 header(UPLOAD_OFFSET, from.toString())
                 header(HttpHeaders.ContentType, OFFSET_OCTET_STREAM)
