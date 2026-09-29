@@ -3,6 +3,8 @@ package dev.stratus.core.backup
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.HttpTimeoutCapability
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -203,5 +205,24 @@ class NegotiateTusTest {
     fun aServerThatDoesNotAnswerAtAllIsNotAFailureEither() = runTest {
         val client = HttpClient(MockEngine { throw kotlinx.io.IOException("refused") })
         assertEquals(null, negotiateTus(client, "http://host/dav/"))
+    }
+
+    @Test
+    fun aPatchHasNoDeadline() = runTest {
+        // It carries the rest of the file, so it takes as long as that does; a
+        // stall is still ended by the socket timeout.
+        val transport = transport { request ->
+            when (request.method.value) {
+                "POST" -> HttpStatusCode.Created to headersOf("Location", "/tus/abc")
+                else -> HttpStatusCode.NoContent to headersOf("Upload-Offset", "10")
+            }
+        }
+        transport.send(target, null, ::bytes)
+
+        val patch = seen.first { it.method.value == "PATCH" }
+        assertEquals(
+            HttpTimeoutConfig.INFINITE_TIMEOUT_MS,
+            patch.getCapabilityOrNull(HttpTimeoutCapability)?.requestTimeoutMillis,
+        )
     }
 }

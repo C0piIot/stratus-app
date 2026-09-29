@@ -3,12 +3,15 @@ package dev.stratus.core.dav
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.HttpTimeoutCapability
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.Headers
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.Buffer
 import kotlinx.io.readByteArray
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -169,4 +172,21 @@ class DavClientTest {
         assertTrue(thrown is DavError.Unexpected, "was $thrown")
         assertEquals(500, thrown.status)
     }
+
+    @Test
+    fun aTransferHasNoDeadlineAndAListingDoes() = runTest {
+        // Twenty seconds for a whole request cut every upload longer than that,
+        // and a PUT cannot resume (STRATUS-BACKEND-3).
+        val client = clientAnswering(HttpStatusCode.Created)
+        client.put("/clip.mp4", 3, Buffer().apply { write(byteArrayOf(1, 2, 3)) })
+        assertEquals(HttpTimeoutConfig.INFINITE_TIMEOUT_MS, requestDeadline())
+
+        clientAnswering(body = "abc").read("/clip.mp4") { it.readRemaining() }
+        assertEquals(HttpTimeoutConfig.INFINITE_TIMEOUT_MS, requestDeadline())
+
+        clientAnswering(HttpStatusCode.MultiStatus, multistatus("/dav/")).list("/")
+        assertNull(requestDeadline(), "a listing lost the client's own deadline")
+    }
+
+    private fun requestDeadline() = lastRequest?.getCapabilityOrNull(HttpTimeoutCapability)?.requestTimeoutMillis
 }

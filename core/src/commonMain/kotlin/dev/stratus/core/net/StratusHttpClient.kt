@@ -3,7 +3,10 @@ package dev.stratus.core.net
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.plugins.timeout
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 
@@ -19,6 +22,8 @@ import io.ktor.http.HttpHeaders
  *
  * The timeouts are what make an unreachable host fail in seconds instead of
  * leaving somebody looking at a spinner wondering whether they typed it wrong.
+ * A transfer lifts the whole-request one with [asTransfer] and keeps the socket
+ * one, so a stalled upload still fails and a long one is not cut.
  */
 fun stratusHttpClient(engine: HttpClientEngine, credentials: Credentials?): HttpClient =
     HttpClient(engine) {
@@ -27,8 +32,16 @@ fun stratusHttpClient(engine: HttpClientEngine, credentials: Credentials?): Http
         install(HttpTimeout) {
             connectTimeoutMillis = 10_000
             requestTimeoutMillis = 20_000
+            socketTimeoutMillis = 20_000
         }
         if (credentials != null) {
             defaultRequest { header(HttpHeaders.Authorization, basicAuthHeader(credentials)) }
         }
     }
+
+/**
+ * No deadline for the request as a whole, because a file takes as long as it is
+ * big: twenty seconds cut every upload and download longer than that, and a PUT,
+ * which cannot resume, never finished at all (STRATUS-BACKEND-3).
+ */
+fun HttpRequestBuilder.asTransfer() = timeout { requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS }
