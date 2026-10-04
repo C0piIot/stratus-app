@@ -27,6 +27,26 @@
             </intent-filter>
         </activity>
 
+        <!-- What puts the library in the Files sidebar and in every picker
+             (stratus-app#104). Exported because DocumentsUI is another app,
+             and protected by MANAGE_DOCUMENTS so that DocumentsUI is the only
+             one that can bind to it: the permission is signature-level and
+             nothing else on a phone holds it. Grants are what let an app the
+             person picked a file in read it afterwards.
+
+             It is not a mount: nothing appears under /storage and
+             java.io.File never sees any of this. -->
+        <provider
+            android:name=".documents.StratusDocumentsProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
         <!-- Opening a file means handing it to another app, and a file:// URI has
              been refused since Android 7. This is the grant that replaces it. -->
         <provider

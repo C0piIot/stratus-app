@@ -6,6 +6,8 @@ import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
 import dev.stratus.core.net.stratusHttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.utils.io.readRemaining
+import kotlinx.io.readByteArray
 import kotlinx.coroutines.runBlocking
 import java.net.InetSocketAddress
 
@@ -57,6 +59,11 @@ object Stratus {
     }
 
     fun names(path: String): List<String> = runBlocking { dav.list(path).map { it.name } }
+
+    /** What a file holds, for checking what somebody else wrote into it. */
+    fun read(path: String): String = runBlocking {
+        dav.read(path) { it.readRemaining().readByteArray().decodeToString() }
+    }
 
     /**
      * Where the backup put a file with this original name, walking the year and

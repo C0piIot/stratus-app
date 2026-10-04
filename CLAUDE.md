@@ -74,6 +74,50 @@ transport by hand while production negotiates one. Both are the same mistake:
 do**, and what it does not prove is found by the emulator a quarter of an hour
 at a time. `transportFor` is out in the open for that reason.
 
+## The library as a storage location (stratus-app#104)
+
+Android puts a `DocumentsProvider` in the Files sidebar and in every picker,
+so any app can read from Stratus and save into it. It asks the server nothing
+WebDAV does not already answer, which is what keeps it on the right side of
+principle 1.
+
+**The shell is Android and the decisions are not.** `StratusDocumentsProvider`
+lives in `androidApp` -- it is the one piece that needs a drawable, and
+resources are not available in the multiplatform library -- and holds nothing
+but cursors, flags and descriptors. What a document id is, when a listing is
+asked for again and which verb each operation is are
+`dev.stratus.core.documents`, in common code, because a decision inside a
+`ContentProvider` is one only an emulator can check. It is the same split as
+`Backup` and `BackupWorker`, made for the same reason.
+
+Three things in it are easy to get wrong and are each written down where they
+are made:
+
+- **A listing answers from the cache and asks the server only when there is
+  nothing there.** Not when it looks old: a provider notifies and the system
+  queries again, so refetching on age would notify, be queried, refetch and
+  notify for ever. `refresh` and writes are what invalidate, because they are
+  the two moments something changed.
+- **A failed listing is said, not drawn as an empty folder.** They look
+  identical to whoever is looking, which is the same trap `BrowserController`
+  already carries a comment about.
+- **Flags are optimistic.** WebDAV cannot report who may write where, so a
+  button is offered and the refusal reported rather than a round trip spent
+  per row asking. Against a Stratus that is also what makes the generated
+  collections behave: a create under `photos/` fails where the server says so
+  rather than where this app guessed.
+
+`RangeReader` is the part worth reading twice. A picker hands another app a
+file descriptor and that app reads it like a local file, so **one request has
+to serve a run of sequential reads** -- the response is held open and only an
+offset that is not where the last read ended closes it and opens another. One
+request per four-kilobyte read would be worse than downloading the file. What
+it costs is a connection held open while the reader is idle, which is the
+right way round for a paused film.
+
+Writing is the other way round and has to be: whoever holds the descriptor
+seeks in it, so the bytes land in the cache first and go out on close.
+
 ## State, and what is the record
 
 **The server is the record of what has been backed up.** The local database is a

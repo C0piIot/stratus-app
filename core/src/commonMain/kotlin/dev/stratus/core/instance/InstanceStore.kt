@@ -11,7 +11,18 @@ import dev.stratus.core.store.SecureStore
  * stays exactly as narrow as it was -- "put this string somewhere safe and give
  * it back" -- whether there is one instance or nine.
  */
-class InstanceStore(private val secure: SecureStore) {
+class InstanceStore(
+    private val secure: SecureStore,
+    /**
+     * Told whenever the set of servers changes.
+     *
+     * For a platform that keeps a list of storage locations of its own:
+     * Android caches the roots a `DocumentsProvider` offers hard, so a server
+     * added or removed would not appear in Files until something made it ask
+     * again (stratus-app#104). A no-op everywhere else.
+     */
+    private val changed: suspend () -> Unit = {},
+) {
 
     suspend fun ids(): List<String> =
         secure.read(INDEX)?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
@@ -29,6 +40,7 @@ class InstanceStore(private val secure: SecureStore) {
             secure.write(INDEX, (ids() + instance.id).joinToString("\n"))
         }
         secure.write(CURRENT, instance.id)
+        changed()
     }
 
     /** Updates settings without touching the password, which it does not have. */
@@ -51,6 +63,7 @@ class InstanceStore(private val secure: SecureStore) {
             val next = ids().firstOrNull { it != id }
             if (next == null) secure.delete(CURRENT) else secure.write(CURRENT, next)
         }
+        changed()
     }
 
     suspend fun currentId(): String? = secure.read(CURRENT)
