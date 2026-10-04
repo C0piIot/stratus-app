@@ -61,18 +61,21 @@ Worth knowing before judging the app for it:
 
 ## In Files, and in every picker
 
-On Android the library is a **storage location**: it appears in the sidebar of
-the Files app and in every `ACTION_OPEN_DOCUMENT` picker, beside Drive and
-whatever else is installed. One entry per server you have signed in to. From
-there any app can open a file out of Stratus, save one into it, and make,
-rename and delete folders — without knowing that Stratus exists.
+On both platforms the library is a **storage location**: it appears in the
+sidebar of the Files app and in every picker, beside Drive and whatever else
+is installed. One entry per server you have signed in to. From there any app
+can open a file out of Stratus, save one into it, and make, rename and delete
+folders — without knowing that Stratus exists.
 
-A film opens by the part you watch rather than by downloading it first: reads
-go out as HTTP ranges, and a run of them shares one request.
+On Android a film opens by the part you watch rather than by downloading it
+first: reads go out as HTTP ranges, and a run of them shares one request. iOS
+materialises a file whole, which is what its File Provider asks for.
 
 **It is not a mount.** Nothing appears under `/storage`, and an app that
 insists on a real file path will not see any of this. What is promised is the
-apps that use the system picker, which is most of them.
+apps that use the system picker, which is most of them. Neither side
+synchronises: there is no local copy of the tree, no offline editing and no
+conflict resolution — they read when they are asked.
 
 Nothing is asked of the server that WebDAV does not already answer, so it works
 against any WebDAV server. The one Stratus-specific touch is the picture beside

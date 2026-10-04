@@ -118,6 +118,38 @@ right way round for a paused film.
 Writing is the other way round and has to be: whoever holds the descriptor
 seeks in it, so the bytes land in the cache first and go out on close.
 
+**iOS gets the same thing through a File Provider extension** (stratus-app#105),
+and the split paid for itself: `DocumentTree` came over whole and the only
+thing it was missing was the `ETag`, which Android had no use for and an item
+version is. What is new on that side is a bridge, `IosDocuments`, deliberately
+thicker than the Android one -- callbacks rather than suspend functions, plain
+lists rather than a sealed `Listing` -- because every line of Swift costs a Mac
+and this compiles on the ordinary runner in ninety seconds.
+
+Three decisions in it are worth keeping:
+
+- **Non-replicated**, so `NSFileProviderExtension` and not the iOS 16
+  replicated one. That one is a sync engine: the system keeps its own copy of
+  the tree and advances it by anchors, and WebDAV has no change feed to
+  advance one from -- every anchor would be a PROPFIND re-walked and diffed.
+  This reads through, like Android. Apple pushes the other way for new work,
+  so this is knowingly something that gets rewritten one day; what it buys is
+  having it now.
+- **A domain per server**, registered from the same `InstanceStore` hook that
+  tells Android its roots changed. A domain is named by the instance id, which
+  *is* that server's root document, so the extension reads the root container
+  off the domain it was asked in with nothing to look up.
+- **The keychain needs an access group**, or the app and the extension see
+  different ones and the provider finds no servers at all. It is built from
+  `$(AppIdentifierPrefix)` in each target's Info.plist, because a group
+  carries the team prefix and only the build knows it. **The simulator does
+  not enforce access groups**, so that part looks right there whatever it
+  says, and only a device proves it -- which waits on stratus-app#5.
+
+What neither platform promises is synchronisation: no local copy of the tree,
+no offline edits, no conflict resolution. Both are clients that read when they
+are asked.
+
 ## State, and what is the record
 
 **The server is the record of what has been backed up.** The local database is a
