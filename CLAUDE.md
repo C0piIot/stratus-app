@@ -55,6 +55,25 @@ success or failure the system can report later. A protocol that needed a live
 connection held open across chunks would be unimplementable on iOS, however
 elegant it looked on paper.
 
+**A tus upload names the file the same way browsing does**, and that took a
+server change to be true (stratus-backend#285). tus carries the name as
+metadata, with no prefix in front of it to say what it is relative to, so the
+server has to decide: it is a path from the origin, like every URL there since
+#279. The app therefore translates nothing — it uploads the path it browses,
+`files/phone_backup/2026/10/…`, and that is the point. The alternative on the
+table was stripping the collection here, the way `ShareLinks` strips it before
+signing, and it was refused because it would have left one upload holding two
+coordinate systems: the folders made over WebDAV in one and the bytes sent
+over tus in the other.
+
+**The lesson that cost the most is about the suites, not the protocol.** This
+went unnoticed because the conformance tests rooted their client at `/files/`
+while the app roots itself at the origin, and because each of them named a
+transport by hand while production negotiates one. Both are the same mistake:
+**a suite set up differently from the app proves something the app does not
+do**, and what it does not prove is found by the emulator a quarter of an hour
+at a time. `transportFor` is out in the open for that reason.
+
 ## State, and what is the record
 
 **The server is the record of what has been backed up.** The local database is a

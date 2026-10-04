@@ -61,3 +61,30 @@ interface Transport {
         open: suspend (from: Long) -> RawSource,
     ): UploadOutcome
 }
+
+/**
+ * tus where the server offers it, `PUT` where it does not.
+ *
+ * Asked every pass rather than remembered: a server that gains tus tomorrow
+ * should be used tomorrow, and there is nothing to invalidate.
+ *
+ * Out here rather than inside `Backup` because **which way a photograph goes
+ * is a decision**, and a decision that only the composition root can build is
+ * one no test reaches. It cost this: every conformance suite named a
+ * transport by hand, so the combination production actually takes -- the base
+ * at the origin, the path browsed, tus negotiated -- was proved by nothing
+ * faster than an emulator (stratus-backend#285).
+ *
+ * [baseUrl] is only read for its origin: the tus endpoint is a sibling of the
+ * tree rather than a corner of it.
+ */
+suspend fun transportFor(connection: Connection, baseUrl: String): Transport =
+    negotiateTus(connection.http, baseUrl)
+        ?.let { endpoint ->
+            // tus reports no ETag, and the ETag is what makes a later check a
+            // real check. One request per file buys it back.
+            TusTransport(connection.http, endpoint) { path ->
+                runCatching { connection.dav.stat(path).etag }.getOrNull()
+            }
+        }
+        ?: PutTransport(connection.dav)

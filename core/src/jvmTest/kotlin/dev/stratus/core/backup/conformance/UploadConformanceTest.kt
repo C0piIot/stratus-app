@@ -5,11 +5,15 @@ import dev.stratus.core.backup.Asset
 import dev.stratus.core.backup.AssetPart
 import dev.stratus.core.backup.AssetSource
 import dev.stratus.core.backup.BackupDatabase
+import dev.stratus.core.backup.Connection
 import dev.stratus.core.backup.MediaAccess
 import dev.stratus.core.backup.MediaSource
 import dev.stratus.core.backup.utcMillis
 import dev.stratus.core.backup.DavDirectoryMaker
 import dev.stratus.core.backup.PutTransport
+import dev.stratus.core.backup.Transport
+import dev.stratus.core.backup.TusTransport
+import dev.stratus.core.backup.transportFor
 import dev.stratus.core.backup.QueueStep
 import dev.stratus.core.backup.RemoteLayout
 import dev.stratus.core.backup.UploadQueue
@@ -68,14 +72,19 @@ class UploadConformanceTest {
             Buffer().apply { write(bytes, from.toInt(), bytes.size) }
     }
 
-    private suspend fun queueFor(id: String, dav: DavClient, layout: RemoteLayout = this.layout): UploadQueue {
+    private suspend fun queueFor(
+        id: String,
+        dav: DavClient,
+        layout: RemoteLayout = this.layout,
+        transport: Transport = PutTransport(dav),
+    ): UploadQueue {
         database.migrate()
         return UploadQueue(
             layout = layout,
             pending = database.pendingFor(id),
             cache = database.cacheFor(id),
             source = source,
-            transport = PutTransport(dav),
+            transport = transport,
             directories = DavDirectoryMaker(dav),
         )
     }
@@ -108,16 +117,26 @@ class UploadConformanceTest {
     }
 
     /**
-     * The configuration the app actually ships: the base is the origin and the
-     * root is `files/<something>`, two segments of which the first is the
-     * server's own. Everything else here roots the client at the writable tree
-     * and so cannot see what that costs.
+     * The configuration the app actually ships, and the only test here that
+     * has it whole: the base is the origin, the root is `files/<something>`
+     * of which the first segment is the server's own, and **the transport is
+     * the negotiated one** rather than a name written into the test.
+     *
+     * That last part is what was missing. Every other case here says
+     * `PutTransport`, so the path a photograph really takes -- tus, carrying
+     * the path the client browses -- was proved by nothing faster than the
+     * emulator, and stratus-backend#285 reached it there (three rounds of
+     * fifteen minutes) instead of here (thirty seconds).
      */
     @Test
     fun backsUpWithTheDefaultRootAgainstTheOrigin() = runTest {
-        val fromOrigin = davAt(originOf(requireNotNull(System.getenv("STRATUS_TEST_URL"))))
+        val origin = originOf(requireNotNull(System.getenv("STRATUS_TEST_URL")))
+        val fromOrigin = davAt(origin)
         val root = "files/phone_backup-${Random.nextLong().toULong().toString(16)}"
-        val queue = queueFor("origin-rooted", fromOrigin, RemoteLayout(root))
+        val transport = transportFor(Connection(stratusHttpClient(CIO.create(), credentials), fromOrigin), origin)
+        assertTrue(transport is TusTransport, "this server offers tus, so a pass should have taken it")
+
+        val queue = queueFor("origin-rooted", fromOrigin, RemoteLayout(root), transport)
 
         assertEquals(1, queue.enqueue(listOf(asset)))
         val steps = drain(queue)
