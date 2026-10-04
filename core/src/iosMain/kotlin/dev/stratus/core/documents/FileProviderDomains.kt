@@ -26,7 +26,7 @@ internal fun refreshDomains(roots: List<DocumentRoot>) {
 
         for (domain in have) {
             if (domain.identifier !in wanted) {
-                NSFileProviderManager.removeDomain(domain, null)
+                NSFileProviderManager.removeDomain(domain) { }
             }
         }
         for ((id, root) in wanted) {
@@ -40,8 +40,7 @@ internal fun refreshDomains(roots: List<DocumentRoot>) {
                         displayName = root.summary,
                         pathRelativeToDocumentStorage = id,
                     ),
-                    null,
-                )
+                ) { }
             }
         }
     }
