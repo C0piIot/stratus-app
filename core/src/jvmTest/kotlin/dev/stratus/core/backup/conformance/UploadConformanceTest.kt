@@ -15,6 +15,7 @@ import dev.stratus.core.backup.RemoteLayout
 import dev.stratus.core.backup.UploadQueue
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.net.Credentials
+import dev.stratus.core.net.originOf
 import dev.stratus.core.net.stratusHttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.utils.io.readRemaining
@@ -85,6 +86,25 @@ class UploadConformanceTest {
             add(step)
             if (step is QueueStep.Idle) return@buildList
         }
+    }
+
+    /**
+     * The shape production actually has since stratus-backend#279: the base is
+     * the origin and the backup root is `files/<something>`, so the first
+     * segment of every path is a collection the server made and a subtree its
+     * router owns. Asking to create that one answers neither 201 nor 405, and
+     * a maker that asked died on a folder that was plainly there.
+     */
+    @Test
+    fun makesTheMonthUnderTheServersOwnCollectionWithoutTryingToMakeIt() = runTest {
+        val fromOrigin = davAt(originOf(requireNotNull(System.getenv("STRATUS_TEST_URL"))))
+        val month = "/files/upload-${Random.nextLong().toULong().toString(16)}/2026/10/"
+
+        DavDirectoryMaker(fromOrigin).ensure(month)
+        assertTrue(fromOrigin.stat(month).isDirectory, "the month was not made")
+
+        // And again, which is every photograph after the first one.
+        DavDirectoryMaker(fromOrigin).ensure(month)
     }
 
     @Test

@@ -55,7 +55,7 @@ class TusConformanceTest {
     private suspend fun folderExists() {
         try {
             dav.makeCollection(folder)
-        } catch (_: DavError.Conflict) {
+        } catch (_: DavError.AlreadyExists) {
             // Already there.
         }
     }

@@ -144,15 +144,17 @@ class DavClient(
     }
 
     /**
-     * Creates a collection. A path that is already taken answers 405, which is
-     * translated here because "method not allowed" describes the wire and not
-     * what happened.
+     * Creates a collection.
+     *
+     * The two refusals are kept apart, and RFC 4918 9.3.1 is what keeps them
+     * so: 405 is "MKCOL can only be executed on an unmapped URL", meaning it
+     * is already there, and 409 is a parent that does not exist. Only the
+     * second one is work. Translated here because "method not allowed"
+     * describes the wire rather than what happened.
      */
     suspend fun makeCollection(path: String) {
         val response = http.request(url(path)) { method = MKCOL }
-        if (response.status.value == 405) {
-            throw DavError.Conflict(path, "something is already there")
-        }
+        if (response.status.value == 405) throw DavError.AlreadyExists(path)
         if (!response.status.isSuccess()) throw response.toError(path)
     }
 

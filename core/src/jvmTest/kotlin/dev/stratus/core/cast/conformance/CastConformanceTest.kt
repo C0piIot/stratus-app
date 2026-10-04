@@ -62,7 +62,7 @@ class CastConformanceTest {
     fun aHeicIsFetchedAsAJpegBySomethingWithNoAccount() = runTest {
         try {
             dav.makeCollection(root)
-        } catch (_: DavError.Conflict) {
+        } catch (_: DavError.AlreadyExists) {
             // Already there.
         }
         dav.put("$root/IMG_1.HEIC", Base64.decode(TINY_HEIC))
@@ -94,7 +94,7 @@ class CastConformanceTest {
     fun aFilmIsFetchedAsHlsBySomethingWithNoAccount() = runTest {
         try {
             dav.makeCollection(root)
-        } catch (_: DavError.Conflict) {
+        } catch (_: DavError.AlreadyExists) {
             // Already there.
         }
         val film = requireNotNull(javaClass.getResourceAsStream("/film.mkv")).readBytes()

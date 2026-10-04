@@ -68,7 +68,7 @@ class ShareConformanceTest {
     private suspend fun given() {
         try {
             dav.makeCollection(root)
-        } catch (_: DavError.Conflict) {
+        } catch (_: DavError.AlreadyExists) {
             // Already there.
         }
         dav.put("$root/$name", contents.encodeToByteArray())

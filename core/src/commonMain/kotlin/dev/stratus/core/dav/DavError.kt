@@ -28,6 +28,17 @@ sealed class DavError(message: String) : Exception(message) {
     class MethodNotAllowed(val path: String) : DavError("not allowed here: $path")
 
     /**
+     * There is already something at that path.
+     *
+     * Its own case and not a [Conflict], because the difference is what the
+     * caller does next: a `MKCOL` answered 405 has nothing left to do, and the
+     * same call answered 409 has a parent to make first. One flattened into
+     * the other sends a directory maker walking up a tree it has no business
+     * creating.
+     */
+    class AlreadyExists(val path: String) : DavError("already there: $path")
+
+    /**
      * The request cannot apply to the tree as it stands.
      *
      * One status covering two genuinely different situations, and the server

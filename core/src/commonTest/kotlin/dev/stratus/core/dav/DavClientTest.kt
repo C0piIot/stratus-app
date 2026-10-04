@@ -178,10 +178,19 @@ class DavClientTest {
     }
 
     @Test
-    fun makingACollectionThatExistsIsAConflictAndNotAMethodProblem() = runTest {
-        val client = clientAnswering(HttpStatusCode.MethodNotAllowed)
-        val thrown = runCatching { client.makeCollection("/Photos") }.exceptionOrNull()
-        assertTrue(thrown is DavError.Conflict, "was $thrown")
+    fun theTwoWaysAMkcolIsRefusedAreTwoErrors() = runTest {
+        // RFC 4918 9.3.1: 405 is "already there" and 409 is a missing parent.
+        // One flattened into the other is what sent the directory maker up a
+        // tree it had no business creating.
+        val taken = clientAnswering(HttpStatusCode.MethodNotAllowed)
+        assertTrue(
+            runCatching { taken.makeCollection("/Photos") }.exceptionOrNull() is DavError.AlreadyExists,
+        )
+
+        val orphan = clientAnswering(HttpStatusCode.Conflict, "no such parent")
+        assertTrue(
+            runCatching { orphan.makeCollection("/a/b") }.exceptionOrNull() is DavError.Conflict,
+        )
     }
 
     @Test

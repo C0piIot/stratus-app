@@ -180,6 +180,13 @@ class DavConformanceTest {
     fun refusesToCreateACollectionOverSomethingThatExists() = runTest {
         givenRoot()
         val thrown = runCatching { dav.makeCollection(root) }.exceptionOrNull()
+        assertTrue(thrown is DavError.AlreadyExists, "was $thrown")
+    }
+
+    @Test
+    fun aMissingParentIsADifferentRefusalFromAnOccupiedName() = runTest {
+        givenRoot()
+        val thrown = runCatching { dav.makeCollection("$root/no-such-dir/deep") }.exceptionOrNull()
         assertTrue(thrown is DavError.Conflict, "was $thrown")
     }
 

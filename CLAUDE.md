@@ -87,6 +87,17 @@ rows. So `list` asks with the slash and `stat` does not, since there a slash
 would name something else. Following the redirect instead would be a second
 round trip for every folder anybody opens.
 
+**The same move split the two ways a `MKCOL` is refused.** RFC 4918 9.3.1 has
+405 for a path that is already a collection and 409 for one whose parent is
+not, and this client used to flatten both into one error -- so the directory
+maker walked down from the top creating every segment of a path and treating
+any refusal as "already there". With the base at the origin the first of those
+segments is the server's own `files/`, a subtree its router owns, and the
+answer there is a redirect: neither success nor a 405, so a backup died on a
+folder that was plainly there. Now the month is asked for first and only a 409
+climbs a level, which is **one request in the ordinary case instead of one per
+segment** and never asks to create what was never ours.
+
 That gives two requirements on how files are named and checked:
 
 - **A deterministic remote path**, so that "is this already uploaded?" is a

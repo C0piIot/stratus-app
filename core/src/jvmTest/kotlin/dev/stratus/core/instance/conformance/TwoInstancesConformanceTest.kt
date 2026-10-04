@@ -56,7 +56,7 @@ class TwoInstancesConformanceTest {
             at += "/$part"
             try {
                 dav.makeCollection(at)
-            } catch (_: DavError.Conflict) {
+            } catch (_: DavError.AlreadyExists) {
                 // Already there.
             }
         }

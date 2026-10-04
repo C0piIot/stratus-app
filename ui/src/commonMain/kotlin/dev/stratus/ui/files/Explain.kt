@@ -39,6 +39,7 @@ private fun describe(error: DavError): String = when (error) {
     is DavError.Forbidden -> "Not allowed."
     is DavError.NotFound -> "That is no longer there."
     is DavError.MethodNotAllowed -> "The server does not allow that here."
+    is DavError.AlreadyExists -> "There is already something there."
     is DavError.Conflict -> "The server refused: ${error.detail}"
     is DavError.PreconditionFailed -> "Something else changed it first."
     is DavError.Malformed -> "The server's answer could not be read."
