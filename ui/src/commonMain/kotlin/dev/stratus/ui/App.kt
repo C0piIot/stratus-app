@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
@@ -51,7 +52,14 @@ fun App(
     /** Asks the system for these permissions, in one request; null where nothing can ask yet. */
     onAsk: ((Set<Ask>) -> Unit)? = null,
 ) {
-    val scope = rememberCoroutineScope()
+    // Pinned to the main thread rather than left on the composition's own
+    // dispatcher. A controller publishes state a screen reads, and a snapshot
+    // written off the main thread is applied there -- which under the test
+    // clock means the recomposition runs there too, and a composition on a
+    // worker thread either builds a Dialog it cannot build or leaves the slot
+    // table torn (stratus-app#85). Publishing UI state on the UI thread is
+    // the right shape regardless of who is driving the clock.
+    val scope = rememberCoroutineScope { Dispatchers.Main.immediate }
     val signIn = remember { container.signIn(scope) }
     val state by signIn.state.collectAsState()
     val editing by signIn.editing.collectAsState()
@@ -121,7 +129,8 @@ private fun SignedIn(
     onEdit: (String) -> Unit,
     onInstancesChanged: suspend () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
+    // The main thread, for the reason the other one says.
+    val scope = rememberCoroutineScope { Dispatchers.Main.immediate }
     val signedIn = remember {
         container.signedIn(onAsk) { on -> if (on) CrashReports.start() else CrashReports.stop() }
     }
