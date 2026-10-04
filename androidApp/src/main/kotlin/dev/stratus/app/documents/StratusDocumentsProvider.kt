@@ -105,7 +105,7 @@ class StratusDocumentsProvider : DocumentsProvider() {
         val row = runBlocking { tree.one(DocumentRef.parse(documentId)) }
             ?: throw FileNotFoundException(documentId)
         val cursor = MatrixCursor(projection ?: DOCUMENT_COLUMNS)
-        cursor.add(row)
+        cursor.put(row)
         return cursor
     }
 
@@ -134,7 +134,7 @@ class StratusDocumentsProvider : DocumentsProvider() {
             override fun getExtras(): Bundle = extras
         }
         cursor.setNotificationUri(app.contentResolver, childrenUri(ref))
-        if (listing is Listing.Loaded) listing.rows.forEach(cursor::add)
+        if (listing is Listing.Loaded) listing.rows.forEach(cursor::put)
         return cursor
     }
 
@@ -255,7 +255,7 @@ class StratusDocumentsProvider : DocumentsProvider() {
     private fun childrenUri(ref: DocumentRef): Uri =
         DocumentsContract.buildChildDocumentsUri(authority, ref.id)
 
-    private fun MatrixCursor.add(row: DocumentRow) {
+    private fun MatrixCursor.put(row: DocumentRow) {
         newRow()
             .add(Document.COLUMN_DOCUMENT_ID, row.ref.id)
             .add(Document.COLUMN_DISPLAY_NAME, row.name)
