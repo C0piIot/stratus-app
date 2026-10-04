@@ -8,6 +8,8 @@ import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import android.os.SystemClock
+import java.net.Socket
 import androidx.test.uiautomator.Until
 
 /** What the phone does outside the app: permissions, the camera roll, the shell. */
@@ -16,6 +18,9 @@ object Phone {
     val device: UiDevice = UiDevice.getInstance(instrumentation)
     val context = instrumentation.targetContext
     private val app = context.packageName
+
+    /** Long enough for a radio on a loaded emulator, short enough to be a failure. */
+    private const val SETTLE_MS = 30_000L
 
     val photoPermissions = arrayOf(
         Manifest.permission.READ_MEDIA_IMAGES,
@@ -93,11 +98,36 @@ object Phone {
         device.wait(Until.hasObject(By.pkg(app).depth(0)), 5_000)
     }
 
+    /**
+     * Turns the radio off or on, and **waits for the thing that matters
+     * rather than for a number** (stratus-app#114).
+     *
+     * This slept three flat seconds, which on a loaded emulator is not always
+     * enough coming back -- and the cost landed on the next test, whose proxy
+     * could not reach the server and died in its `@Before` blaming a change
+     * that had nothing to do with it. It is the rule `scripts/e2e.sh` already
+     * follows for the backend: ask for the answer, not for the clock.
+     *
+     * It is also quicker in the ordinary case, where the radio is already in
+     * the state asked for and the first check returns.
+     */
     fun airplane(on: Boolean) {
         shell("cmd connectivity airplane-mode ${if (on) "enable" else "disable"}")
-        // Radios take a moment either way; what matters is that it settles.
-        Thread.sleep(3_000)
+        val deadline = SystemClock.uptimeMillis() + SETTLE_MS
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (serverIsReachable() != on) return
+            Thread.sleep(250)
+        }
+        // Said here rather than left for whoever runs next, which is the whole
+        // point of the change.
+        throw AssertionError("the radio did not ${if (on) "go off" else "come back"} within ${SETTLE_MS}ms")
     }
+
+    /** Whether the backend answers at all, which is what "the network is back" means here. */
+    private fun serverIsReachable(): Boolean = runCatching {
+        Socket().use { it.connect(Stratus.upstream, 1_000) }
+        true
+    }.getOrDefault(false)
 
     /**
      * A photograph in the camera roll, taken [takenMillis], in a folder of its
