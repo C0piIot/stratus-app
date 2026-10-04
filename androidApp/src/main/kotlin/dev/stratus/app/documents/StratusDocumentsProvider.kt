@@ -134,7 +134,9 @@ class StratusDocumentsProvider : DocumentsProvider() {
             override fun getExtras(): Bundle = extras
         }
         cursor.setNotificationUri(app.contentResolver, childrenUri(ref))
-        if (listing is Listing.Loaded) listing.rows.forEach(cursor::put)
+        // A call and not a reference: Kotlin forbids referencing a name that
+        // is a member and an extension at once, which `put` on a cursor is.
+        if (listing is Listing.Loaded) listing.rows.forEach { cursor.put(it) }
         return cursor
     }
 
