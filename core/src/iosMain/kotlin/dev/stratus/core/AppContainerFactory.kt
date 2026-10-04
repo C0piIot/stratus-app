@@ -3,6 +3,9 @@ package dev.stratus.core
 import dev.stratus.core.backup.IosAssetSource
 import dev.stratus.core.files.IosFileHandoff
 import dev.stratus.core.net.darwinTrust
+import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.documents.rootOf
+import dev.stratus.core.documents.refreshDomains
 import dev.stratus.core.cast.NoCaster
 import dev.stratus.core.share.IosLinkSharing
 import dev.stratus.core.store.KeychainSecureStore
@@ -21,9 +24,23 @@ import platform.Foundation.NSUserDomainMask
  * what somebody has vouched for. See [darwinTrust] for the two places the
  * platform forces a different shape.
  */
-fun appContainer(): AppContainer = AppContainer(
+fun appContainer(): AppContainer = container(registersDomains = false)
+
+/**
+ * The app's own, which is the one that keeps the Files locations in step
+ * (stratus-app#105).
+ *
+ * Apart from [appContainer] because the File Provider extension builds one
+ * too, and an extension has no business registering domains -- it is the
+ * thing inside them.
+ */
+fun hostAppContainer(): AppContainer = container(registersDomains = true)
+
+private fun container(registersDomains: Boolean): AppContainer {
+    val secure = KeychainSecureStore(accessGroup = sharedKeychainGroup())
+    return AppContainer(
     engine = { policy -> Darwin.create { handleChallenge(darwinTrust(policy)) } },
-    secure = KeychainSecureStore(accessGroup = sharedKeychainGroup()),
+    secure = secure,
     handoff = IosFileHandoff(),
     sharing = IosLinkSharing(),
     // No Cast sender here: Google's iOS SDK is a proprietary binary framework
@@ -33,7 +50,14 @@ fun appContainer(): AppContainer = AppContainer(
     caster = NoCaster(),
     databasePath = databasePath(),
     assets = IosAssetSource(),
-)
+    // A store of its own rather than the container's, which does not exist
+    // yet here. It is a view of the keychain and holds nothing, so a second
+    // one costs nothing either.
+    serversChanged = {
+        if (registersDomains) refreshDomains(InstanceStore(secure).all().map(::rootOf))
+    },
+    )
+}
 
 /**
  * The keychain group the app and its File Provider extension share

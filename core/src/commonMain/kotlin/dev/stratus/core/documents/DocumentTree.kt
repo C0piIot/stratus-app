@@ -35,6 +35,20 @@ data class DocumentRoot(
     val document get() = DocumentRef(instanceId, "")
 }
 
+/**
+ * One server as a root, which is a row in a picker's sidebar on Android and a
+ * File Provider domain on iOS (stratus-app#104, #105).
+ *
+ * Out here rather than inside [DocumentTree] because the iOS half registers
+ * domains from the composition root, where there is no tree yet, and the two
+ * must not disagree about what a server is called.
+ */
+fun rootOf(instance: Instance) = DocumentRoot(
+    instanceId = instance.id,
+    title = "Stratus",
+    summary = originOf(instance.baseUrl).substringAfter("://"),
+)
+
 /** One row of a listing. */
 data class DocumentRow(
     val ref: DocumentRef,
@@ -94,9 +108,7 @@ class DocumentTree(
     private val fetching = mutableMapOf<DocumentRef, Job>()
 
     /** One per server somebody has signed in to. Empty is a legitimate answer. */
-    suspend fun roots(): List<DocumentRoot> = instances.all().map {
-        DocumentRoot(instanceId = it.id, title = TITLE, summary = summaryOf(it))
-    }
+    suspend fun roots(): List<DocumentRoot> = instances.all().map(::rootOf)
 
     /**
      * What is in a folder, and a fetch started if nobody has asked before.
@@ -246,9 +258,6 @@ class DocumentTree(
         }.getOrNull()
     }
 
-    /** What the platform shows when it has nowhere else to say it. */
-    fun summaryOf(instance: Instance): String = originOf(instance.baseUrl).substringAfter("://")
-
     private suspend fun invalidate(ref: DocumentRef) {
         lock.withLock {
             listings[ref] = Listing.Loading
@@ -288,7 +297,7 @@ class DocumentTree(
 
     private suspend fun rootRow(ref: DocumentRef): DocumentRow? {
         val instance = instances.instance(ref.instanceId) ?: return null
-        return DocumentRow(ref, summaryOf(instance), isDirectory = true, null, MIME_DIRECTORY, null)
+        return DocumentRow(ref, rootOf(instance).summary, isDirectory = true, null, MIME_DIRECTORY, null)
     }
 
     private fun rowOf(instanceId: String, entry: DavResource): DocumentRow {
@@ -311,7 +320,6 @@ class DocumentTree(
         /** Android's own name for a folder, which the picker matches on exactly. */
         const val MIME_DIRECTORY = "vnd.android.document/directory"
 
-        private const val TITLE = "Stratus"
         private const val CHUNK = 64L * 1024
     }
 }
