@@ -288,8 +288,27 @@ it and a user. Three rules follow, each with a test:
 The Android trust manager is plain JDK code, so it lives in a `jvmCommon` source
 set and the fast loop proves it against a committed self-signed certificate --
 no private key in the repository and no TLS server in the test, because what is
-under test is the decision rather than the handshake. iOS is stratus-app#58 and
-until then behaves as it always has.
+under test is the decision rather than the handshake.
+
+**The Darwin half keeps that order and differs twice, both times because the
+platform forces it** (stratus-app#58). It **records rather than throws**:
+nothing can be thrown across the `URLSession` boundary, so a certificate the
+system refused goes into the policy's sink and the challenge is cancelled, and
+what reaches `DavProber` is an ordinary connection failure with the sink
+already filled -- which is exactly what its `catch` reads. And it needs no twin
+of the hostname verifier, because `SecTrustEvaluateWithError` evaluates against
+the protection space's own policy, name included, so the third rule above holds
+in one place instead of two.
+
+**Its test is the one thing in this project that needs a Mac**, and that is
+why it exists rather than a fake: there is no honest way to build an
+`NSURLAuthenticationChallenge`, so the macOS job raises an `openssl s_server`
+with a certificate nothing vouches for and the simulator signs in to it
+through the real prober -- unpinned is a question, pinned gets through, and
+somebody else's fingerprint opens nothing. It is selected by the same
+`*.conformance.*` filter the JVM suites use, so `make test` stays offline, and
+its address reaches the test binary through the task rather than the ambient
+environment, because `simctl` passes nothing through on its own.
 
 Two properties hold around that, and both have tests. Nothing carrying a password
 goes out over http before consent -- the probe that precedes it is anonymous, so

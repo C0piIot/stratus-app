@@ -275,6 +275,42 @@ jobs:
       - name: Run the shared tests on a simulator
         run: ./gradlew --no-daemon :core:iosSimulatorArm64Test
 
+      # The one test in this project that needs a Mac, and the reason the
+      # macOS runner earns its keep beyond compiling: a real TLS handshake
+      # against a certificate nothing vouches for, which is the only way to
+      # exercise an NSURLAuthenticationChallenge (stratus-app#58). The
+      # simulator shares this machine's network, so localhost is this server.
+      - name: Accepting a self-signed certificate, against one
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$dir/key.pem" -out "$dir/cert.pem" \
+            -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost"
+
+          # The same spelling fingerprintOf produces: SHA-256 of the DER, in
+          # lowercase hex pairs.
+          fingerprint="$(openssl x509 -in "$dir/cert.pem" -outform DER |
+            openssl dgst -sha256 -hex | sed 's/^.*= //' |
+            sed 's/\(..\)/\1:/g; s/:$//' | tr 'A-Z' 'a-z')"
+
+          openssl s_server -quiet -www -accept 18443 \
+            -cert "$dir/cert.pem" -key "$dir/key.pem" &
+          echo "$!" > "$dir/pid"
+          for _ in $(seq 60); do
+            if nc -z 127.0.0.1 18443; then break; fi
+            sleep 0.5
+          done
+
+          set +e
+          STRATUS_TLS_URL="https://localhost:18443/" \
+          STRATUS_TLS_FINGERPRINT="$fingerprint" \
+            ./gradlew --no-daemon :core:iosSimulatorArm64Test -Pconformance
+          status=$?
+          set -e
+          kill "$(cat "$dir/pid")" 2>/dev/null || true
+          exit $status
+
       - name: Link the framework Xcode embeds
         run: ./gradlew --no-daemon :ui:linkDebugFrameworkIosSimulatorArm64
         env:

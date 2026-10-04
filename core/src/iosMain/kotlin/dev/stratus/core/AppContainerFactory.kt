@@ -2,6 +2,7 @@ package dev.stratus.core
 
 import dev.stratus.core.backup.IosAssetSource
 import dev.stratus.core.files.IosFileHandoff
+import dev.stratus.core.net.darwinTrust
 import dev.stratus.core.cast.NoCaster
 import dev.stratus.core.share.IosLinkSharing
 import dev.stratus.core.store.KeychainSecureStore
@@ -14,13 +15,13 @@ import platform.Foundation.NSUserDomainMask
 /**
  * See the Android twin.
  *
- * The trust policy is ignored here, which is the honest state of it: the Darwin
- * half of accepting a self-signed certificate is stratus-app#58. Until then iOS
- * behaves as it always has -- a certificate nothing vouches for is a server that
- * cannot be reached -- rather than pretending to offer a choice it cannot make.
+ * The trust policy is honoured here as it is there (stratus-app#58): the
+ * system judges first, and only a certificate it refused is compared against
+ * what somebody has vouched for. See [darwinTrust] for the two places the
+ * platform forces a different shape.
  */
 fun appContainer(): AppContainer = AppContainer(
-    engine = { _ -> Darwin.create() },
+    engine = { policy -> Darwin.create { handleChallenge(darwinTrust(policy)) } },
     secure = KeychainSecureStore(),
     handoff = IosFileHandoff(),
     sharing = IosLinkSharing(),

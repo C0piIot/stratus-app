@@ -53,6 +53,11 @@ Worth knowing before judging the app for it:
   still interfere.
 - **Originals are uploaded as they are**, including HEIC and Live Photos. A
   backup that transcodes is not a backup.
+- **A certificate nothing vouches for is a question, on both platforms.** Most
+  self-hosted servers present one, so the app shows you its fingerprint and
+  asks — once, for that address. What it will not do is accept it quietly:
+  the system's own validation runs first and unchanged, and only what it
+  refused is compared against what you vouched for.
 
 ## In Files, and in every picker
 
