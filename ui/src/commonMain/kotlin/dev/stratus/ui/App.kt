@@ -216,15 +216,26 @@ private fun SignedIn(
         }
 
         is Screen.Browser -> {
-            val open = browser ?: return
-            Column {
-                BackupStrip(state.overall) { screen = Screen.Backup }
-                BrowserScreen(
-                    open,
-                    cast,
-                    onOpenServers = { screen = Screen.Servers },
-                    onEditServer = { state.currentId?.let(onEdit) },
-                )
+            // A condition and not `?: return`, which is what this was.
+            //
+            // An early return out of a composable is legal and the compiler
+            // balances the groups for it, but this one leaves and re-enters a
+            // branch holding two `SubcomposeLayout`s -- a Scaffold and a lazy
+            // list -- every time the controller is rebuilt, and that is the
+            // shape the slot table was found corrupted in at dispose
+            // (stratus-app#85). Written this way there is nothing to balance,
+            // and it says the same thing.
+            val open = browser
+            if (open != null) {
+                Column {
+                    BackupStrip(state.overall) { screen = Screen.Backup }
+                    BrowserScreen(
+                        open,
+                        cast,
+                        onOpenServers = { screen = Screen.Servers },
+                        onEditServer = { state.currentId?.let(onEdit) },
+                    )
+                }
             }
         }
     }
