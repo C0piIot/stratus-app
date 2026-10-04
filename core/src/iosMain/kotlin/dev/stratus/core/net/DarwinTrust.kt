@@ -2,6 +2,7 @@ package dev.stratus.core.net
 
 import io.ktor.client.engine.darwin.ChallengeHandler
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.reinterpret
 import platform.CoreFoundation.CFArrayGetCount
@@ -11,6 +12,7 @@ import platform.CoreFoundation.CFDataGetLength
 import platform.CoreFoundation.CFRelease
 import platform.Foundation.NSURLAuthenticationMethodServerTrust
 import platform.Foundation.NSURLCredential
+import platform.Foundation.credentialForTrust
 import platform.Foundation.NSURLSessionAuthChallengeCancelAuthenticationChallenge
 import platform.Foundation.NSURLSessionAuthChallengePerformDefaultHandling
 import platform.Foundation.NSURLSessionAuthChallengeUseCredential
@@ -51,17 +53,17 @@ fun darwinTrust(policy: TrustPolicy): ChallengeHandler =
         if (space.authenticationMethod != NSURLAuthenticationMethodServerTrust) {
             // Basic and the rest are not this function's business; Ktor sends
             // credentials the ordinary way.
-            completion(NSURLSessionAuthChallengePerformDefaultHandling, null)
+            completion(NSURLSessionAuthChallengePerformDefaultHandling.convert(), null)
             return@handler
         }
         val trust = space.serverTrust
         if (trust == null) {
-            completion(NSURLSessionAuthChallengePerformDefaultHandling, null)
+            completion(NSURLSessionAuthChallengePerformDefaultHandling.convert(), null)
             return@handler
         }
 
         if (SecTrustEvaluateWithError(trust, null)) {
-            completion(NSURLSessionAuthChallengePerformDefaultHandling, null)
+            completion(NSURLSessionAuthChallengePerformDefaultHandling.convert(), null)
             return@handler
         }
 
@@ -69,17 +71,17 @@ fun darwinTrust(policy: TrustPolicy): ChallengeHandler =
         if (leaf == null) {
             // Refused and with nothing to show for it: there is no question to
             // ask, so it is a plain failure.
-            completion(NSURLSessionAuthChallengeCancelAuthenticationChallenge, null)
+            completion(NSURLSessionAuthChallengeCancelAuthenticationChallenge.convert(), null)
             return@handler
         }
 
         if (policy.pin != null && fingerprintOf(leaf) == policy.pin) {
-            completion(NSURLSessionAuthChallengeUseCredential, NSURLCredential.credentialForTrust(trust))
+            completion(NSURLSessionAuthChallengeUseCredential.convert(), NSURLCredential.credentialForTrust(trust))
             return@handler
         }
 
         policy.capture.rejected(leaf)
-        completion(NSURLSessionAuthChallengeCancelAuthenticationChallenge, null)
+        completion(NSURLSessionAuthChallengeCancelAuthenticationChallenge.convert(), null)
     }
 
 /**
