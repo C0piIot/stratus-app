@@ -55,7 +55,7 @@ class RebuildConformanceTest {
             at += "/$part"
             try {
                 dav.makeCollection(at)
-            } catch (_: DavError.Conflict) {
+            } catch (_: DavError.AlreadyExists) {
                 // Already there, which is the ordinary case on the second file.
             }
         }

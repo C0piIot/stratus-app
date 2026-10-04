@@ -6,10 +6,13 @@ import kotlin.test.assertEquals
 class CandidatesTest {
 
     @Test
-    fun looksForDavFirstAndThenTheRoot() {
+    fun looksAtTheRootFirstAndThenTheOldConvention() {
+        // A Stratus is one WebDAV namespace from its origin, so the root is
+        // both where our own server lives and where somebody else's usually
+        // is. `/dav/` stays as a convention other servers use.
         val address = ServerAddress(null, "host", null, null)
         assertEquals(
-            listOf("https://host/dav/", "https://host/"),
+            listOf("https://host/", "https://host/dav/"),
             address.candidates(Scheme.Https).map { it.baseUrl },
         )
     }
@@ -27,9 +30,9 @@ class CandidatesTest {
 
     @Test
     fun leavesOffAPortThatIsAlreadyImplied() {
-        assertEquals("https://host/dav/", ServerAddress(null, "host", 443, null).candidates(Scheme.Https)[0].baseUrl)
-        assertEquals("http://host/dav/", ServerAddress(null, "host", 80, null).candidates(Scheme.Http)[0].baseUrl)
-        assertEquals("https://host:8443/dav/", ServerAddress(null, "host", 8443, null).candidates(Scheme.Https)[0].baseUrl)
+        assertEquals("https://host/", ServerAddress(null, "host", 443, null).candidates(Scheme.Https)[0].baseUrl)
+        assertEquals("http://host/", ServerAddress(null, "host", 80, null).candidates(Scheme.Http)[0].baseUrl)
+        assertEquals("https://host:8443/", ServerAddress(null, "host", 8443, null).candidates(Scheme.Https)[0].baseUrl)
     }
 
     @Test

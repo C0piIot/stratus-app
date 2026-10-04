@@ -41,16 +41,37 @@ class PutTransport(private val dav: DavClient) : Transport {
     }
 }
 
-/** Makes the month folder, and the year above it, before anything is written there. */
+/**
+ * Makes the month folder, and whatever above it is missing.
+ *
+ * **From the deepest upwards, and that is not a style.** Walking down from the
+ * top meant asking the server to create every segment of the path on every
+ * photograph, including segments that are not ours to create: with the base at
+ * the origin the first of them is the server's own `files/`, and a router that
+ * owns that subtree answers a redirect rather than a 405 -- which is neither
+ * success nor "already there", so the upload failed on a folder that was
+ * plainly there.
+ *
+ * Asking for the month first costs one request in the ordinary case instead of
+ * four, and only a 409 -- a parent that does not exist -- sends it up a level.
+ */
 class DavDirectoryMaker(private val dav: DavClient) : DirectoryMaker {
     override suspend fun ensure(path: String) {
-        var at = ""
-        for (part in path.trim('/').split('/')) {
-            at += "/$part"
+        val at = "/" + path.trim('/')
+        if (at == "/") return
+        try {
+            dav.makeCollection(at)
+        } catch (_: DavError.AlreadyExists) {
+            // The ordinary case after the first photograph of the month.
+        } catch (e: DavError.Conflict) {
+            val parent = at.substringBeforeLast('/')
+            if (parent.isEmpty()) throw e
+            ensure(parent)
             try {
                 dav.makeCollection(at)
-            } catch (_: DavError.Conflict) {
-                // Already there, which is the ordinary case after the first photo.
+            } catch (_: DavError.AlreadyExists) {
+                // Somebody else made it between the two calls, which is the
+                // answer we wanted anyway.
             }
         }
     }

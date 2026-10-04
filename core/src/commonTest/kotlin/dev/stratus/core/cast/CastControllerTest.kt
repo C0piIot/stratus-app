@@ -30,7 +30,9 @@ private class FakeCaster(override val available: Boolean = true) : Caster {
 
 class CastControllerTest {
 
-    private val links = ShareLinks("https://host/dav/", Credentials("edu", "secret"))
+    // The origin, as sign-in settles on it, with paths under the files
+    // collection -- which is what a signature is relative to.
+    private val links = ShareLinks("https://host/", Credentials("edu", "secret"))
     private val caster = FakeCaster()
 
     /**
@@ -56,7 +58,7 @@ class CastControllerTest {
     ) = CastController(caster, links, pinned, support, scope) { 1_700_000_000 }
 
     private fun file(name: String, type: String?) =
-        DavResource(path = "/album/$name", isDirectory = false, contentType = type)
+        DavResource(path = "/files/album/$name", isDirectory = false, contentType = type)
 
     @Test
     fun aPhotographGoesAsTheServersJpegAndNotAsItself() = runTest {
@@ -73,7 +75,7 @@ class CastControllerTest {
         // WebDAV does not say whether this is an HEVC most Chromecasts cannot
         // decode, so the server's playlist is what lets the receiver choose.
         val item = chosenFor(this, "clip.mp4", "video/mp4")
-        assertTrue(item.url.contains("/dav/album/clip.mp4?k="), "was ${item.url}")
+        assertTrue(item.url.contains("/files/album/clip.mp4?k="), "was ${item.url}")
         assertTrue(item.url.endsWith("&hls=index.m3u8"), "was ${item.url}")
         assertEquals(HLS_TYPE, item.contentType)
     }

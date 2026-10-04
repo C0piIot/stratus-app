@@ -26,7 +26,10 @@ class Sharing(
 
     /** Anything but [LinkAnswer.Honoured] leaves the sheet closed, and is worth saying. */
     suspend fun offer(target: DavResource, life: ShareLife): LinkAnswer {
-        val link = links.link(target.path, target.isDirectory, life, now())
+        // A path the server cannot sign for -- one of the generated
+        // collections, which have no rows behind them. Refused here rather
+        // than by a round trip that would come back saying the same thing.
+        val link = links.link(target.path, target.isDirectory, life, now()) ?: return LinkAnswer.Refused
         val answer = support.honours(link)
         if (answer == LinkAnswer.Honoured) sheet.offer(link, target.name)
         return answer

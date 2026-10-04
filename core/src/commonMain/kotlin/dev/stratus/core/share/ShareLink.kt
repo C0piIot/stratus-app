@@ -44,25 +44,45 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
     )
 
     /**
-     * The URL to send somebody: the WebDAV address, with a signature on it.
+     * The URL to send somebody, with a signature on it, or null when the path
+     * is not one the server can sign for.
      *
-     * On `/dav/` rather than on the web UI's `/files/`, though both take the
-     * same token (stratus-backend#180). Two reasons: this app speaks WebDAV and
-     * already holds this URL, so nothing has to be derived; and the web UI is
-     * the surface most likely to change shape, while a mount is not. `/files/`
-     * also sets `Content-Disposition: attachment`, which nothing has been seen
-     * to mind and would be miserable to diagnose in a television that did.
+     * There is one address now: the WebDAV path and the browser's are the same
+     * URL (stratus-backend#279), so there is nothing to choose between and
+     * nothing to derive -- this is the URL the browser is already looking at,
+     * with `?k=` on the end.
      *
-     * [path] is as WebDAV gives it, leading slash and all; the server's own
-     * paths have none, and the signature is over its form rather than ours.
+     * [path] is as WebDAV gives it, leading slash and all.
      */
-    fun link(path: String, isDirectory: Boolean, life: ShareLife, nowEpochSeconds: Long): String {
-        val target = path.trim('/')
+    fun link(path: String, isDirectory: Boolean, life: ShareLife, nowEpochSeconds: Long): String? {
+        val target = signable(path) ?: return null
         val deadline = life.seconds?.let { nowEpochSeconds + it } ?: 0L
         return URLBuilder(baseUrl).apply {
-            appendPathSegments(target.split('/'))
+            appendPathSegments(path.trim('/').split('/'))
             parameters.append(PARAM, token(target, isDirectory, deadline))
         }.buildString()
+    }
+
+    /**
+     * What a signature is over: the path **inside the files collection**, with
+     * the collection's own name off the front.
+     *
+     * This is the one place in this app that knows the shape of a Stratus, and
+     * it is here because there is nowhere else it could be. The base URL is
+     * the origin, so a WebDAV path is `/files/holiday/x.jpg`; the server signs
+     * the row, which is `holiday/x.jpg`, and a token over anything else is a
+     * 403 nobody could explain from the outside.
+     *
+     * Null for a path outside the collection. The generated ones --
+     * `/photos/`, `/playlists/` -- have no rows behind them and no gate that
+     * verifies a signature, so a link to one would be refused however it was
+     * signed. Saying so here is what keeps the button from being offered and
+     * broken.
+     */
+    private fun signable(path: String): String? {
+        val trimmed = path.trim('/')
+        if (trimmed == FILES) return ""
+        return if (trimmed.startsWith("$FILES/")) trimmed.removePrefix("$FILES/") else null
     }
 
     /**
@@ -73,11 +93,13 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
      * It is what makes a HEIC something a television or a gallery can show
      * without decoding it here.
      *
-     * This one does hang off the origin, because there is no thumbnail in
-     * WebDAV and nowhere else to put it.
+     * This one hangs off the origin and names the row's path, because there
+     * is no thumbnail in WebDAV and `/thumb/` is where the server's own
+     * rendering lives. Null for the same paths [link] refuses, and for the
+     * same reason.
      */
-    fun thumbnail(path: String, width: Int, life: ShareLife, nowEpochSeconds: Long): String {
-        val target = path.trim('/')
+    fun thumbnail(path: String, width: Int, life: ShareLife, nowEpochSeconds: Long): String? {
+        val target = signable(path) ?: return null
         val deadline = life.seconds?.let { nowEpochSeconds + it } ?: 0L
         return URLBuilder(originOf(baseUrl)).apply {
             appendPathSegments(listOf(THUMBNAILS) + target.split('/'))
@@ -112,6 +134,9 @@ class ShareLinks(private val baseUrl: String, credentials: Credentials) {
         const val FILE = "f"
         const val SUBTREE = "d"
         const val THUMBNAILS = "thumb"
+
+        /** The collection the writable tree is, as the server names it. */
+        const val FILES = "files"
         const val SIZE = "size"
         const val PARAM = "k"
     }

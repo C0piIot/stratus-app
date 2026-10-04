@@ -25,7 +25,7 @@ class ServersTest : E2E() {
         openServers()
         see(link.address)
         see(second.address)
-        tap("${link.address}/dav/")
+        tap("${link.address}/")
         tap("Back")
         see("Servers")
     }

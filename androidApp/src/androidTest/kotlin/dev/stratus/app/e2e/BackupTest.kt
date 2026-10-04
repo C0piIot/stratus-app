@@ -1,5 +1,6 @@
 package dev.stratus.app.e2e
 
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
@@ -18,11 +19,24 @@ class BackupTest : E2E() {
         tap("Back up now")
     }
 
+    /**
+     * A bare timeout here says only that a photograph did not arrive, which is
+     * every way this can fail at once. So it says what the app was showing and
+     * what the server actually holds -- the two halves of the answer.
+     */
     private fun waitForTheServer(name: String, timeoutMs: Long = 90_000): Pair<String, Long> {
         var found: Pair<String, Long>? = null
-        ui.waitUntil(timeoutMs) {
-            found = Stratus.backedUp(name)
-            found != null
+        try {
+            ui.waitUntil(timeoutMs) {
+                found = Stratus.backedUp(name)
+                found != null
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "$name never reached the server. The backup root holds " +
+                    "${Stratus.underBackupRoot()}, and the app showed:\n${screen()}",
+                e,
+            )
         }
         return assertNotNull(found)
     }

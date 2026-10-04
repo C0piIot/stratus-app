@@ -45,14 +45,18 @@ fun castItemFor(entry: DavResource, links: ShareLinks, nowEpochSeconds: Long): C
     val kind = entry.contentType?.substringBefore('/') ?: return null
     return when (kind) {
         "image" -> CastItem(
-            url = links.thumbnail(entry.path, TELEVISION_WIDTH, ShareLife.ADay, nowEpochSeconds),
+            // Null for a path the server cannot sign for, which is anything
+            // outside the files collection: a receiver fetches by URL and the
+            // only credential it can carry is the signature.
+            url = links.thumbnail(entry.path, TELEVISION_WIDTH, ShareLife.ADay, nowEpochSeconds) ?: return null,
             contentType = "image/jpeg",
             title = entry.name,
         )
 
         "video", "audio" -> {
             val direct = CastItem(
-                url = links.link(entry.path, isDirectory = false, life = ShareLife.ADay, nowEpochSeconds = nowEpochSeconds),
+                url = links.link(entry.path, isDirectory = false, life = ShareLife.ADay, nowEpochSeconds = nowEpochSeconds)
+                    ?: return null,
                 contentType = entry.contentType,
                 title = entry.name,
             )

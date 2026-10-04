@@ -3,6 +3,7 @@ package dev.stratus.core.backup
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import dev.stratus.core.dav.DavClient
 import io.ktor.client.plugins.HttpTimeoutCapability
 import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.request.HttpRequestData
@@ -226,4 +227,21 @@ class NegotiateTusTest {
         assertEquals(null, negotiateTus(client, "http://host/dav/"))
     }
 
+    /**
+     * Which way a photograph goes, which until stratus-backend#285 nothing
+     * asserted: it was private to `Backup`, so the only thing that ever ran
+     * the negotiated path was an emulator.
+     */
+    @Test
+    fun theTransportIsTheOneTheServerOffers() = runTest {
+        val tus = HttpClient(MockEngine { respond("", HttpStatusCode.NoContent, headersOf("Tus-Resumable", "1.0.0")) })
+        val chosen = transportFor(Connection(tus, DavClient(tus, "http://host/")), "http://host/")
+        assertTrue(chosen is TusTransport, "was $chosen")
+        assertTrue(chosen.resumable)
+
+        val plain = HttpClient(MockEngine { respond("", HttpStatusCode.NoContent) })
+        val fallback = transportFor(Connection(plain, DavClient(plain, "http://host/")), "http://host/")
+        assertTrue(fallback is PutTransport, "was $fallback")
+        assertEquals(false, fallback.resumable)
+    }
 }

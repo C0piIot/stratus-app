@@ -25,7 +25,24 @@ data class Instance(
     val sources: Set<String> = emptySet(),
 ) {
     companion object {
-        const val DEFAULT_BACKUP_ROOT = "Photos"
+        /**
+         * Where a camera roll lands by default.
+         *
+         * Under `files/` because the base URL is the origin now, and the
+         * origin of a Stratus is a read-only listing of its collections --
+         * the writable tree is one level down (stratus-backend#279). The two
+         * segments cost nothing: the directory maker walks every one of them
+         * and treats "already there" as the ordinary answer.
+         *
+         * Named for what wrote it rather than for what is in it. `Photos`
+         * read like a folder somebody had made and chosen; this is a process
+         * filing things, and a person looking at their tree should be able to
+         * tell which it was.
+         *
+         * It is a default and not a rule: [backupRoot] is a field, and an
+         * instance that has one keeps it.
+         */
+        const val DEFAULT_BACKUP_ROOT = "files/phone_backup"
     }
 }
 

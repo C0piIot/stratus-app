@@ -8,6 +8,7 @@ import dev.stratus.core.backup.negotiateTus
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
+import dev.stratus.core.net.originOf
 import dev.stratus.core.net.stratusHttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
@@ -46,16 +47,23 @@ class TusConformanceTest {
         "run this with `make conformance`"
     }
 
-    private val http = stratusHttpClient(CIO.create(), credentials)
-    private val dav = DavClient(http, baseUrl)
+    // The origin, because that is where the app is rooted since
+    // stratus-backend#279 -- and because a tus filename is a path from here
+    // too (#285), so what this suite browses **is** what it uploads, with no
+    // translation in between. Rooted at `/files/` it built the target from a
+    // different base and sent the right thing by accident.
+    private val origin = originOf(baseUrl)
 
-    private val folder = "/tus-${Random.nextLong().toULong().toString(16)}"
+    private val http = stratusHttpClient(CIO.create(), credentials)
+    private val dav = DavClient(http, origin)
+
+    private val folder = "/files/tus-${Random.nextLong().toULong().toString(16)}"
     private val bytes = ByteArray(64 * 1024) { (it % 251).toByte() }
 
     private suspend fun folderExists() {
         try {
             dav.makeCollection(folder)
-        } catch (_: DavError.Conflict) {
+        } catch (_: DavError.AlreadyExists) {
             // Already there.
         }
     }
@@ -66,13 +74,13 @@ class TusConformanceTest {
     fun theServerSaysItSpeaksTus() = runTest {
         // The protocol's own question, answered without anything specific to
         // this server being assumed.
-        assertNotNull(negotiateTus(http, baseUrl), "no Tus-Resumable came back")
+        assertNotNull(negotiateTus(http, origin), "no Tus-Resumable came back")
     }
 
     @Test
     fun sendsAWholeFileAndTheBytesAreThere() = runTest {
         folderExists()
-        val endpoint = requireNotNull(negotiateTus(http, baseUrl))
+        val endpoint = requireNotNull(negotiateTus(http, origin))
         val transport = TusTransport(http, endpoint) { runCatching { dav.stat(it).etag }.getOrNull() }
         val target = UploadTarget("$folder/whole.bin", bytes.size.toLong(), null)
 
@@ -90,7 +98,7 @@ class TusConformanceTest {
     @Test
     fun picksUpAnUploadThatWasLeftHalfFinished() = runTest {
         folderExists()
-        val endpoint = requireNotNull(negotiateTus(http, baseUrl))
+        val endpoint = requireNotNull(negotiateTus(http, origin))
         val path = "$folder/resumed.bin"
         val half = bytes.size / 2
 
@@ -105,7 +113,7 @@ class TusConformanceTest {
         assertEquals(201, created.status.value)
         val handle = requireNotNull(created.headers[HttpHeaders.Location])
 
-        val partial: HttpResponse = http.request(originOf(endpoint) + handle) {
+        val partial: HttpResponse = http.request(origin + handle) {
             method = HttpMethod.Patch
             header("Tus-Resumable", "1.0.0")
             header("Upload-Offset", "0")
@@ -118,7 +126,7 @@ class TusConformanceTest {
         val transport = TusTransport(http, endpoint) { runCatching { dav.stat(it).etag }.getOrNull() }
         val outcome = transport.send(
             UploadTarget(path, bytes.size.toLong(), null),
-            Resume(originOf(endpoint) + handle, half.toLong()),
+            Resume(origin + handle, half.toLong()),
             ::source,
         )
 
@@ -127,5 +135,24 @@ class TusConformanceTest {
         assertTrue(read.contentEquals(bytes), "the resumed half did not join up with the first")
     }
 
-    private fun originOf(endpoint: String) = endpoint.removeSuffix("/tus/")
+    /**
+     * The promise #285 made, from the side that has to rely on it: a filename
+     * is a path from the origin, so one without the collection on it names
+     * nothing. Said plainly rather than as a 404, because a client that reads
+     * "not found" waits for a folder that will never appear -- which is
+     * exactly what this app did.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun aFilenameOutsideTheCollectionIsRefusedAndSaysSo() = runTest {
+        val endpoint = requireNotNull(negotiateTus(http, origin))
+        val refused: HttpResponse = http.request(endpoint) {
+            method = HttpMethod.Post
+            header("Tus-Resumable", "1.0.0")
+            header("Upload-Length", "5")
+            // The old namespace: the row path, with no collection in front.
+            header("Upload-Metadata", "filename " + Base64.encode("tus-nowhere/x.bin".encodeToByteArray()))
+        }
+        assertEquals(400, refused.status.value)
+    }
 }

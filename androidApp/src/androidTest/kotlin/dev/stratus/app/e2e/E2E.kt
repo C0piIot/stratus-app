@@ -165,11 +165,16 @@ abstract class E2E {
         if (consentAsked) tap("Send anyway")
     }
 
-    /** Signed in and looking at the root of the tree. */
+    /**
+     * Signed in and looking at the tree, which is one step down from where
+     * signing in lands: a Stratus answers its origin with a listing of its
+     * collections, and `files` is the writable one (stratus-backend#279).
+     */
     fun signedIn() {
         launch()
         signIn()
         see("Servers")
+        tap("files")
     }
 
     fun openServers() = tap("Servers")

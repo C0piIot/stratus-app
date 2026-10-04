@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 # CI for reasons belonging to another repo, and the two tests that pin current
 # server limitations would flip without anybody deciding to look. Bumping this
 # is a commit, which is the point.
-IMAGE="${BACKEND_IMAGE:-ghcr.io/c0piiot/stratus-backend@sha256:8cdde564d9e280487ea0160eb740e89475260eea71d4a1fd0345f19ac1ffba79}"
+IMAGE="${BACKEND_IMAGE:-ghcr.io/c0piiot/stratus-backend@sha256:d783819d85a7086ca82d1dacecaf6b4d2186c5bb33b34f0223a8bfad8eadcf6b}"
 
 DAV_USER="${DAV_USER:-conformance}"
 DAV_PASS="${DAV_PASS:-conformance-secret}"
@@ -87,7 +87,7 @@ make gradle \
     IMAGE="${TEST_IMAGE:-eclipse-temurin:21-jdk-noble}" \
     ARGS=":core:jvmTest -Pconformance" \
     DOCKER_EXTRA="--network $NET \
-        -e STRATUS_TEST_URL=http://$NAME:8080/dav/ \
-        -e STRATUS_TEST_URL_2=http://$SECOND:8080/dav/ \
+        -e STRATUS_TEST_URL=http://$NAME:8080/files/ \
+        -e STRATUS_TEST_URL_2=http://$SECOND:8080/files/ \
         -e STRATUS_TEST_USER=$DAV_USER \
         -e STRATUS_TEST_PASS=$DAV_PASS"

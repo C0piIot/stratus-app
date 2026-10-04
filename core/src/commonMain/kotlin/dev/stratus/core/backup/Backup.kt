@@ -97,27 +97,10 @@ class Backup(
             pending = database.pendingFor(instance.id),
             cache = database.cacheFor(instance.id),
             source = assets,
-            transport = transportFor(instance, connection),
+            transport = transportFor(connection, instance.baseUrl),
             directories = DavDirectoryMaker(connection.dav),
         )
     }
-
-    /**
-     * tus where it is offered, `PUT` where it is not.
-     *
-     * Asked every pass rather than remembered: a server that gains tus tomorrow
-     * should be used tomorrow, and there is nothing to invalidate.
-     */
-    private suspend fun transportFor(instance: Instance, connection: Connection): Transport =
-        negotiateTus(connection.http, instance.baseUrl)
-            ?.let { endpoint ->
-                TusTransport(connection.http, endpoint) { path ->
-                    // tus reports no ETag, and the ETag is what makes a later
-                    // check a real check. One request per file buys it back.
-                    runCatching { connection.dav.stat(path).etag }.getOrNull()
-                }
-            }
-            ?: PutTransport(connection.dav)
 
     /** Null when nobody is signed in, or for one instance in particular. */
     suspend fun index(instanceId: String? = null): BackupIndex? {
