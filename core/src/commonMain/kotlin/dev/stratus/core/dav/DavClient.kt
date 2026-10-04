@@ -50,15 +50,15 @@ class DavClient(
      */
     suspend fun list(path: String): List<DavResource> {
         val self = normalise(path)
-        return propfind(path, Depth.One).filterNot { normalise(it.path) == self }
+        return propfind(path, Depth.One, collection = true).filterNot { normalise(it.path) == self }
     }
 
     /** One resource, or [DavError.NotFound]. */
     suspend fun stat(path: String): DavResource =
         propfind(path, Depth.Zero).firstOrNull() ?: throw DavError.NotFound(path)
 
-    suspend fun propfind(path: String, depth: Depth): List<DavResource> {
-        val response = http.request(url(path)) {
+    suspend fun propfind(path: String, depth: Depth, collection: Boolean = false): List<DavResource> {
+        val response = http.request(url(path, collection)) {
             method = PROPFIND
             header(HttpHeaders.Depth, depth.header)
             contentType(ContentType.Application.Xml)
@@ -156,7 +156,19 @@ class DavClient(
         if (!response.status.isSuccess()) throw response.toError(path)
     }
 
-    private fun url(path: String): String = base + DavPath.encodePath(normalise(path))
+    /**
+     * [collection] asks for the slash RFC 4918 puts on the end of a collection,
+     * and it is not cosmetic: a path is held here without one -- [MultiStatus]
+     * trims it so that one resource has one form -- and a server asked for a
+     * collection by the name of a thing that is not one redirects to the same
+     * path with the slash. Go's own `ServeMux` does, which is how this was
+     * found: the tree at `/files` answered 307 to every listing of it.
+     * Following that would be a second round trip for every folder opened.
+     */
+    private fun url(path: String, collection: Boolean = false): String {
+        val encoded = base + DavPath.encodePath(normalise(path))
+        return if (collection && !encoded.endsWith("/")) "$encoded/" else encoded
+    }
 
     private fun normalise(path: String): String {
         val withLeading = if (path.startsWith("/")) path else "/$path"

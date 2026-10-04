@@ -44,6 +44,25 @@ class DavClientTest {
     }
 
     @Test
+    fun asksForACollectionWithTheSlashRfc4918PutsOnIt() = runTest {
+        // A path is held without one, so this is the only place it can go back
+        // on -- and a server asked for a collection without it answers a
+        // redirect rather than a listing. Go's ServeMux does, which is what a
+        // tree mounted at `/files` taught us.
+        val client = clientAnswering(HttpStatusCode.MultiStatus, multistatus("/dav/Photos/"))
+        client.list("/Photos")
+        assertEquals("http://host:8080/dav/Photos/", lastRequest?.url.toString())
+
+        // The root is already a slash and does not get a second one.
+        client.list("/")
+        assertEquals("http://host:8080/dav/", lastRequest?.url.toString())
+
+        // A file is asked for as itself: a slash there is a different resource.
+        client.stat("/Photos/one.txt")
+        assertEquals("http://host:8080/dav/Photos/one.txt", lastRequest?.url.toString())
+    }
+
+    @Test
     fun dropsTheCollectionItselfFromAListing() = runTest {
         // A spec-compliant server includes the collection in a Depth: 1 answer.
         val client = clientAnswering(
@@ -75,7 +94,7 @@ class DavClientTest {
         val client = clientAnswering(HttpStatusCode.MultiStatus, multistatus())
         client.list("/Photos/Hello World & co")
         assertEquals(
-            "/dav/Photos/Hello%20World%20%26%20co",
+            "/dav/Photos/Hello%20World%20%26%20co/",
             lastRequest?.url?.encodedPath,
         )
     }

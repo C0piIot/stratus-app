@@ -3,6 +3,7 @@ package dev.stratus.core.dav.conformance
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.dav.Depth
+import dev.stratus.core.net.originOf
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.header
@@ -53,6 +54,20 @@ class DavConformanceTest {
     private suspend fun givenRoot(): String {
         dav.makeCollection(root)
         return root
+    }
+
+    // What the app actually does since stratus-backend#279: rooted at the
+    // origin and walking into the tree. `/files` is where a server mounts a
+    // subtree, so it is the one collection whose name a router may redirect --
+    // Go's ServeMux sends `/files` to `/files/` with a 307, and a listing that
+    // did not ask with the slash got the redirect instead of its rows.
+    @Test
+    fun listsTheTreeFromTheOriginWithoutBeingRedirected() = runTest {
+        givenRoot()
+        val fromOrigin = DavClient(http, originOf(baseUrl))
+
+        assertContains(fromOrigin.list("/").map { it.name }, "files")
+        assertContains(fromOrigin.list("/files").map { it.path }, "/files$root")
     }
 
     @Test

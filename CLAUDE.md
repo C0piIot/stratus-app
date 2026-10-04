@@ -78,6 +78,15 @@ with a slash -- Apache, sabre/dav, Nextcloud, RFC 4918's own examples -- ours di
 not until it changed libraries, and the cache, the self entry a `Depth: 1`
 listing has to drop, and a signed link would each have decided it separately.
 
+**And it goes back on where the request is made.** A key with no slash is right
+for everything that compares paths and wrong for one thing: a server asked for
+a collection by a name that could be a file answers a redirect to the same path
+with the slash. Go's `ServeMux` does, which is how it was found -- the tree at
+`/files` is a subtree the router owns, so every listing of it got a 307 and no
+rows. So `list` asks with the slash and `stat` does not, since there a slash
+would name something else. Following the redirect instead would be a second
+round trip for every folder anybody opens.
+
 That gives two requirements on how files are named and checked:
 
 - **A deterministic remote path**, so that "is this already uploaded?" is a
