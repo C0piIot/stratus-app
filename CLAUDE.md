@@ -93,7 +93,9 @@ That gives two requirements on how files are named and checked:
   `localId` exists only to ask the platform for the bytes again.
 
   The name that falls out is `2026-09-17_143022_IMG_0001.fe038252.heic` under
-  `/<root>/2026/09/`, the eight characters being a digest of those three fields.
+  `/<root>/2026/09/`, where the root is `files/phone_backup` by default --
+  under the collection, because the base URL is the origin and the origin of a
+  Stratus is a read-only listing, the eight characters being a digest of those three fields.
   Two photographs land on one path only when their second, their name and their
   size all match -- at which point they are almost certainly the same picture
   imported twice, and storing it once is the right answer rather than a collision
@@ -146,9 +148,12 @@ Three surfaces, and no more than three:
 What that implies, in the order it will be discovered:
 
 **The URL is a field users get wrong.** Take a base address and find the WebDAV
-path from it rather than demanding somebody know that Stratus serves `/dav/` --
-they are typing what their browser shows them. Credentials are proved with a real
-request before the screen is dismissed, so that a typo fails at the keyboard
+path from it rather than demanding somebody know where a server keeps its files
+-- they are typing what their browser shows them. The root is tried first,
+because a Stratus is one WebDAV collection from its origin
+(stratus-backend#279), and then `/dav/`, which stays in the list as somebody
+else's convention rather than as compatibility with anything of ours.
+Credentials are proved with a real request before the screen is dismissed, so that a typo fails at the keyboard
 rather than silently four hours later when the first upload runs.
 
 **There is no standard way to discover a files collection, and this was measured
@@ -228,12 +233,19 @@ itself, and no endpoint had to be invented for it. That is the difference
 between adding sharing and breaking the no-private-API rule, and it is worth
 noticing that the rule was what made the good design findable.
 
-The link is the **WebDAV** address with a signature on it, not the web UI's
-`/files/`, though the server takes the token at both (stratus-backend#180). The
-app already holds this URL, so nothing has to be derived from it -- and a mount
-is not the surface that changes shape, while the web UI has a PWA and a calendar
-filed against it. The one exception is a thumbnail, which has nowhere else to
-live because WebDAV has no such thing.
+The link is **the URL the browser is already looking at**, with a signature on
+it: there is one address per thing now, the WebDAV path and the web UI's being
+the same (stratus-backend#279). The one exception is a thumbnail, which has
+nowhere else to live because WebDAV has no such thing.
+
+**One piece of this app knows the shape of a Stratus, and it is here.** The
+base is the origin, so a path is `/files/holiday/x.jpg` while the server signs
+the row -- `holiday/x.jpg` -- and a token over anything else is a 403 nobody
+could explain from the outside. `ShareLinks` takes the collection off the front
+before signing, and answers null for a path outside it: the generated
+collections have no rows behind them and no gate that checks a signature, so a
+link to one would be refused however it was signed. Saying so where the link is
+made is what keeps the button from being offered and broken.
 
 **A signed link is Stratus's, and this app is meant to work against any WebDAV
 server**, so whether one means anything is a question rather than an assumption.
@@ -271,7 +283,7 @@ reads HEIC and HEIC is what an iPhone records and what this app uploads
 untouched; `/thumb/` already renders one, and the conformance suite proves a
 HEIC comes back as a JPEG to a request with no account behind it.
 
-**A video goes as HLS**, `&hls=index.m3u8` on the same signed WebDAV link
+**A video goes as HLS**, `&hls=index.m3u8` on the same signed link
 (stratus-backend#50), and always rather than only when it has to: WebDAV says
 nothing about codecs, so the app cannot tell an iPhone's HEVC from an H.264,
 and the server's master playlist declares both for the receiver to choose. A

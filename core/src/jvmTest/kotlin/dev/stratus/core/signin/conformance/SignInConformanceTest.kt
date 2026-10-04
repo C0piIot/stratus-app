@@ -24,8 +24,9 @@ import kotlin.test.assertTrue
  * The whole sign-in flow against a real stratus-backend, started by
  * `make conformance`.
  *
- * Path discovery is the part most likely to be subtly wrong, and only a server
- * that genuinely serves `/dav/` can say whether it works. The container speaks
+ * Path discovery is the part most likely to be subtly wrong, and only a real
+ * server can say whether it works: this one is a WebDAV collection from its
+ * origin (stratus-backend#279), so landing on the root is the thing to prove. The container speaks
  * http, so this also exercises the plaintext question end to end.
  */
 class SignInConformanceTest {
@@ -36,7 +37,7 @@ class SignInConformanceTest {
     private val username: String = System.getenv("STRATUS_TEST_USER") ?: "conformance"
     private val password: String = System.getenv("STRATUS_TEST_PASS") ?: "conformance-secret"
 
-    /** `http://name:8080/dav/` reduced to the `name:8080` somebody would type. */
+    /** `http://name:8080/files/` reduced to the `name:8080` somebody would type. */
     private val hostAndPort: String = url.substringAfter("://").substringBefore("/")
 
     private fun controller(scope: CoroutineScope): SignInController {
@@ -70,7 +71,7 @@ class SignInConformanceTest {
 
         val done = signIn.awaitOutcome()
         assertTrue(done is SignInState.Done, "was $done")
-        assertEquals("http://$hostAndPort/dav/", done.baseUrl)
+        assertEquals("http://$hostAndPort/", done.baseUrl)
     }
 
     @Test

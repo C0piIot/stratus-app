@@ -76,8 +76,9 @@ class SignInControllerTest {
         signIn.submit(form)
         testScheduler.advanceUntilIdle()
 
-        assertEquals(listOf("/dav/", "/"), prober.asked.map { it.first.path })
-        assertEquals("https://host/", (signIn.state.value as SignInState.Done).baseUrl)
+        // The root first, and the one that answered is the one that is kept.
+        assertEquals(listOf("/", "/dav/"), prober.asked.map { it.first.path })
+        assertEquals("https://host/dav/", (signIn.state.value as SignInState.Done).baseUrl)
     }
 
     @Test
@@ -135,7 +136,7 @@ class SignInControllerTest {
         testScheduler.advanceUntilIdle()
 
         val (second, _) = controller(this, store, ScriptedProber(mutableListOf()))
-        assertEquals("https://host/dav/", second.restore()?.baseUrl)
+        assertEquals("https://host/", second.restore()?.baseUrl)
         assertTrue(second.state.value is SignInState.Done)
     }
 

@@ -5,11 +5,18 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ShareLinkTest {
 
-    private val links = ShareLinks("https://host/dav/", Credentials("edu", "secret"))
+    // The origin, because that is what sign-in settles on now: a Stratus is
+    // one WebDAV namespace from its root (stratus-backend#279).
+    private val links = ShareLinks("https://host/", Credentials("edu", "secret"))
+
+    /** A link for a path that can have one, which every case here uses. */
+    private fun link(path: String, isDirectory: Boolean = false, life: ShareLife = ShareLife.Forever, now: Long = 0) =
+        requireNotNull(links.link(path, isDirectory, life, now)) { "$path should be shareable" }
 
     private fun tokenOf(url: String) = url.substringAfter("?k=")
 
@@ -26,14 +33,50 @@ class ShareLinkTest {
         // code: a golden value this implementation agreed with is worth nothing.
         // The conformance suite proves the server agrees too; this catches the
         // same mistake in seconds instead of needing a container.
-        val url = links.link("/album/a b.jpg", isDirectory = false, life = ShareLife.Forever, nowEpochSeconds = 0)
+        //
+        // Unchanged by the move to the origin, and that is the point of the
+        // whole exercise: the URL grew a `files/` and the signature did not,
+        // because the server signs the row.
+        val url = link("/files/album/a b.jpg")
         assertEquals("k1.ZWR1.YWxidW0vYSBiLmpwZw.f.0.gmeIwaQGF0_j40VunU4k8hYm-ztH1O1kaT3NL8R-sDE", tokenOf(url))
     }
 
     @Test
+    fun theSignatureIsTheRowAndTheUrlIsTheAddress() {
+        // The one piece of this app that knows the shape of a Stratus: the
+        // base is the origin, so the address carries `files/` and the token
+        // must not, or the server verifies a string it never stored.
+        val url = link("/files/album/one.jpg")
+        assertTrue(url.startsWith("https://host/files/album/one.jpg?"), "was $url")
+        assertEquals("album/one.jpg", signedPathOf(url))
+    }
+
+    @Test
+    fun whatIsNotInTheFilesCollectionCannotBeSignedFor() {
+        // The generated collections have no rows behind them and no gate that
+        // verifies a signature, so a link to one would be a 403 nobody could
+        // explain. Said here, where the button is decided, rather than found
+        // out by a receiver.
+        assertNull(links.link("/photos/2026/01/IMG_1.jpg", false, ShareLife.Forever, 0))
+        assertNull(links.link("/playlists/Mix.m3u8", false, ShareLife.Forever, 0))
+        assertNull(links.thumbnail("/photos/2026/01/IMG_1.jpg", 300, ShareLife.ADay, 0))
+        // Nor the root itself, which is a listing of collections.
+        assertNull(links.link("/", true, ShareLife.Forever, 0))
+    }
+
+    @Test
+    fun theCollectionItselfIsTheWholeTree() {
+        // Sharing `files/` is sharing everything, which the server spells as
+        // the empty path with the subtree flag on.
+        val url = link("/files", isDirectory = true)
+        assertEquals("", signedPathOf(url))
+        assertEquals("d", tokenOf(url).split(".")[3])
+    }
+
+    @Test
     fun aFolderIsADifferentClaimFromAFile() {
-        val file = tokenOf(links.link("/album", isDirectory = false, life = ShareLife.Forever, nowEpochSeconds = 0))
-        val folder = tokenOf(links.link("/album", isDirectory = true, life = ShareLife.Forever, nowEpochSeconds = 0))
+        val file = tokenOf(link("/files/album"))
+        val folder = tokenOf(link("/files/album", isDirectory = true))
         assertEquals("f", file.split(".")[3])
         assertEquals("d", folder.split(".")[3])
         // And the signature covers the difference, or one could be filed into
@@ -43,18 +86,16 @@ class ShareLinkTest {
 
     @Test
     fun aLifeIsADeadlineAndForeverIsAZero() {
-        val day = tokenOf(links.link("/a", false, ShareLife.ADay, nowEpochSeconds = 1_700_000_000))
+        val day = tokenOf(link("/files/a", life = ShareLife.ADay, now = 1_700_000_000))
         assertEquals("1700086400", day.split(".")[4])
-        val forever = tokenOf(links.link("/a", false, ShareLife.Forever, nowEpochSeconds = 1_700_000_000))
+        val forever = tokenOf(link("/files/a", life = ShareLife.Forever, now = 1_700_000_000))
         assertEquals("0", forever.split(".")[4])
     }
 
     @Test
-    fun theUrlIsTheWebDavOneAndEncodesWhatAPathCannotCarry() {
-        // The mount rather than the web UI: this app already holds this address,
-        // and a mount is not the surface that changes shape.
-        val url = links.link("/álbum/a b&c.jpg", false, ShareLife.Forever, 0)
-        assertTrue(url.startsWith("https://host/dav/"), "was $url")
+    fun theUrlEncodesWhatAPathCannotCarry() {
+        val url = link("/files/álbum/a b&c.jpg")
+        assertTrue(url.startsWith("https://host/files/"), "was $url")
         // Signed raw, sent encoded: the server unescapes before it verifies.
         assertTrue("%C3%A1lbum" in url && "a%20b" in url, "was $url")
         assertEquals("álbum/a b&c.jpg", signedPathOf(url))
@@ -62,31 +103,27 @@ class ShareLinkTest {
 
     @Test
     fun aPortThatIsNotTheDefaultSurvives() {
-        val other = ShareLinks("http://192.168.1.10:8080/dav/", Credentials("edu", "secret"))
-        assertTrue(other.link("/a", false, ShareLife.Forever, 0).startsWith("http://192.168.1.10:8080/dav/a?"))
+        val other = ShareLinks("http://192.168.1.10:8080/", Credentials("edu", "secret"))
+        val url = requireNotNull(other.link("/files/a", false, ShareLife.Forever, 0))
+        assertTrue(url.startsWith("http://192.168.1.10:8080/files/a?"), "was $url")
     }
 
     @Test
     fun anotherPasswordSignsSomethingElseEntirely() {
         // The property the whole thing rests on, and the reason changing the
         // password withdraws every link ever sent.
-        val moved = ShareLinks("https://host/dav/", Credentials("edu", "other"))
-        assertTrue(
-            tokenOf(links.link("/a", false, ShareLife.Forever, 0)) !=
-                tokenOf(moved.link("/a", false, ShareLife.Forever, 0)),
-        )
+        val moved = ShareLinks("https://host/", Credentials("edu", "other"))
+        assertTrue(tokenOf(link("/files/a")) != tokenOf(requireNotNull(moved.link("/files/a", false, ShareLife.Forever, 0))))
     }
 
     @Test
     fun aThumbnailIsTheOneThingStillOffTheOrigin() {
-        // There is no thumbnail in WebDAV, so it has nowhere else to live -- and
-        // it takes the same signature, over the same path.
-        val url = links.thumbnail("/album/IMG_1.HEIC", 1200, ShareLife.ADay, 0)
+        // There is no thumbnail in WebDAV, so it has nowhere else to live --
+        // and it takes the same signature, over the same row, which means the
+        // `files/` comes off its address too.
+        val url = requireNotNull(links.thumbnail("/files/album/IMG_1.HEIC", 1200, ShareLife.ADay, 0))
         assertTrue(url.startsWith("https://host/thumb/album/IMG_1.HEIC?"), "was $url")
         assertTrue("size=1200" in url)
-        assertEquals(
-            tokenOf(links.link("/album/IMG_1.HEIC", false, ShareLife.ADay, 0)),
-            url.substringAfter("&k="),
-        )
+        assertEquals(tokenOf(link("/files/album/IMG_1.HEIC", life = ShareLife.ADay)), url.substringAfter("&k="))
     }
 }

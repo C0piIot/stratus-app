@@ -80,11 +80,14 @@ class BrowserControllerTest {
             respond(body, status)
         }
         return BrowserController(
-            DavClient(HttpClient(engine), "http://host/dav/"),
+            // The origin, as sign-in settles on it: the browser walks the
+            // whole namespace and an entry's path carries the collection it
+            // is in, which is what a share link is built from.
+            DavClient(HttpClient(engine), "http://host/"),
             handoff,
             scope,
             Sharing(
-                ShareLinks("http://host/dav/", Credentials("edu", "secret")),
+                ShareLinks("http://host/", Credentials("edu", "secret")),
                 sheet,
                 links,
             ) { 1_700_000_000 },
@@ -103,7 +106,7 @@ class BrowserControllerTest {
     fun putsFoldersFirstAndThenSortsByNameIgnoringCase() = runTest {
         val browser = controller(
             this,
-            answer = listingOf("/dav/zebra.txt" to false, "/dav/Apple.txt" to false, "/dav/photos" to true),
+            answer = listingOf("/files/zebra.txt" to false, "/files/Apple.txt" to false, "/files/photos" to true),
         )
         browser.start()
         browser.settled()
@@ -112,13 +115,19 @@ class BrowserControllerTest {
 
     @Test
     fun walksIntoAFolderAndBackOutOfIt() = runTest {
-        val browser = controller(this, answer = listingOf("/dav/photos" to true))
+        val browser = controller(this, answer = listingOf("/files/photos" to true))
         browser.start()
         browser.settled()
 
         browser.enter(browser.state.value.entries.single())
         browser.settled()
-        assertEquals("/photos", browser.state.value.path)
+        assertEquals("/files/photos", browser.state.value.path)
+
+        // Two levels back out, because the tree is one level down from the
+        // origin now: the collection, and then the listing of collections.
+        assertTrue(browser.goUp())
+        browser.settled()
+        assertEquals("/files/", browser.state.value.path)
 
         assertTrue(browser.goUp())
         browser.settled()
@@ -133,7 +142,7 @@ class BrowserControllerTest {
         // chance somebody has to have not meant it.
         val browser = controller(this) { request ->
             if (request.method.value == "DELETE") HttpStatusCode.NoContent to ""
-            else HttpStatusCode.MultiStatus to listing("/dav/a.txt" to false)
+            else HttpStatusCode.MultiStatus to listing("/files/a.txt" to false)
         }
         browser.start()
         browser.settled()
@@ -152,7 +161,7 @@ class BrowserControllerTest {
 
     @Test
     fun dismissingAConfirmationDoesNothingAtAll() = runTest {
-        val browser = controller(this, answer = listingOf("/dav/a.txt" to false))
+        val browser = controller(this, answer = listingOf("/files/a.txt" to false))
         browser.start()
         browser.settled()
 
@@ -167,7 +176,7 @@ class BrowserControllerTest {
     fun renamingKeepsTheFileWhereItWas() = runTest {
         val browser = controller(this) { request ->
             if (request.method.value == "MOVE") HttpStatusCode.Created to ""
-            else HttpStatusCode.MultiStatus to listing("/dav/photos/a.txt" to false)
+            else HttpStatusCode.MultiStatus to listing("/files/photos/a.txt" to false)
         }
         browser.start()
         browser.settled()
@@ -177,13 +186,13 @@ class BrowserControllerTest {
         browser.settled()
 
         val move = seen.single { it.method.value == "MOVE" }
-        assertEquals("http://host/dav/photos/b.txt", move.headers["Destination"])
+        assertEquals("http://host/files/photos/b.txt", move.headers["Destination"])
     }
 
     @Test
     fun refusesARenameThatWouldBeAMove() = runTest {
         // A typed path would otherwise carry the file across the tree quietly.
-        val browser = controller(this, answer = listingOf("/dav/a.txt" to false))
+        val browser = controller(this, answer = listingOf("/files/a.txt" to false))
         browser.start()
         browser.settled()
 
@@ -199,7 +208,7 @@ class BrowserControllerTest {
         // parent. Only the app knows it asked to rename a directory.
         val browser = controller(this) { request ->
             if (request.method.value == "MOVE") HttpStatusCode.Conflict to "is a directory and is not empty"
-            else HttpStatusCode.MultiStatus to listing("/dav/photos" to true)
+            else HttpStatusCode.MultiStatus to listing("/files/photos" to true)
         }
         browser.start()
         browser.settled()
@@ -218,7 +227,7 @@ class BrowserControllerTest {
     fun handsAFileToThePlatformForOpeningAndForKeeping() = runTest {
         val browser = controller(this) { request ->
             if (request.method.value == "GET") HttpStatusCode.OK to "some bytes"
-            else HttpStatusCode.MultiStatus to listing("/dav/a.txt" to false)
+            else HttpStatusCode.MultiStatus to listing("/files/a.txt" to false)
         }
         browser.start()
         browser.settled()
@@ -245,7 +254,7 @@ class BrowserControllerTest {
 
     @Test
     fun sharingHandsTheSystemALinkAndNothingGoesToTheServer() = runTest {
-        val browser = controller(this, answer = listingOf("/dav/photos/a.txt" to false))
+        val browser = controller(this, answer = listingOf("/files/photos/a.txt" to false))
         browser.start()
         browser.settled()
         val target = browser.state.value.entries.single()
@@ -254,7 +263,7 @@ class BrowserControllerTest {
         browser.confirmShare(ShareLife.ADay)
 
         val link = requireNotNull(sheet.links.first { it != null })
-        assertTrue(link.startsWith("http://host/dav/photos/a.txt?k="), "was $link")
+        assertTrue(link.startsWith("http://host/files/photos/a.txt?k="), "was $link")
         assertEquals("a.txt", sheet.label)
         // A link is arithmetic over the password: the first the server hears of
         // it is when somebody opens it.
@@ -264,7 +273,7 @@ class BrowserControllerTest {
 
     @Test
     fun aFolderIsSharedAsAFolder() = runTest {
-        val browser = controller(this, answer = listingOf("/dav/album" to true))
+        val browser = controller(this, answer = listingOf("/files/album" to true))
         browser.start()
         browser.settled()
 
@@ -280,7 +289,7 @@ class BrowserControllerTest {
     fun aServerThatDoesNotUnderstandLinksIsToldAboutRatherThanGuessedAt() = runTest {
         // A signed link is Stratus's. Against anything else it is a URL nobody
         // has heard of, and handing that to somebody is worse than saying no.
-        val browser = controller(this, links = support(HttpStatusCode.SeeOther), answer = listingOf("/dav/a.txt" to false))
+        val browser = controller(this, links = support(HttpStatusCode.SeeOther), answer = listingOf("/files/a.txt" to false))
         browser.start()
         browser.settled()
 
@@ -296,7 +305,7 @@ class BrowserControllerTest {
     @Test
     fun aServerThatFailsToAnswerAboutALinkIsNotTakenForARefusal() = runTest {
         // A restart behind a proxy answers 502, which says nothing about links.
-        val browser = controller(this, links = support(HttpStatusCode.BadGateway), answer = listingOf("/dav/a.txt" to false))
+        val browser = controller(this, links = support(HttpStatusCode.BadGateway), answer = listingOf("/files/a.txt" to false))
         browser.start()
         browser.settled()
 
@@ -313,7 +322,7 @@ class BrowserControllerTest {
     fun theQuestionIsAskedWithoutCredentials() = runTest {
         // With them it would succeed against any server at all and prove
         // nothing: what is being asked is whether the signature was enough.
-        val browser = controller(this, answer = listingOf("/dav/a.txt" to false))
+        val browser = controller(this, answer = listingOf("/files/a.txt" to false))
         browser.start()
         browser.settled()
 
@@ -336,7 +345,7 @@ class BrowserWithoutAServerTest {
 
     private var failing: Throwable? = null
 
-    private val listing = """<multistatus xmlns="DAV:"><response><href>/dav/a.txt</href>""" +
+    private val listing = """<multistatus xmlns="DAV:"><response><href>/files/a.txt</href>""" +
         """<propstat><prop><resourcetype/></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>"""
 
     private fun controller(scope: TestScope) = BrowserController(
@@ -348,7 +357,7 @@ class BrowserWithoutAServerTest {
                     else respond(listing, HttpStatusCode.MultiStatus)
                 },
             ),
-            "http://host/dav/",
+            "http://host/files/",
         ),
         RecordingHandoff(),
         scope,

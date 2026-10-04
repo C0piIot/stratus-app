@@ -3,6 +3,7 @@ package dev.stratus.core.share.conformance
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
+import dev.stratus.core.net.originOf
 import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.share.LinkAnswer
 import dev.stratus.core.share.LinkSupport
@@ -39,13 +40,20 @@ class ShareConformanceTest {
         System.getenv("STRATUS_TEST_PASS") ?: "conformance-secret",
     )
 
-    private val dav = DavClient(stratusHttpClient(CIO.create(), credentials), baseUrl)
-    private val links = ShareLinks(baseUrl, credentials)
+    // Both on the origin, which is where sign-in settles: a WebDAV path is
+    // then `/files/...` and a signature is over the row underneath it
+    // (stratus-backend#279). The suite talks to the server the way the app
+    // does, or it is proving something the app does not do.
+    private val dav = DavClient(stratusHttpClient(CIO.create(), credentials), originOf(baseUrl))
+    private val links = ShareLinks(originOf(baseUrl), credentials)
 
     /** Nothing at all: no cookie, no Basic, which is the visitor's whole position. */
     private val stranger = HttpClient(CIO) { followRedirects = false }
 
-    private val root = "/share-${Random.nextLong().toULong().toString(16)}"
+    private val root = "/files/share-${Random.nextLong().toULong().toString(16)}"
+
+    /** The collection every path here is under, as the app sees it. */
+    private val collection = "/files/"
 
     // The three shapes that break a URL: a space, something outside ASCII, and
     // an ampersand. The DAV suite pins them for hrefs; this pins them signed.
@@ -69,15 +77,19 @@ class ShareConformanceTest {
     private fun tokenOf(url: String) = url.substringAfter("?k=")
 
     private fun urlFor(path: String, token: String) =
-        URLBuilder(baseUrl).apply {
-            appendPathSegments(path.trim('/').split('/'))
+        URLBuilder(originOf(baseUrl)).apply {
+            // The trailing slash is kept: a collection asked for without one
+            // is a redirect rather than an answer, and what is under test
+            // here is the answer.
+            val segments = path.trim('/').split('/') + if (path.endsWith("/")) listOf("") else emptyList()
+            appendPathSegments(segments)
             parameters.append("k", token)
         }.buildString()
 
     @Test
     fun aFileOpensForSomebodyWithNoAccountAtAll() = runTest {
         given()
-        val link = links.link("$root/$name", isDirectory = false, life = ShareLife.Forever, nowEpochSeconds = now())
+        val link = link("$root/$name", isDirectory = false, life = ShareLife.Forever, nowEpochSeconds = now())
 
         val response = stranger.get(link)
         assertEquals(200, response.status.value, "the server would not take our signature")
@@ -87,7 +99,7 @@ class ShareConformanceTest {
     @Test
     fun itStreamsRangesBecauseAReceiverSeeks() = runTest {
         given()
-        val link = links.link("$root/$name", false, ShareLife.Forever, now())
+        val link = link("$root/$name", false, ShareLife.Forever, now())
 
         val response = stranger.get(link) { header(HttpHeaders.Range, "bytes=4-7") }
         assertEquals(206, response.status.value, "a film that cannot seek is not a film")
@@ -97,18 +109,18 @@ class ShareConformanceTest {
     @Test
     fun aFolderLinkReachesInsideItAndNothingElse() = runTest {
         given()
-        val token = tokenOf(links.link(root, isDirectory = true, life = ShareLife.Forever, nowEpochSeconds = now()))
+        val token = tokenOf(link(root, isDirectory = true, life = ShareLife.Forever, nowEpochSeconds = now()))
 
         assertEquals(200, stranger.get(urlFor("$root/$name", token)).status.value, "did not reach its own child")
         // The same signature offered one level up, which is the mistake that
         // would turn a shared folder into the whole library.
-        assertEquals(403, stranger.get(urlFor("/", token)).status.value)
+        assertEquals(403, stranger.get(urlFor(collection, token)).status.value)
     }
 
     @Test
     fun aFileLinkIsNotAKeyToItsFolder() = runTest {
         given()
-        val token = tokenOf(links.link("$root/$name", isDirectory = false, life = ShareLife.Forever, nowEpochSeconds = now()))
+        val token = tokenOf(link("$root/$name", isDirectory = false, life = ShareLife.Forever, nowEpochSeconds = now()))
         assertEquals(403, stranger.get(urlFor(root, token)).status.value)
     }
 
@@ -116,7 +128,7 @@ class ShareConformanceTest {
     fun aDeadlineInThePastIsRefused() = runTest {
         given()
         // A day from a day ago: a link whose life ran out while nobody looked.
-        val link = links.link("$root/$name", false, ShareLife.ADay, nowEpochSeconds = now() - 2 * 86_400)
+        val link = link("$root/$name", false, ShareLife.ADay, nowEpochSeconds = now() - 2 * 86_400)
         assertEquals(403, stranger.get(link).status.value)
     }
 
@@ -127,7 +139,7 @@ class ShareConformanceTest {
         // is yes; against every other WebDAV server it is no, and the app has
         // no other way of telling the two apart.
         val support = LinkSupport(HttpClient(CIO) { followRedirects = false })
-        val link = links.link("$root/$name", false, ShareLife.Forever, now())
+        val link = link("$root/$name", false, ShareLife.Forever, now())
 
         assertEquals(LinkAnswer.Honoured, support.honours(link), "the server refused a link this app had just signed")
         assertTrue(support.offered)
@@ -136,10 +148,14 @@ class ShareConformanceTest {
     @Test
     fun anEditedSignatureIsRefused() = runTest {
         given()
-        val link = links.link("$root/$name", false, ShareLife.Forever, now())
+        val link = link("$root/$name", false, ShareLife.Forever, now())
         val tampered = link.dropLast(4) + "aaaa"
         assertTrue(stranger.get(tampered).status.value in listOf(403, 401), "an edited token was accepted")
     }
+
+    /** A link for a path that can have one, which every case here uses. */
+    private fun link(path: String, isDirectory: Boolean = false, life: ShareLife = ShareLife.Forever, nowEpochSeconds: Long = now()) =
+        requireNotNull(links.link(path, isDirectory, life, nowEpochSeconds)) { "$path should be shareable" }
 
     private fun now() = System.currentTimeMillis() / 1000
 }

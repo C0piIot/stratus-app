@@ -38,7 +38,7 @@ class SignInMachineTest {
     fun triesHttpsFirstWhenNoSchemeWasTyped() {
         val step = submit()
         assertEquals(Scheme.Https, step.attempt.scheme)
-        assertEquals("/dav/", step.attempt.path)
+        assertEquals("/", step.attempt.path)
         // Over TLS there is nothing to ask about, so the credentials go at once.
         assertEquals(form.password, step.probes.single().credentials?.password)
     }
@@ -47,15 +47,15 @@ class SignInMachineTest {
     fun signsInAndAsksForTheSessionToBeStored() {
         val first = submit()
         val done = first.then(ProbeOutcome.IsWebDav(first.attempt))
-        assertEquals("https://host/dav/", (done.state as SignInState.Done).baseUrl)
+        assertEquals("https://host/", (done.state as SignInState.Done).baseUrl)
         assertTrue(done.effects.any { it is SignInEffect.Store })
     }
 
     @Test
-    fun walksOnToTheRootWhenDavIsNotThere() {
+    fun walksOnToDavWhenTheRootIsNotThere() {
         val first = submit()
         val second = first.then(ProbeOutcome.NotWebDav(first.attempt, 404))
-        assertEquals("/", second.attempt.path)
+        assertEquals("/dav/", second.attempt.path)
     }
 
     @Test
@@ -67,7 +67,7 @@ class SignInMachineTest {
         val second = first.then(ProbeOutcome.NotWebDav(first.attempt, 405))
         val exhausted = second.then(ProbeOutcome.NotWebDav(second.attempt, 405))
         val reason = (exhausted.state as SignInState.Failed).reason
-        assertEquals(listOf(Tried("/dav/", 405), Tried("/", 405)), (reason as SignInFailure.NotWebDav).tried)
+        assertEquals(listOf(Tried("/", 405), Tried("/dav/", 405)), (reason as SignInFailure.NotWebDav).tried)
     }
 
     @Test
@@ -91,7 +91,7 @@ class SignInMachineTest {
         val reason = (exhausted.state as SignInState.Failed).reason
         assertTrue(reason is SignInFailure.NotWebDav, "was $reason")
         // Both paths, and what each answered: the message depends on the second.
-        assertEquals(listOf(Tried("/dav/", 404), Tried("/", 404)), reason.tried)
+        assertEquals(listOf(Tried("/", 404), Tried("/dav/", 404)), reason.tried)
         assertEquals(emptyList(), exhausted.probes)
     }
 
@@ -101,7 +101,7 @@ class SignInMachineTest {
         val fallback = first.then(ProbeOutcome.Unreachable(first.attempt, "connection refused"))
         assertEquals(Scheme.Http, fallback.attempt.scheme)
         // And the remaining https path is dropped: it is the same closed port.
-        assertEquals("/dav/", fallback.attempt.path)
+        assertEquals("/", fallback.attempt.path)
         // Nothing carrying a password goes out before consent.
         assertEquals(null, fallback.probes.single().credentials)
     }
@@ -193,8 +193,9 @@ class SignInMachineTest {
         assertEquals("/webdav/", followed.attempt.path)
 
         val elsewhere = first.then(ProbeOutcome.Redirected(first.attempt, "https://other.example/dav/"))
-        // Not followed: it would hand the credentials to whoever Location names.
-        assertEquals("/", elsewhere.attempt.path)
+        // Not followed: it would hand the credentials to whoever Location
+        // names. The queue carries on with the next path instead.
+        assertEquals("/dav/", elsewhere.attempt.path)
     }
 
     @Test

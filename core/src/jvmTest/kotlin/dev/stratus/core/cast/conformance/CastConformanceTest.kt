@@ -5,6 +5,7 @@ import dev.stratus.core.cast.castItemFor
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
+import dev.stratus.core.net.originOf
 import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.share.ShareLinks
 import io.ktor.client.HttpClient
@@ -42,13 +43,16 @@ class CastConformanceTest {
         System.getenv("STRATUS_TEST_PASS") ?: "conformance-secret",
     )
 
-    private val dav = DavClient(stratusHttpClient(CIO.create(), credentials), baseUrl)
-    private val links = ShareLinks(baseUrl, credentials)
+    // Both on the origin, as sign-in settles on it: a path then carries the
+    // collection it is in, which is what a signature is taken relative to
+    // (stratus-backend#279).
+    private val dav = DavClient(stratusHttpClient(CIO.create(), credentials), originOf(baseUrl))
+    private val links = ShareLinks(originOf(baseUrl), credentials)
 
     /** No cookie and no Basic, which is a Chromecast's whole position. */
     private val television = HttpClient(CIO) { followRedirects = false }
 
-    private val root = "/cast-${Random.nextLong().toULong().toString(16)}"
+    private val root = "/files/cast-${Random.nextLong().toULong().toString(16)}"
 
     @AfterTest
     fun tearDown() = runTest { runCatching { dav.delete(root) } }

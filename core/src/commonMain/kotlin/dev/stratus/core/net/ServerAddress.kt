@@ -11,7 +11,8 @@ enum class Scheme(val wire: String, val defaultPort: Int) {
  *
  * A null [scheme] or [path] means they typed none, which is different from
  * having typed the default: "no scheme" is what licenses trying https and then
- * asking about http, and "no path" is what licenses looking for `/dav/`.
+ * asking about http, and "no path" is what licenses looking for the collection
+ * at the root and then at `/dav/`.
  */
 data class ServerAddress(
     val scheme: Scheme?,
