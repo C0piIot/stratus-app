@@ -50,9 +50,28 @@ class SignInTest : E2E() {
         see("Servers")
     }
 
+    // stratus-backend#279: the origin is a collection of collections, and the
+    // tree is one of them -- so this is what signing in now lands on.
+    @Test
+    fun signingInLandsOnTheCollectionsAndTheTreeIsOneOfThem() {
+        Stratus.folder("/$unique/")
+        launch()
+        signIn()
+        see("files")
+        see("photos")
+        see("playlists")
+
+        tap("files")
+        see(unique)
+    }
+
     @Test
     fun theSessionSurvivesTheAppBeingClosed() {
-        signedIn()
+        launch()
+        signIn()
+        see("Servers")
+        // Back from the first screen leaves the app, which is the point here;
+        // signedIn() would have walked a level down from it.
         Phone.device.pressBack()
         Phone.toHomeAndBack()
         see("Servers")

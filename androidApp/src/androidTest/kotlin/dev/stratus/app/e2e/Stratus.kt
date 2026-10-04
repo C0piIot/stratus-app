@@ -27,8 +27,13 @@ object Stratus {
     val otherPassword: String = arguments.getString("stratusPassword2") ?: "e2e-secret-2"
     val otherUpstream = InetSocketAddress("10.0.2.2", arguments.getString("stratusPort2")?.toInt() ?: 18097)
 
-    /** The server behind the app's back, for arranging a test and checking its outcome. */
-    val dav = DavClient(stratusHttpClient(OkHttp.create(), Credentials(user, password)), "http://10.0.2.2:$port/dav/")
+    /**
+     * The server behind the app's back, for arranging a test and checking its
+     * outcome -- on `/files/`, which is the writable tree. The app signs in at
+     * the origin and walks into it; these paths start inside it, so arranging
+     * a folder reads the same as it always did.
+     */
+    val dav = DavClient(stratusHttpClient(OkHttp.create(), Credentials(user, password)), "http://10.0.2.2:$port/files/")
 
     fun folder(path: String) = runBlocking { dav.makeCollection(path) }
 
@@ -59,7 +64,7 @@ object Stratus {
      * which is what RemoteLayoutTest pins, and a second copy of it here would
      * only have to agree.
      */
-    fun backedUp(originalName: String, root: String = "/Photos/"): Pair<String, Long>? = runBlocking {
+    fun backedUp(originalName: String, root: String = "/phone_backup/"): Pair<String, Long>? = runBlocking {
         if (!exists(root)) return@runBlocking null
         for (year in dav.list(root).filter { it.isDirectory }) {
             for (month in dav.list(year.path).filter { it.isDirectory }) {

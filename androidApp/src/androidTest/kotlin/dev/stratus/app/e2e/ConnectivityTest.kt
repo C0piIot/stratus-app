@@ -72,6 +72,7 @@ class ConnectivityTest : E2E() {
         // Straight at the server, not through the link: this is about the
         // phone's own network, which a proxy on the loopback would not notice.
         signIn(address = "http://10.0.2.2:${Stratus.port}")
+        tap("files")
         see(unique)
 
         Phone.airplane(true)
