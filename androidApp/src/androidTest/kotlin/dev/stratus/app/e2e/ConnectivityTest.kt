@@ -77,7 +77,11 @@ class ConnectivityTest : E2E() {
 
         Phone.airplane(true)
         tap(unique)
-        see("Could not reach the server", timeoutMs = 30_000)
+        // Either wording: with the radio off a connection is sometimes refused
+        // at once and sometimes swallowed until the request times out, and
+        // which one happens is the emulator's business rather than the app's.
+        // Both say the same thing to whoever is reading them.
+        seeOneOf("Could not reach the server", "did not answer in time", timeoutMs = 45_000)
 
         Phone.airplane(false)
         tap("Try again")

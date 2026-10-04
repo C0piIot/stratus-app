@@ -1,6 +1,7 @@
 package dev.stratus.core
 
 import android.content.Context
+import android.provider.DocumentsContract
 import dev.stratus.core.backup.AndroidAssetSource
 import dev.stratus.core.cast.AndroidCaster
 import dev.stratus.core.cast.Caster
@@ -17,6 +18,13 @@ import io.ktor.client.engine.okhttp.OkHttp
 import javax.net.ssl.HttpsURLConnection
 
 @Volatile private var shared: AppContainer? = null
+
+/**
+ * What the documents provider is declared as in the manifest, after the
+ * application id. One copy, because the provider reads it and this file
+ * writes to it.
+ */
+const val DOCUMENTS_AUTHORITY_SUFFIX = ".documents"
 
 /**
  * Assembled here rather than in `:ui` so the engine, the keystore and the
@@ -55,6 +63,17 @@ private fun build(application: Context): AppContainer {
         caster = casterFor(application),
         databasePath = application.filesDir.resolve("backup.db").absolutePath,
         assets = AndroidAssetSource(application),
+        // Files keeps the storage locations a provider offers until something
+        // tells it they moved, so a server added or removed would otherwise
+        // not show up there until the next reboot (stratus-app#104).
+        serversChanged = {
+            runCatching {
+                application.contentResolver.notifyChange(
+                    DocumentsContract.buildRootsUri(application.packageName + DOCUMENTS_AUTHORITY_SUFFIX),
+                    null,
+                )
+            }
+        },
     )
 }
 

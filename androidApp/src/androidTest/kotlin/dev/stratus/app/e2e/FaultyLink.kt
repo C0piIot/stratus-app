@@ -41,6 +41,9 @@ class FaultyLink(@Volatile private var upstream: InetSocketAddress) : Closeable 
     /** Everything the app has sent towards the server, which is how a resume is told from a restart. */
     val sent = AtomicLong(0)
 
+    /** And what came back, which is how a ranged read is told from a download. */
+    val received = AtomicLong(0)
+
     /** Bytes the app may still send before the connection is cut; negative for no limit. */
     private val uploadBudget = AtomicLong(-1)
 
@@ -113,7 +116,7 @@ class FaultyLink(@Volatile private var upstream: InetSocketAddress) : Closeable 
             }
             live += server
             pump(client.getInputStream(), server.getOutputStream(), uploadBudget, client, server, sent)
-            pump(server.getInputStream(), client.getOutputStream(), downloadBudget, client, server, null)
+            pump(server.getInputStream(), client.getOutputStream(), downloadBudget, client, server, received)
         }
     }
 

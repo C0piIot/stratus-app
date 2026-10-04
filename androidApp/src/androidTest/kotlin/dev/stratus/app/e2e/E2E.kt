@@ -120,6 +120,17 @@ abstract class E2E {
         return ui.onAllNodes(wanted)[0]
     }
 
+    /** Any one of these, for a failure a platform words more than one way. */
+    fun seeOneOf(vararg texts: String, timeoutMs: Long = 15_000) {
+        try {
+            ui.waitUntil(timeoutMs) {
+                texts.any { ui.onAllNodes(hasText(it, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("never saw any of ${texts.toList()} on screen. It showed:\n${screen()}", e)
+        }
+    }
+
     fun gone(text: String, timeoutMs: Long = 15_000) = ui.waitUntil(timeoutMs) {
         ui.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isEmpty()
     }

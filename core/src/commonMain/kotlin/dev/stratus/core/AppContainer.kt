@@ -9,6 +9,8 @@ import dev.stratus.core.backup.Connections
 import dev.stratus.core.cast.CastController
 import dev.stratus.core.cast.Caster
 import dev.stratus.core.dav.DavClient
+import dev.stratus.core.documents.DocumentRef
+import dev.stratus.core.documents.DocumentTree
 import dev.stratus.core.files.BrowserController
 import dev.stratus.core.files.FileHandoff
 import dev.stratus.core.instance.Instance
@@ -52,8 +54,13 @@ class AppContainer(
     databasePath: String,
     /** Where photographs come from on this platform. */
     val assets: AssetSource,
+    /**
+     * Told when the set of servers changes, for a platform that lists them
+     * somewhere of its own -- Android's Files app does (stratus-app#104).
+     */
+    serversChanged: suspend () -> Unit = {},
 ) {
-    private val instances = InstanceStore(secure)
+    private val instances = InstanceStore(secure, serversChanged)
 
     // Opened once and kept: SQLite does not want a connection per question, and
     // the file is a cache, so losing it costs a rebuild and nothing else.
@@ -141,6 +148,16 @@ class AppContainer(
             scope = scope,
         )
     }
+
+    /**
+     * The library as a tree of documents, for the platform's own file picker.
+     *
+     * One per process and not per request: it holds the listings the picker
+     * has been given, and a second copy would answer from an empty cache and
+     * fetch everything again.
+     */
+    fun documents(scope: CoroutineScope, changed: (DocumentRef) -> Unit): DocumentTree =
+        DocumentTree(instances, connections, scope, changed)
 
     /** Null when nobody is signed in, which is the only state it can be built from. */
     suspend fun browser(scope: CoroutineScope): BrowserController? {
