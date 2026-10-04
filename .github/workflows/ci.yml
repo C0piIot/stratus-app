@@ -288,11 +288,12 @@ jobs:
             -keyout "$dir/key.pem" -out "$dir/cert.pem" \
             -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost"
 
-          # The same spelling fingerprintOf produces: SHA-256 of the DER, in
-          # lowercase hex pairs.
+          # The same spelling fingerprintOf produces: SHA-256 of the DER in
+          # hex pairs, and uppercase -- `hexPairs` has an uppercase table, and
+          # a pin is compared as a string.
           fingerprint="$(openssl x509 -in "$dir/cert.pem" -outform DER |
             openssl dgst -sha256 -hex | sed 's/^.*= //' |
-            sed 's/\(..\)/\1:/g; s/:$//' | tr 'A-Z' 'a-z')"
+            sed 's/\(..\)/\1:/g; s/:$//' | tr 'a-z' 'A-Z')"
 
           openssl s_server -quiet -www -accept 18443 \
             -cert "$dir/cert.pem" -key "$dir/key.pem" &
