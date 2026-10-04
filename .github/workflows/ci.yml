@@ -310,8 +310,13 @@ jobs:
           kill "$(cat "$dir/pid")" 2>/dev/null || true
           exit $status
 
-      - name: Link the framework Xcode embeds
-        run: ./gradlew --no-daemon :ui:linkDebugFrameworkIosSimulatorArm64
+      # Two: the app links StratusUI and the File Provider extension links
+      # StratusCore, which carries no Compose (stratus-app#105).
+      - name: Link the frameworks Xcode links against
+        run: |
+          ./gradlew --no-daemon \
+            :ui:linkDebugFrameworkIosSimulatorArm64 \
+            :core:linkDebugFrameworkIosSimulatorArm64
         env:
           SENTRY_DSN: ${{ vars.SENTRY_DSN }}
 

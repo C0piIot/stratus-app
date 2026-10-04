@@ -30,6 +30,10 @@ targets:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # What the shared keychain group is built from at runtime. A group has
+        # to carry the team's prefix and only the build knows it, so each
+        # process reads its own (see sharedKeychainGroup, stratus-app#105).
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
     settings:
       base:
         # The framework Gradle links, not one Xcode builds. Producing it is
@@ -44,4 +48,43 @@ targets:
       # Static, so it is linked and not embedded: there is no dynamic library to
       # carry into the bundle.
       - framework: ../ui/build/bin/iosSimulatorArm64/debugFramework/StratusUI.framework
+        embed: false
+      # The extension travels inside the app, which is what makes it appear
+      # under Locations in Files.
+      - target: StratusFileProvider
+
+  # The library as a place to open from and save into (stratus-app#105).
+  #
+  # It links StratusCore and not StratusUI: that one carries Compose, and an
+  # extension runs on a much shorter memory budget than an app. Two static
+  # frameworks in two binaries, so there is nothing to collide.
+  StratusFileProvider:
+    type: app-extension
+    platform: iOS
+    sources:
+      - FileProvider
+    info:
+      path: FileProvider/Info.plist
+      properties:
+        CFBundleDisplayName: Stratus
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.fileprovider-nonui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FileProviderExtension
+          # Where materialised files live. It is an app group, so it needs an
+          # entitlement a signed build has -- which is behind the developer
+          # programme (stratus-app#5) and is why the device half of this is
+          # deferred.
+          NSExtensionFileProviderDocumentGroup: group.dev.stratus
+          # Without this key Files does not show the provider at all.
+          NSExtensionFileProviderSupportsEnumeration: true
+    settings:
+      base:
+        # An extension's bundle id has to sit under the app's.
+        PRODUCT_BUNDLE_IDENTIFIER: dev.stratus.Stratus.FileProvider
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../core/build/bin/iosSimulatorArm64/debugFramework
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+    dependencies:
+      - framework: ../core/build/bin/iosSimulatorArm64/debugFramework/StratusCore.framework
         embed: false
