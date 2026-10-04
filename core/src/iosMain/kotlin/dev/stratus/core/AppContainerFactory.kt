@@ -9,6 +9,7 @@ import dev.stratus.core.store.KeychainSecureStore
 import io.ktor.client.engine.darwin.Darwin
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSApplicationSupportDirectory
+import platform.Foundation.NSBundle
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 
@@ -22,7 +23,7 @@ import platform.Foundation.NSUserDomainMask
  */
 fun appContainer(): AppContainer = AppContainer(
     engine = { policy -> Darwin.create { handleChallenge(darwinTrust(policy)) } },
-    secure = KeychainSecureStore(),
+    secure = KeychainSecureStore(accessGroup = sharedKeychainGroup()),
     handoff = IosFileHandoff(),
     sharing = IosLinkSharing(),
     // No Cast sender here: Google's iOS SDK is a proprietary binary framework
@@ -33,6 +34,24 @@ fun appContainer(): AppContainer = AppContainer(
     databasePath = databasePath(),
     assets = IosAssetSource(),
 )
+
+/**
+ * The keychain group the app and its File Provider extension share
+ * (stratus-app#105), or null where there is none to share.
+ *
+ * Read from the bundle rather than passed in from Swift, because a group has
+ * to carry the team's prefix and only the build knows it: both targets put
+ * `$(AppIdentifierPrefix)` in their Info.plist under this key, and each
+ * process reads its own. Null before there is a developer programme
+ * (stratus-app#5), which leaves every process on its own default group --
+ * today's behaviour, and the reason this degrades rather than breaks.
+ */
+private fun sharedKeychainGroup(): String? {
+    val prefix = NSBundle.mainBundle.objectForInfoDictionaryKey("AppIdentifierPrefix") as? String
+    return prefix?.takeIf { it.isNotBlank() }?.let { it + SHARED_KEYCHAIN }
+}
+
+private const val SHARED_KEYCHAIN = "dev.stratus.shared"
 
 /**
  * Application Support rather than Caches or the temporary directory: the file is

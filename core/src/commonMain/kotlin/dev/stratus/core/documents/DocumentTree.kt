@@ -43,6 +43,14 @@ data class DocumentRow(
     val size: Long?,
     val contentType: String?,
     val lastModifiedEpochMs: Long?,
+    /**
+     * What the server says this content is, where it says anything.
+     *
+     * Android's picker has no use for it; iOS's File Provider does -- an
+     * item carries a version and that is the only honest one WebDAV offers
+     * (stratus-app#105).
+     */
+    val etag: String? = null,
 )
 
 /** What is known about a folder at this moment, which is not always its contents. */
@@ -101,6 +109,20 @@ class DocumentTree(
             listings[ref] = it
             start(ref)
         }
+    }
+
+    /**
+     * A folder's contents, waited for.
+     *
+     * [children] answers from a cache and tells the platform afterwards,
+     * which is what a `DocumentsProvider` needs because its query must return
+     * at once. A File Provider enumerator is the other shape: it is handed a
+     * callback and wants the answer in it (stratus-app#105). Same client, no
+     * cache in the way.
+     */
+    suspend fun listNow(ref: DocumentRef): List<DocumentRow> {
+        val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
+        return dav.list(ref.davPath).map { rowOf(ref.instanceId, it) }.sortedForPeople()
     }
 
     /** Throws the cached answer away and asks again. What pull-to-refresh is. */
@@ -239,11 +261,10 @@ class DocumentTree(
         fetching.remove(ref)?.cancel()
         fetching[ref] = scope.launch {
             val answer = try {
-                val dav = davFor(ref.instanceId)
-                if (dav == null) {
+                if (davFor(ref.instanceId) == null) {
                     Listing.Failed("that server is not signed in any more")
                 } else {
-                    Listing.Loaded(dav.list(ref.davPath).map { rowOf(ref.instanceId, it) }.sortedForPeople())
+                    Listing.Loaded(listNow(ref))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -279,6 +300,7 @@ class DocumentTree(
             size = entry.size,
             contentType = if (entry.isDirectory) MIME_DIRECTORY else entry.contentType,
             lastModifiedEpochMs = entry.lastModifiedEpochMs,
+            etag = entry.etag,
         )
     }
 

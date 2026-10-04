@@ -38,6 +38,7 @@ import platform.Security.errSecSuccess
 import platform.Security.kSecAttrAccessible
 import platform.Security.kSecAttrAccessibleAfterFirstUnlock
 import platform.Security.kSecAttrAccount
+import platform.Security.kSecAttrAccessGroup
 import platform.Security.kSecAttrService
 import platform.Security.kSecClass
 import platform.Security.kSecClassGenericPassword
@@ -62,7 +63,19 @@ import platform.Security.kSecValueData
 class KeychainFailure(val status: Int) : Exception("the keychain refused the item: OSStatus $status")
 
 @OptIn(ExperimentalForeignApi::class)
-class KeychainSecureStore(private val service: String = "dev.stratus.app") : SecureStore {
+class KeychainSecureStore(
+    private val service: String = "dev.stratus.app",
+    /**
+     * The group both processes read, or null for this one's own.
+     *
+     * An app and its extension get a different default group, so without this
+     * the File Provider would see no servers at all (stratus-app#105). Worth
+     * knowing while testing it: **the simulator does not enforce access
+     * groups**, so this looks right there whatever it says, and only a device
+     * proves it -- which is behind the developer programme (stratus-app#5).
+     */
+    private val accessGroup: String? = null,
+) : SecureStore {
 
     override suspend fun read(key: String): String? = memScoped {
         val query = identifying(key)
@@ -131,6 +144,7 @@ class KeychainSecureStore(private val service: String = "dev.stratus.app") : Sec
         CFDictionarySetValue(dictionary, kSecClass, kSecClassGenericPassword)
         CFDictionarySetValue(dictionary, kSecAttrService, cfString(service))
         CFDictionarySetValue(dictionary, kSecAttrAccount, cfString(key))
+        accessGroup?.let { CFDictionarySetValue(dictionary, kSecAttrAccessGroup, cfString(it)) }
         return dictionary
     }
 
