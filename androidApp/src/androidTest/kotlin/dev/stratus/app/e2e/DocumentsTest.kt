@@ -77,6 +77,16 @@ class DocumentsTest : E2E() {
 
     private fun Cursor.string(column: String): String = getString(getColumnIndexOrThrow(column))
 
+    /** Waits for the server to hold what was written, and answers what it holds. */
+    private fun eventually(path: String, timeoutMs: Long = 20_000, done: (String) -> Boolean): String {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (runCatching { done(path) }.getOrDefault(false)) break
+            Thread.sleep(200)
+        }
+        return runCatching { Stratus.read(path) }.getOrDefault("")
+    }
+
     @Test
     fun theServersCollectionsAreWhatTheRootOpensOnto() {
         Stratus.folder("/$unique/")
@@ -102,9 +112,13 @@ class DocumentsTest : E2E() {
         val file = DocumentsContract.createDocument(resolver, folder, "text/plain", "note.txt")!!
         resolver.openOutputStream(file)!!.use { it.write("written from a picker".encodeToByteArray()) }
 
+        // Closing the stream is not the end of it: whoever writes seeks in the
+        // descriptor, so the bytes go out when *that* closes, which the system
+        // reports on a thread of its own. Waiting is the honest way to assert
+        // on something that was never promised to be synchronous.
         assertEquals(
             "written from a picker",
-            Stratus.read("/$unique/made/note.txt"),
+            eventually("/$unique/made/note.txt") { Stratus.read(it) == "written from a picker" },
             "the bytes a picker wrote are not what the server holds",
         )
     }
