@@ -171,6 +171,13 @@ tasks.withType<AbstractTestTask>().configureEach {
 // they do run here.
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     for (name in listOf("STRATUS_TLS_URL", "STRATUS_TLS_FINGERPRINT")) {
-        providers.environmentVariable(name).orNull?.let { environment(name, it) }
+        val value = providers.environmentVariable(name).orNull ?: continue
+        // Both spellings on purpose. `simctl spawn` hands the child only the
+        // variables prefixed SIMCTL_CHILD_, with the prefix taken off -- and
+        // whether the plugin adds that prefix for you has changed between
+        // versions. Setting both means the test sees the name either way, and
+        // the loser is one unread variable.
+        environment(name, value)
+        environment("SIMCTL_CHILD_$name", value)
     }
 }
