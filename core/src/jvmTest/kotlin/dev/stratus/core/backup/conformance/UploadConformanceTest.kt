@@ -68,7 +68,7 @@ class UploadConformanceTest {
             Buffer().apply { write(bytes, from.toInt(), bytes.size) }
     }
 
-    private suspend fun queueFor(id: String, dav: DavClient): UploadQueue {
+    private suspend fun queueFor(id: String, dav: DavClient, layout: RemoteLayout = this.layout): UploadQueue {
         database.migrate()
         return UploadQueue(
             layout = layout,
@@ -105,6 +105,26 @@ class UploadConformanceTest {
 
         // And again, which is every photograph after the first one.
         DavDirectoryMaker(fromOrigin).ensure(month)
+    }
+
+    /**
+     * The configuration the app actually ships: the base is the origin and the
+     * root is `files/<something>`, two segments of which the first is the
+     * server's own. Everything else here roots the client at the writable tree
+     * and so cannot see what that costs.
+     */
+    @Test
+    fun backsUpWithTheDefaultRootAgainstTheOrigin() = runTest {
+        val fromOrigin = davAt(originOf(requireNotNull(System.getenv("STRATUS_TEST_URL"))))
+        val root = "files/phone_backup-${Random.nextLong().toULong().toString(16)}"
+        val queue = queueFor("origin-rooted", fromOrigin, RemoteLayout(root))
+
+        assertEquals(1, queue.enqueue(listOf(asset)))
+        val steps = drain(queue)
+        assertTrue(steps.any { it is QueueStep.Uploaded }, "nothing was uploaded: $steps")
+
+        val landed = RemoteLayout(root).pathFor(asset)
+        assertEquals(bytes.size.toLong(), fromOrigin.stat(landed).size)
     }
 
     @Test

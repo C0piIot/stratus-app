@@ -33,7 +33,10 @@ cleanup() {
     if [ "$status" -ne 0 ]; then
         echo "--- backend at the end of the run" >&2
         docker ps -a --filter "name=$NAME" >&2 || true
-        docker logs "$NAME" 2>&1 | tail -40 >&2 || true
+        # All of it, not a tail: a run is a quarter of an hour of fourteen
+        # tests, and the last forty lines are whichever one happened to finish
+        # last rather than the one that failed.
+        docker logs "$NAME" 2>&1 >&2 || true
     fi
     docker rm -f "$NAME" "$NAME2" >/dev/null 2>&1 || true
     rm -rf "$DATA" "$DATA2"

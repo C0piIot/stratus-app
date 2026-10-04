@@ -64,6 +64,17 @@ object Stratus {
      * which is what RemoteLayoutTest pins, and a second copy of it here would
      * only have to agree.
      */
+    /** Every path under the backup root, for a failure to say what did arrive. */
+    fun underBackupRoot(root: String = "/phone_backup/"): List<String> = runBlocking {
+        runCatching {
+            dav.list(root).flatMap { year ->
+                if (!year.isDirectory) listOf(year.path) else dav.list(year.path).flatMap { month ->
+                    if (!month.isDirectory) listOf(month.path) else dav.list(month.path).map { it.path }
+                }
+            }
+        }.getOrElse { listOf("(could not be read: $it)") }
+    }
+
     fun backedUp(originalName: String, root: String = "/phone_backup/"): Pair<String, Long>? = runBlocking {
         if (!exists(root)) return@runBlocking null
         for (year in dav.list(root).filter { it.isDirectory }) {
