@@ -101,6 +101,13 @@ kotlin {
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
+        // The Darwin trust half has the one test in this project that needs a
+        // Mac: a real TLS handshake against a certificate nothing vouches for,
+        // on the simulator (stratus-app#58).
+        iosTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
         // The JVM target ships nowhere, but it needs an engine to run the
         // conformance suite against a real server.
         // No typed accessor for this one: the device-test source set is created
@@ -130,9 +137,16 @@ kotlin {
 // two using one configuration, which is what stops them drifting apart.
 private val conformancePackage = "*.conformance.*"
 
-tasks.named<Test>("jvmTest") {
+// Every test task, which since stratus-app#58 means the simulator's too: the
+// Darwin trust half is proved against a real TLS server the macOS job starts,
+// and it is selected the same way the JVM suite is.
+//
+// Kotlin/Native also reports a failed test as a class name and nothing else,
+// which is useless for anything thrown with a message worth reading -- an
+// OSStatus from the Keychain, say -- hence the logging.
+tasks.withType<AbstractTestTask>().configureEach {
     val conformance = providers.gradleProperty("conformance").isPresent
-    filter {
+    filter.apply {
         if (conformance) includeTestsMatching(conformancePackage) else excludeTestsMatching(conformancePackage)
         isFailOnNoMatchingTests = conformance
     }
@@ -141,15 +155,29 @@ tasks.named<Test>("jvmTest") {
         // against a different one would otherwise be reported as up to date.
         outputs.upToDateWhen { false }
     }
-}
-
-// Kotlin/Native reports a failed test as a class name and nothing else, which is
-// useless for anything thrown with a message worth reading -- an OSStatus from
-// the Keychain, say. Applies to every test task, JVM included.
-tasks.withType<AbstractTestTask>().configureEach {
     testLogging {
         showExceptions = true
         showStackTraces = true
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
+// Where the simulator's TLS test finds its server.
+//
+// Handed to the task by name rather than inherited: a test binary does not run
+// in this process, it runs under `simctl`, which passes nothing through unless
+// the plugin is told to -- and it prefixes what it is told with SIMCTL_CHILD_
+// on the way. The JVM suites take theirs from the ambient environment because
+// they do run here.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+    for (name in listOf("STRATUS_TLS_URL", "STRATUS_TLS_FINGERPRINT")) {
+        val value = providers.environmentVariable(name).orNull ?: continue
+        // Both spellings on purpose. `simctl spawn` hands the child only the
+        // variables prefixed SIMCTL_CHILD_, with the prefix taken off -- and
+        // whether the plugin adds that prefix for you has changed between
+        // versions. Setting both means the test sees the name either way, and
+        // the loser is one unread variable.
+        environment(name, value)
+        environment("SIMCTL_CHILD_$name", value)
     }
 }
