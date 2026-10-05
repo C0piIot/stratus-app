@@ -37,6 +37,11 @@ kotlin {
         target.binaries.framework {
             baseName = "StratusUI"
             isStatic = true
+            // Compiled in is not the same as visible: without this, `:core`'s
+            // declarations are inside the framework and absent from its
+            // headers, so Swift cannot name them. The app needs to, for the
+            // door a background transfer comes back through (stratus-app#20).
+            export(project(":core"))
         }
     }
 
