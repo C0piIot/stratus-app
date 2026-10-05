@@ -2,8 +2,8 @@
 <!--
   The mark, on the 108dp canvas an adaptive icon is drawn on. It is scaled to
   46dp wide so its diagonal stays inside the 66dp circle every launcher mask
-  leaves alone -- tighter than anything iOS asks for, which is why the same
-  sizing is what brand/app-icon.svg uses.
+  leaves alone, which is tighter than anything iOS asks for and is why
+  brand/app-icon.svg sizes it the same way.
 
   The grid underneath is the mark's own 64 units; the group is what places it.
 -->
