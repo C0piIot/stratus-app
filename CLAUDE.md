@@ -183,6 +183,44 @@ description, and asking for one does not fail but kills the process. So
 `IosAssetSourceTest` proves the one thing it can: the unauthorised path
 degrades rather than throws. The rest is in stratus-app#117.
 
+## Uploads that outlive the app (stratus-app#20)
+
+On Android a transfer runs in this process, held up by a foreground service,
+and `Transport.send` suspends and answers. **On iOS it cannot**: a background
+`URLSession` transfers with the app suspended or killed and relaunches it to
+report, so there is nothing to return and no coroutine left to return it to.
+
+So the queue has a second door. `UploadOutcome.HandedOver` carries a ticket,
+`pending` holds it and is not offered again, and the answer arrives through
+`settle` whenever it arrives -- possibly in another life of the process.
+`reconcile` is what stops a forgotten transfer blocking a row for ever.
+
+Three things in that shape are worth keeping:
+
+- **The executor decides nothing.** It reports a status and an offset;
+  `outcomeOf` works out what that means against the queue's own row, because
+  the row knows how long the file is and the executor knows nothing at all
+  after a restart.
+- **Recording needs no connection.** `UploadRecords` takes the two tables and
+  nothing else, so a result that arrives while the phone is in a tunnel is
+  still written down -- the upload already happened, and losing it because a
+  client could not be built would be absurd.
+- **The split falls where tus already split.** `TusTransport.append` was
+  written to send everything left in one request, so the control plane is
+  `begin` and `offsetOf` -- still Ktor, still shared through `TusProtocol` --
+  and the bytes are the third request. Nothing had to be taken apart.
+
+The executor is Kotlin and not Swift, which is a practical choice and not a
+principled one: Kotlin/Native can implement an Objective-C protocol, and that
+is ninety seconds of an ordinary runner per iteration instead of seven minutes
+of a Mac. The Swift is an `AppDelegate` that holds a completion handler.
+
+Two smaller things fell out of it. `:ui`'s framework now **exports** `:core`,
+because compiled in is not the same as visible and Swift could not name what
+it could link. And the iOS container is one per process, like Android's, for
+the reason that one gives: three callers in a process is three connections to
+one SQLite file.
+
 ## State, and what is the record
 
 **The server is the record of what has been backed up.** The local database is a
