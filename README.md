@@ -12,10 +12,12 @@ private to Stratus.
 > **Early.** You can sign in to more than one server, switch between them, walk
 > their files, choose which folders feed each one and watch what the backup is
 > doing. On Android it runs in the background and reaches every server you turn
-> on. On iOS the app can now **see** the camera roll — it asks for the library,
-> lists your albums and knows what is in them — but it cannot send any of it
-> yet: the transport is next. The sections below describe what it is
-> meant to be; this warning shrinks as that stops being aspirational.
+> on. **On iOS it now backs up too**: the camera roll goes out through a
+> background transfer that the system finishes while the app is closed, and
+> which has never been run by anybody on a real phone — see
+> [#117](https://github.com/C0piIot/stratus-app/issues/117). The sections below
+> describe what it is meant to be; this warning shrinks as that stops being
+> aspirational.
 
 ## Why it exists
 

@@ -14,6 +14,11 @@ fun MainViewController() = ComposeUIViewController {
     val scope = rememberCoroutineScope { Dispatchers.Main.immediate }
     App(
         container,
+        // A pass now, for somebody who does not want to wait for the system to
+        // feel like it. What it starts still leaves through the background
+        // session, so closing the app does not stop what it handed over
+        // (stratus-app#20).
+        onBackUpNow = { scope.launch { container.backup.pass() } },
         // Asking is the shell's to trigger and the platform's to perform, as
         // on Android. Without it `access()` answers None for ever and the
         // backup sits in front of a camera roll nobody ever offered it

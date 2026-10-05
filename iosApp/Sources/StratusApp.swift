@@ -24,6 +24,19 @@ struct ComposeView: UIViewControllerRepresentable {
 /// Everything it does is bookkeeping. What any of it *means* is decided in
 /// shared Kotlin, which is the rule the whole backup is built on.
 class AppDelegate: NSObject, UIApplicationDelegate {
+
+    /// Registering has to happen before launching finishes: the system calls
+    /// the handler immediately for a task it was already holding, and refuses
+    /// one registered late.
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        BackupTasks.shared.register()
+        BackupTasks.shared.schedule()
+        return true
+    }
+
     func application(
         _ application: UIApplication,
         handleEventsForBackgroundURLSession identifier: String,
