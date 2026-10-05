@@ -15,6 +15,14 @@ data class MediaRow(
     val takenEpochMs: Long?,
     val addedEpochSeconds: Long,
     val mimeType: String? = null,
+    /**
+     * The movie half, where the library reports one as a thing of its own.
+     *
+     * iOS does: a Live Photo is two `PHAssetResource`s and is only a Live
+     * Photo with both (stratus-app#20). Android's motion photos are one file
+     * with the video inside it, so this is null there and nothing is lost.
+     */
+    val motion: MotionPart? = null,
 )
 
 /**
@@ -35,4 +43,5 @@ fun assetOf(row: MediaRow): Asset = Asset(
     originalName = row.displayName?.takeIf { it.isNotBlank() } ?: "untitled",
     sizeBytes = row.sizeBytes,
     mimeType = row.mimeType?.takeIf { it.isNotBlank() },
+    motion = row.motion,
 )
