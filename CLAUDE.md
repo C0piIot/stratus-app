@@ -530,6 +530,16 @@ background `URLSession` on a real device over days. That is unverifiable in CI a
 any price, which is the reason the native layer is a dumb executor. Everything it
 decides is decided somewhere a test can reach.
 
+**What a person has to check instead is written down, in stratus-app#117.**
+Nobody here has a Mac or an iPhone, so the iOS half is compiled and unit-tested
+and **has never been run by anybody**; the Keychain above is one example and the
+File Provider's access group is another, and both look fine on a simulator
+whatever they do. The rule that keeps that list honest is the same one the
+README has: **anything iOS-shaped that lands adds its cases there in the same
+pull request**, marked for whether a simulator settles it or it needs a signed
+build on a device. A case nothing can automate is not a gap to apologise for --
+it is a thing to write down before it is forgotten.
+
 ## Toolchain: Docker, and where that stops working
 
 **No JDK, no Gradle and no Android SDK on the host.** Every toolchain command
