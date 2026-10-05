@@ -68,6 +68,101 @@ class UploadQueueTest {
     private fun asset(day: Int, name: String = "IMG_$day.HEIC", motion: MotionPart? = null) =
         Asset("local-$day", utcMillis(2026, 9, day, 12, 0, 0), name, 100, motion)
 
+    // ---- Handed to the system, answered later (stratus-app#20) ------------
+
+    @Test
+    fun whatTheSystemIsCarryingIsNotOfferedAgain() = runTest {
+        // The whole reason the column exists: a second pass that picked this
+        // up would upload the same photograph twice.
+        val queue = queue(FakeTransport(answers = mutableListOf(UploadOutcome.HandedOver("t-1"))))
+        queue.enqueue(listOf(asset(1)))
+
+        assertEquals(QueueStep.HandedOver(layout.pathFor(asset(1))), queue.runNext())
+        assertEquals(QueueStep.Idle, queue.runNext())
+        assertEquals(1, queue.summary().inFlight)
+        assertEquals(1, queue.summary().total, "it is still owed until the server has it")
+    }
+
+    @Test
+    fun theLateAnswerIsRecordedExactlyLikeAnImmediateOne() = runTest {
+        val queue = queue(FakeTransport(answers = mutableListOf(UploadOutcome.HandedOver("t-1"))))
+        queue.enqueue(listOf(asset(1)))
+        queue.runNext()
+
+        val path = layout.pathFor(asset(1))
+        assertEquals(QueueStep.Uploaded(path), queue.settle("t-1", UploadOutcome.Done("etag")))
+        assertEquals(0, queue.summary().total)
+        assertEquals(listOf(path), database.cacheFor("instance-a").paths().toList())
+    }
+
+    @Test
+    fun anInterruptedHandoverGoesBackOnTheQueueWhereItGotTo() = runTest {
+        val queue = queue(FakeTransport(resumable = true, answers = mutableListOf(UploadOutcome.HandedOver("t-1"))))
+        queue.enqueue(listOf(asset(1)))
+        queue.runNext()
+
+        queue.settle("t-1", UploadOutcome.Interrupted(Resume("handle", 64)))
+
+        assertEquals(0, queue.summary().inFlight, "it is ours again")
+        val next = queue.outstanding().single()
+        assertEquals(64, next.offset)
+        assertNull(next.ticket)
+    }
+
+    @Test
+    fun aRefusedHandoverIsGivenUpOnLikeAnyOther() = runTest {
+        val queue = queue(FakeTransport(answers = mutableListOf(UploadOutcome.HandedOver("t-1"))))
+        queue.enqueue(listOf(asset(1)))
+        queue.runNext()
+
+        val step = queue.settle("t-1", UploadOutcome.Failed(FailureKind.Permanent, "no"))
+
+        assertTrue(step is QueueStep.GaveUp, "was $step")
+        assertEquals(1, queue.summary().givenUp)
+    }
+
+    @Test
+    fun beingToldTwiceAboutTheSameTransferIsNothing() = runTest {
+        // iOS relaunches the app to report, and may report again. The second
+        // time there is no row with that ticket, and that has to be a shrug.
+        val queue = queue(FakeTransport(answers = mutableListOf(UploadOutcome.HandedOver("t-1"))))
+        queue.enqueue(listOf(asset(1)))
+        queue.runNext()
+        queue.settle("t-1", UploadOutcome.Done("etag"))
+
+        assertEquals(QueueStep.Idle, queue.settle("t-1", UploadOutcome.Done("etag")))
+        assertEquals(QueueStep.Idle, queue.settle("never-existed", UploadOutcome.Done(null)))
+    }
+
+    @Test
+    fun aTransferThePlatformHasForgottenComesBack() = runTest {
+        // Without this an app that was reinstalled leaves rows nothing will
+        // ever close and nothing will ever pick up: lost, silently, for good.
+        val queue = queue(FakeTransport(answers = mutableListOf(UploadOutcome.HandedOver("t-1"))))
+        queue.enqueue(listOf(asset(1)))
+        queue.runNext()
+
+        assertEquals(0, queue.reconcile(live = setOf("t-1")), "it is still there, so leave it alone")
+        assertEquals(1, queue.summary().inFlight)
+
+        assertEquals(1, queue.reconcile(live = emptySet()))
+        assertEquals(0, queue.summary().inFlight)
+        assertEquals(QueueStep.HandedOver(layout.pathFor(asset(1))), queue.runNext(), "and it is runnable again")
+    }
+
+    @Test
+    fun theTransportsThatAnswerAtOnceLeaveNoTicketAnywhere() = runTest {
+        // The guard for Android: its two transports never hand anything over,
+        // so none of the above is on the path they take.
+        val queue = queue()
+        queue.enqueue(listOf(asset(1), asset(2)))
+        queue.runNext()
+        queue.runNext()
+
+        assertEquals(0, queue.summary().inFlight)
+        assertTrue(queue.outstanding().all { it.ticket == null })
+    }
+
     @Test
     fun queuesOnlyWhatTheServerHasNotGot() = runTest {
         val here = asset(1)

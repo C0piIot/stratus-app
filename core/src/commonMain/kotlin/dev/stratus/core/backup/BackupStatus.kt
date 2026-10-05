@@ -46,7 +46,14 @@ class BackupStatus(
 
         if (summary.total > 0) {
             return BackupState.Waiting(
-                reason = if (summary.nextAttemptAt != null) WaitingReason.ForARetry else WaitingReason.ForTheNextPass,
+                // What is moving outranks what is not: telling somebody their
+                // backup is "waiting for the next pass" while the system is
+                // actively sending it is the wrong thing to say.
+                reason = when {
+                    summary.inFlight > 0 -> WaitingReason.InTheSystemsHands
+                    summary.nextAttemptAt != null -> WaitingReason.ForARetry
+                    else -> WaitingReason.ForTheNextPass
+                },
                 left = summary.total,
                 bytesLeft = summary.bytesLeft,
                 until = summary.nextAttemptAt,

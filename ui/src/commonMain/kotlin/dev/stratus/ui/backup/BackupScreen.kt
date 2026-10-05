@@ -90,6 +90,9 @@ internal fun explain(state: BackupState): String = when (state) {
         WaitingReason.ForARetry ->
             "Something did not go through and will be tried again by itself. " +
                 "Nothing needs doing."
+        WaitingReason.InTheSystemsHands ->
+            "Sending in the background. The phone decides when it finishes, " +
+                "and will carry on with the app closed."
     }
 
     is BackupState.NeedsYou -> when (val reason = state.reason) {

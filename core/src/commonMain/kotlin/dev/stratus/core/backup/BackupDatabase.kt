@@ -131,6 +131,14 @@ class BackupDatabase(
             )
             connection.execSQL("PRAGMA user_version = 3")
         }
+        if (version() < 4) {
+            // Which upload the system is carrying, for a transport that cannot
+            // answer where it was asked (stratus-app#20). A row with one is in
+            // flight: nobody may pick it up again until whoever has it says
+            // what happened, which may be in another life of the process.
+            connection.execSQL("ALTER TABLE pending ADD COLUMN ticket TEXT")
+            connection.execSQL("PRAGMA user_version = 4")
+        }
     }
 
     /** Drops everything an instance knew, for when it is forgotten. */

@@ -25,6 +25,20 @@ sealed interface UploadOutcome {
     data class Interrupted(val resume: Resume) : UploadOutcome
 
     data class Failed(val kind: FailureKind, val detail: String) : UploadOutcome
+
+    /**
+     * Given to the platform, which will say how it went later.
+     *
+     * A background `URLSession` transfers with the app suspended or killed and
+     * relaunches it to report, so there is nothing to return and no coroutine
+     * left to return it to (stratus-app#20). [ticket] is how the answer is
+     * recognised when it arrives, through [UploadQueue.settle] -- possibly in
+     * another life of the process.
+     *
+     * The transports here never produce it. It exists for the one that cannot
+     * do anything else.
+     */
+    data class HandedOver(val ticket: String, val resume: Resume? = null) : UploadOutcome
 }
 
 /**

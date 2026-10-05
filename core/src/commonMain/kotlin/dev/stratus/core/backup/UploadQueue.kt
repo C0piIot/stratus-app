@@ -13,6 +13,9 @@ sealed interface QueueStep {
     data object Idle : QueueStep
     data class Uploaded(val path: String) : QueueStep
     data class Progressed(val path: String, val offset: Long) : QueueStep
+
+    /** Given to the platform; the answer arrives through [UploadQueue.settle]. */
+    data class HandedOver(val path: String) : QueueStep
     data class Retrying(val path: String, val inMillis: Long, val detail: String) : QueueStep
     data class GaveUp(val path: String, val detail: String) : QueueStep
 }
@@ -109,7 +112,45 @@ class UploadQueue(
             return failure(upload, FailureKind.Transient, e.message ?: e::class.simpleName ?: "no detail")
         }
 
-        return when (outcome) {
+        return record(upload, outcome)
+    }
+
+    /**
+     * The answer to something handed over, whenever it turns up.
+     *
+     * A background transport cannot answer where it was asked -- it answers
+     * after the app has been suspended, killed and relaunched -- so this is
+     * the other door into **exactly the same decisions** [runNext] makes.
+     * That it is the same code is the point: a result recorded two ways would
+     * eventually disagree with itself.
+     *
+     * Unknown tickets are nothing, not errors. The platform may report a
+     * transfer twice, and the second time there is simply no row with that
+     * ticket any more.
+     */
+    suspend fun settle(ticket: String, outcome: UploadOutcome): QueueStep {
+        val upload = pending.byTicket(ticket) ?: return QueueStep.Idle
+        // Freed first: whatever is decided below, nobody else is carrying it.
+        pending.release(upload.path)
+        return record(upload, outcome)
+    }
+
+    /**
+     * Hands back anything the platform has forgotten, and answers how many.
+     *
+     * A row in flight is skipped by [PendingStore.next], so one whose answer
+     * is never coming -- the app reinstalled, the session dropped, the system
+     * having quietly discarded the task -- would sit there untouched for ever.
+     * Asked at the start of a pass, with whatever the platform says it still
+     * has.
+     */
+    suspend fun reconcile(live: Set<String>): Int = pending.releaseExcept(live)
+
+    /** What is outstanding, counted. */
+    suspend fun summary(): PendingSummary = pending.summary(now())
+
+    private suspend fun record(upload: PendingUpload, outcome: UploadOutcome): QueueStep =
+        when (outcome) {
             is UploadOutcome.Done -> {
                 cache.record(RemoteEntry(upload.path, outcome.etag, upload.size))
                 pending.remove(upload.path)
@@ -121,15 +162,19 @@ class UploadQueue(
                 QueueStep.Progressed(upload.path, outcome.resume.offset)
             }
 
+            is UploadOutcome.HandedOver -> {
+                pending.recordHandover(upload.path, outcome.ticket, outcome.resume)
+                QueueStep.HandedOver(upload.path)
+            }
+
             is UploadOutcome.Failed -> failure(upload, outcome.kind, outcome.detail)
         }
-    }
 
     /** Everything outstanding. Unbounded, so not for anything asked repeatedly. */
     suspend fun outstanding(): List<PendingUpload> = pending.all()
 
     /** How much is left, counted rather than read. */
-    suspend fun left(): Int = pending.summary(now()).total
+    suspend fun left(): Int = summary().total
 
     private suspend fun failure(upload: PendingUpload, kind: FailureKind, detail: String): QueueStep =
         if (kind == FailureKind.Permanent) {

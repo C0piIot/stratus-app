@@ -34,6 +34,19 @@ class BackupStatusTest {
     }
 
     @Test
+    fun whatTheSystemIsCarryingIsSaidAsSendingAndNotAsWaiting() = runTest {
+        // The state somebody reads while an iOS backup is actually running:
+        // "waiting for the next pass" over a transfer in progress is the
+        // wrong thing to tell them (stratus-app#20).
+        queue(path = "/a.jpg")
+        database.pendingFor(instance.id).recordHandover("/a.jpg", "t-1", null)
+
+        val state = status().of(instance)
+        assertTrue(state is BackupState.Waiting, "was $state")
+        assertEquals(WaitingReason.InTheSystemsHands, state.reason)
+    }
+
+    @Test
     fun saysSoWhenNothingHasEverHappened() = runTest {
         database.migrate()
         assertEquals(BackupState.NeverRun, status().of(instance))
