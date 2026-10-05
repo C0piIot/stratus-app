@@ -1,16 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The icon beside "Stratus" in the Files sidebar and in every picker. A cloud,
-  because that is what a personal cloud is, and the only drawable this app has:
-  everything else on screen is Compose.
+  The icon beside "Stratus" in the Files sidebar and in every picker. The only
+  drawables this app has are this and the launcher's two: everything else on
+  screen is Compose. It is the mark on its own 64-unit grid, tinted by the
+  sidebar rather than coloured here, so the row it sits in decides whether it
+  is light or dark.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24"
+    android:viewportWidth="64"
+    android:viewportHeight="64"
     android:tint="?attr/colorControlNormal">
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M19.35,10.04C18.67,6.59 15.64,4 12,4 9.11,4 6.6,5.64 5.35,8.04 2.34,8.36 0,10.91 0,14c0,3.31 2.69,6 6,6h13c2.76,0 5,-2.24 5,-5 0,-2.64 -2.05,-4.78 -4.65,-4.96z" />
+        android:pathData="M30.5,14 H49.5 A4.5,4.5 0 0 1 49.5,23 H30.5 A4.5,4.5 0 0 1 30.5,14 Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M14.5,27 H49.5 A4.5,4.5 0 0 1 49.5,36 H14.5 A4.5,4.5 0 0 1 14.5,27 Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M14.5,40 H33.5 A4.5,4.5 0 0 1 33.5,49 H14.5 A4.5,4.5 0 0 1 14.5,40 Z" />
 </vector>

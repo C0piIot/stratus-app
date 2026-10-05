@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive only, with no PNG fallback anywhere: minSdk is 29 and adaptive icons
+  arrived in 26, so there is no phone left that would look for one.
+
+  The monochrome layer is the foreground again. A themed icon is tinted by the
+  system and reads only the alpha, and the mark is already one flat shape.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

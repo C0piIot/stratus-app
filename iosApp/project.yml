@@ -23,6 +23,7 @@ targets:
     platform: iOS
     sources:
       - Sources
+      - Assets.xcassets
     info:
       path: Sources/Info.plist
       properties:
@@ -43,6 +44,10 @@ targets:
           - dev.stratus.backup
     settings:
       base:
+        # One 1024px square and nothing else: Xcode has downsampled every other
+        # size itself since 14, and the alternative is fifteen PNGs to keep in
+        # step. scripts/appicon.py draws it.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # The framework Gradle links, not one Xcode builds. Producing it is
         # :ui:linkDebugFrameworkIosSimulatorArm64, which CI runs first.
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The mark, on the 108dp canvas an adaptive icon is drawn on. It is scaled to
+  46dp wide so its diagonal stays inside the 66dp circle every launcher mask
+  leaves alone -- tighter than anything iOS asks for, which is why the same
+  sizing is what brand/app-icon.svg uses.
+
+  The grid underneath is the mark's own 64 units; the group is what places it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.05"
+        android:scaleY="1.05"
+        android:translateX="20.4"
+        android:translateY="20.925">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M30.5,14 H49.5 A4.5,4.5 0 0 1 49.5,23 H30.5 A4.5,4.5 0 0 1 30.5,14 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M14.5,27 H49.5 A4.5,4.5 0 0 1 49.5,36 H14.5 A4.5,4.5 0 0 1 14.5,27 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M14.5,40 H33.5 A4.5,4.5 0 0 1 33.5,49 H14.5 A4.5,4.5 0 0 1 14.5,40 Z" />
+    </group>
+</vector>
