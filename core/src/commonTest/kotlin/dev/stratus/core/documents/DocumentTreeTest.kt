@@ -34,6 +34,11 @@ class DocumentTreeTest {
     private val one = "1111111111111111"
     private val two = "2222222222222222"
 
+    // Appended to from the tree's background fetches as well as from the test,
+    // which is why every case below settles before it reads: with nothing in
+    // flight there is one writer at a time, and without that
+    // `eachOperationIsTheWebDavVerbItShouldBe` failed about one run in twenty
+    // with a listing landing under its assertion.
     private val seen = mutableListOf<HttpRequestData>()
     private val told = mutableListOf<DocumentRef>()
 
@@ -160,14 +165,20 @@ class DocumentTreeTest {
         val tree = tree()
         val parent = DocumentRef(one, "files")
 
+        // Settled after each one: every write invalidates its folder, so the
+        // listing that follows would otherwise land on the request log in the
+        // middle of the next assertion.
         tree.create(parent, "text/plain", "note.txt")
+        settle()
         assertEquals("PUT", seen.last { it.method.value != "PROPFIND" }.method.value)
 
         tree.rename(DocumentRef(one, "files/note.txt"), "other.txt")
+        settle()
         val moved = seen.last { it.method.value == "MOVE" }
         assertEquals("http://host/files/other.txt", moved.headers["Destination"])
 
         tree.delete(DocumentRef(one, "files/other.txt"))
+        settle()
         assertEquals("DELETE", seen.last { it.method.value != "PROPFIND" }.method.value)
     }
 

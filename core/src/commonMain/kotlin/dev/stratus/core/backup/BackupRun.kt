@@ -8,6 +8,8 @@ data class BackupReport(
     val queued: Int = 0,
     val uploaded: Int = 0,
     val failed: Int = 0,
+    /** Given to the system during this pass, and not finished by it. */
+    val handedOver: Int = 0,
     val stopped: StoppedBecause = StoppedBecause.NothingLeft,
 )
 
@@ -23,6 +25,17 @@ enum class StoppedBecause {
 
     /** The library is not readable, so there is nothing to look at. */
     NoAccessToTheLibrary,
+
+    /**
+     * Handed to the system, which will finish it when it chooses.
+     *
+     * Not `WaitingToRetry`, which would be a lie about something that is not
+     * waiting on us at all: on iOS a transfer outlives the pass that started
+     * it, and a screen saying "waiting to retry" over a backup that is
+     * actively running would be the wrong thing to tell somebody
+     * (stratus-app#20).
+     */
+    InFlight,
 }
 
 /**
@@ -74,9 +87,11 @@ class BackupRun(
                 }
                 is QueueStep.Uploaded -> report.copy(uploaded = report.uploaded + 1)
                 is QueueStep.GaveUp -> report.copy(failed = report.failed + 1)
-                // A retry or a partial upload is neither done nor lost: the row
-                // stays, and this pass simply moves on to whatever is next.
+                // A retry, a partial upload or one the system is now carrying
+                // is neither done nor lost: the row stays, and this pass simply
+                // moves on to whatever is next.
                 is QueueStep.Retrying, is QueueStep.Progressed -> report
+                is QueueStep.HandedOver -> report.copy(handedOver = report.handedOver + 1)
             }
             // Written per file so a screen reopened mid-backup says what is
             // happening rather than what was happening when it last looked.
@@ -92,6 +107,14 @@ class BackupRun(
      * left: work waiting out a backoff is still work, and a screen that said
      * "finished" over it would be lying.
      */
-    private suspend fun stoppedFrom(queue: UploadQueue): StoppedBecause =
-        if (queue.left() == 0) StoppedBecause.NothingLeft else StoppedBecause.WaitingToRetry
+    private suspend fun stoppedFrom(queue: UploadQueue): StoppedBecause {
+        val left = queue.summary()
+        return when {
+            left.total == 0 -> StoppedBecause.NothingLeft
+            // Asked in this order because a pass can end with both, and what
+            // somebody wants to be told is that something is moving.
+            left.inFlight > 0 -> StoppedBecause.InFlight
+            else -> StoppedBecause.WaitingToRetry
+        }
+    }
 }

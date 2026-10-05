@@ -65,7 +65,15 @@ class Backup(
         for (instance in enabled()) {
             if (!keepGoing()) break
             val report = run.once(instance, keepGoing, onStep)
-            if (report.stopped == StoppedBecause.WaitingToRetry) again = true
+            // InFlight too, and not because the system needs reminding about
+            // what it is carrying -- it does not. A pass that ended with
+            // something in flight may also have left rows serving out a
+            // backoff, and that reason is the one that got reported.
+            if (report.stopped == StoppedBecause.WaitingToRetry ||
+                report.stopped == StoppedBecause.InFlight
+            ) {
+                again = true
+            }
         }
         return if (again) PassOutcome.ComeBackLater else PassOutcome.Finished
     }

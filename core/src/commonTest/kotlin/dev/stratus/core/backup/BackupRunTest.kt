@@ -116,6 +116,20 @@ class BackupRunTest {
     }
 
     @Test
+    fun workInTheSystemsHandsIsNotCalledWaitingToRetry() = runTest {
+        // It is not waiting on us at all: on iOS a transfer outlives the pass
+        // that started it, and telling somebody "waiting to retry" over a
+        // backup that is running would be the wrong thing to say
+        // (stratus-app#20).
+        val roll = RollOf(listOf(asset(1), asset(2)))
+        val report = run(roll, UploadOutcome.HandedOver("t-1")).once(instance)
+
+        assertEquals(StoppedBecause.InFlight, report.stopped)
+        assertEquals(2, report.handedOver)
+        assertEquals(0, report.uploaded, "nothing has arrived yet, and the report must not pretend")
+    }
+
+    @Test
     fun countsWhatItGaveUpOn() = runTest {
         val roll = RollOf(listOf(asset(1)))
         val report = run(roll, UploadOutcome.Failed(FailureKind.Permanent, "rejected")).once(instance)

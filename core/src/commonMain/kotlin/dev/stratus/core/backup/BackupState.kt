@@ -38,6 +38,15 @@ enum class WaitingReason {
 
     /** Everything left is serving out a backoff after something that may pass. */
     ForARetry,
+
+    /**
+     * The system is carrying it and will say when it is done.
+     *
+     * Not waiting on this app at all, which is why it is not
+     * [ForTheNextPass]: on iOS a transfer outlives the pass that started it
+     * and runs while the app is suspended (stratus-app#20).
+     */
+    InTheSystemsHands,
 }
 
 sealed interface AttentionReason {
