@@ -5,6 +5,7 @@ import dev.stratus.core.backup.TusTransport
 import dev.stratus.core.backup.UploadOutcome
 import dev.stratus.core.backup.UploadTarget
 import dev.stratus.core.backup.negotiateTus
+import dev.stratus.core.backup.uploadBody
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
@@ -84,7 +85,7 @@ class TusConformanceTest {
         val transport = TusTransport(http, endpoint) { runCatching { dav.stat(it).etag }.getOrNull() }
         val target = UploadTarget("$folder/whole.bin", bytes.size.toLong(), null)
 
-        val outcome = transport.send(target, null, ::source)
+        val outcome = transport.send(target, null, uploadBody(::source))
         assertTrue(outcome is UploadOutcome.Done, "was $outcome")
 
         // tus reports no ETag of its own; the one that comes back is the
@@ -127,7 +128,7 @@ class TusConformanceTest {
         val outcome = transport.send(
             UploadTarget(path, bytes.size.toLong(), null),
             Resume(origin + handle, half.toLong()),
-            ::source,
+            uploadBody(::source),
         )
 
         assertTrue(outcome is UploadOutcome.Done, "was $outcome")

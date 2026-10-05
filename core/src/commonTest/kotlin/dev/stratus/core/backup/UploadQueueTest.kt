@@ -26,13 +26,9 @@ private class FakeTransport(
     private val answers: MutableList<UploadOutcome>,
 ) : Transport {
     val sent = mutableListOf<Pair<UploadTarget, Resume?>>()
-    override suspend fun send(
-        target: UploadTarget,
-        resume: Resume?,
-        open: suspend (from: Long) -> RawSource,
-    ): UploadOutcome {
+    override suspend fun send(target: UploadTarget, resume: Resume?, body: UploadBody): UploadOutcome {
         sent += target to resume
-        open(resume?.offset ?: 0)
+        body.open(resume?.offset ?: 0)
         return if (answers.size > 1) answers.removeFirst() else answers.first()
     }
 }
@@ -324,7 +320,7 @@ class UploadQueueTest {
     fun aPassStoppedByTheSystemLeavesTheUploadPendingWithNoFailure() = runTest {
         val stopped = object : Transport {
             override val resumable = false
-            override suspend fun send(target: UploadTarget, resume: Resume?, open: suspend (from: Long) -> RawSource) =
+            override suspend fun send(target: UploadTarget, resume: Resume?, body: UploadBody) =
                 throw kotlinx.coroutines.CancellationException("Job was cancelled")
         }
         val queue = queue(stopped)

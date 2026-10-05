@@ -1,6 +1,9 @@
 package dev.stratus.core.backup
 
 import kotlinx.io.RawSource
+import kotlinx.io.buffered
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
 
 /**
  * One thing in the camera roll.
@@ -77,4 +80,24 @@ interface AssetSource {
      * but it has to look the same from here.
      */
     suspend fun open(localId: String, part: AssetPart, from: Long = 0): RawSource
+
+    /**
+     * The same bytes, written to [toPath].
+     *
+     * For a transport that uploads **a file and not a stream**, which a
+     * background `URLSession` does and cannot do otherwise (stratus-app#20).
+     *
+     * The caller chooses the path and owns what lands there, so there is no
+     * question about who deletes it. The default spools [open], which is the
+     * honest answer wherever the library hands out streams; a platform whose
+     * bytes are already a file overrides this rather than copying twice --
+     * eight gigabytes of temporary space for a four-gigabyte video.
+     */
+    suspend fun writeTo(localId: String, part: AssetPart, from: Long, toPath: String) {
+        open(localId, part, from).use { source ->
+            SystemFileSystem.sink(Path(toPath)).buffered().use { sink ->
+                sink.transferFrom(source)
+            }
+        }
+    }
 }

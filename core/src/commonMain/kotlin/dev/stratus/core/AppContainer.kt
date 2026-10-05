@@ -6,6 +6,7 @@ import dev.stratus.core.backup.Backup
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.Connection
 import dev.stratus.core.backup.Connections
+import dev.stratus.core.backup.Transport
 import dev.stratus.core.cast.CastController
 import dev.stratus.core.cast.Caster
 import dev.stratus.core.dav.DavClient
@@ -59,6 +60,9 @@ class AppContainer(
      * somewhere of its own -- Android's Files app does (stratus-app#104).
      */
     serversChanged: suspend () -> Unit = {},
+    /** See [Backup]'s own parameter: the one thing a platform answers differently. */
+    private val transports: (suspend (Connection, Instance) -> Transport)? = null,
+    private val liveTransfers: (suspend () -> Set<String>)? = null,
 ) {
     private val instances = InstanceStore(secure, serversChanged)
 
@@ -82,7 +86,13 @@ class AppContainer(
         Connection(client, DavClient(client, instance.baseUrl))
     }
 
-    val backup: Backup by lazy { Backup(instances, database, assets, connections) }
+    val backup: Backup by lazy {
+        if (transports == null) {
+            Backup(instances, database, assets, connections)
+        } else {
+            Backup(instances, database, assets, connections, transports, liveTransfers)
+        }
+    }
 
     /** Whether crash reports may be sent, which the platform reads before anything else runs. */
     val reporting = ReportingConsent(secure)

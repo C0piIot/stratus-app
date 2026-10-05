@@ -159,6 +159,41 @@ class IosAssetSource : AssetSource {
         return DeletingSource(source, path)
     }
 
+    /**
+     * The bytes straight onto [toPath], without the copy [open] would make.
+     *
+     * PhotoKit writes a file; a background upload wants a file. Spooling the
+     * stream from one into the other would put a four-gigabyte video on this
+     * disk twice (stratus-app#20).
+     *
+     * From an offset it cannot be helped: `writeData` writes the whole
+     * resource, so the tail is cut afterwards. Only a resumed upload pays it.
+     */
+    override suspend fun writeTo(localId: String, part: AssetPart, from: Long, toPath: String) {
+        val asset = assetWith(localId) ?: error("the library has no $localId any more")
+        val resource = resourcesOf(asset).let { if (part == AssetPart.Motion) it.motion else it.still }
+            ?: error("$localId has no ${part.name.lowercase()} to send")
+
+        val destination = Path(toPath)
+        SystemFileSystem.delete(destination, mustExist = false)
+        if (from == 0L) {
+            writeOut(resource, destination)
+            return
+        }
+
+        val whole = Path(toPath + ".whole")
+        SystemFileSystem.delete(whole, mustExist = false)
+        writeOut(resource, whole)
+        try {
+            SystemFileSystem.source(whole).buffered().use { source ->
+                source.skip(from)
+                SystemFileSystem.sink(destination).buffered().use { sink -> sink.transferFrom(source) }
+            }
+        } finally {
+            SystemFileSystem.delete(whole, mustExist = false)
+        }
+    }
+
     // ---- PhotoKit, and nothing else below here ----------------------------
 
     private fun collections(): List<PHAssetCollection> = buildList {

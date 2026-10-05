@@ -46,7 +46,7 @@ class TusTransportTest {
         }
         // There is no "finish" in the protocol: the file exists once the upload
         // is as long as it said it would be.
-        assertEquals(UploadOutcome.Done("the-etag"), transport.send(target, null, ::bytes))
+        assertEquals(UploadOutcome.Done("the-etag"), transport.send(target, null, uploadBody(::bytes)))
     }
 
     @OptIn(ExperimentalEncodingApi::class)
@@ -60,7 +60,7 @@ class TusTransportTest {
                 else -> HttpStatusCode.NoContent to headersOf("Upload-Offset", "10")
             }
         }
-        transport.send(target, null, ::bytes)
+        transport.send(target, null, uploadBody(::bytes))
 
         val metadata = seen.first { it.method.value == "POST" }.headers["Upload-Metadata"]!!
         assertEquals(
@@ -93,7 +93,7 @@ class TusTransportTest {
         }
         assertEquals(
             UploadOutcome.Done("the-etag"),
-            transport.send(target, Resume("http://host/tus/abc", 4), ::bytes),
+            transport.send(target, Resume("http://host/tus/abc", 4), uploadBody(::bytes)),
         )
         // Asked, not assumed -- and the bytes go out from the answer.
         assertEquals("4", seen.single { it.method.value == "PATCH" }.headers["Upload-Offset"])
@@ -111,7 +111,7 @@ class TusTransportTest {
                 else -> HttpStatusCode.NoContent to headersOf("Upload-Offset", "10")
             }
         }
-        val outcome = transport.send(target, Resume("http://host/tus/abc", 7), ::bytes)
+        val outcome = transport.send(target, Resume("http://host/tus/abc", 7), uploadBody(::bytes))
         assertEquals(UploadOutcome.Interrupted(Resume("http://host/tus/abc", 7)), outcome)
     }
 
@@ -122,14 +122,14 @@ class TusTransportTest {
         val transport = transport(etag = "already-there") { HttpStatusCode.NotFound to headersOf() }
         assertEquals(
             UploadOutcome.Done("already-there"),
-            transport.send(target, Resume("http://host/tus/abc", 4), ::bytes),
+            transport.send(target, Resume("http://host/tus/abc", 4), uploadBody(::bytes)),
         )
     }
 
     @Test
     fun anUploadThatExpiredStartsAgain() = runTest {
         val transport = transport(etag = null) { HttpStatusCode.NotFound to headersOf() }
-        val outcome = transport.send(target, Resume("http://host/tus/abc", 4), ::bytes)
+        val outcome = transport.send(target, Resume("http://host/tus/abc", 4), uploadBody(::bytes))
         // No handle and no offset: the next attempt creates a fresh upload.
         assertEquals(UploadOutcome.Interrupted(Resume(null, 0)), outcome)
     }
@@ -142,7 +142,7 @@ class TusTransportTest {
                 else -> HttpStatusCode.NoContent to headersOf("Upload-Offset", "6")
             }
         }
-        val outcome = transport.send(target, null, ::bytes)
+        val outcome = transport.send(target, null, uploadBody(::bytes))
         assertEquals(UploadOutcome.Interrupted(Resume("http://host/tus/abc", 6)), outcome)
     }
 
@@ -158,7 +158,7 @@ class TusTransportTest {
         }
         val transport = TusTransport(HttpClient(engine), "http://host/tus/") { "the-etag" }
 
-        val outcome = transport.send(target, null, ::bytes)
+        val outcome = transport.send(target, null, uploadBody(::bytes))
 
         assertEquals(UploadOutcome.Interrupted(Resume("http://host/tus/abc", 0)), outcome)
     }
@@ -171,7 +171,7 @@ class TusTransportTest {
                 else -> HttpStatusCode.Unauthorized to headersOf()
             }
         }
-        val outcome = transport.send(target, null, ::bytes)
+        val outcome = transport.send(target, null, uploadBody(::bytes))
         assertTrue(outcome is UploadOutcome.Failed, "was $outcome")
         assertEquals(FailureKind.Permanent, outcome.kind)
     }
@@ -186,7 +186,7 @@ class TusTransportTest {
                 else -> HttpStatusCode.NoContent to headersOf("Upload-Offset", "10")
             }
         }
-        transport.send(target, null, ::bytes)
+        transport.send(target, null, uploadBody(::bytes))
 
         val patch = seen.first { it.method.value == "PATCH" }
         assertEquals(

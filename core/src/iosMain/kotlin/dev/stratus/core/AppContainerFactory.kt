@@ -3,6 +3,11 @@ package dev.stratus.core
 import dev.stratus.core.backup.IosAssetSource
 import dev.stratus.core.files.IosFileHandoff
 import dev.stratus.core.net.darwinTrust
+import dev.stratus.core.net.basicAuthHeader
+import dev.stratus.core.backup.negotiateTus
+import dev.stratus.core.backup.BackgroundUploads
+import dev.stratus.core.backup.BackgroundTusTransport
+import dev.stratus.core.backup.BackgroundPutTransport
 import dev.stratus.core.instance.InstanceStore
 import dev.stratus.core.documents.rootOf
 import dev.stratus.core.documents.refreshDomains
@@ -24,7 +29,36 @@ import platform.Foundation.NSUserDomainMask
  * what somebody has vouched for. See [darwinTrust] for the two places the
  * platform forces a different shape.
  */
-fun appContainer(): AppContainer = container(registersDomains = false)
+/**
+ * One per process, like the Android twin and for the same reason it gives:
+ * two containers are two connections to one SQLite file, and the status poll
+ * met the backup's writes as `database is locked`. On iOS there are now three
+ * callers in one process -- the interface, the File Provider and the delegate
+ * a background transfer relaunches us to run -- so it matters more, not less.
+ */
+/**
+ * One container per process, like the Android twin and for the reason it
+ * gives: two are two connections to one SQLite file, and the status poll met
+ * the backup's writes as `database is locked`. iOS now has three callers in
+ * one process -- the interface, the File Provider and the delegate a
+ * background transfer relaunches us to run -- so it matters more, not less.
+ *
+ * `lazy` rather than a volatile holder: it is thread-safe by default, it says
+ * "once" in the type rather than in a comment, and only one of the two is
+ * ever reached in a given process.
+ */
+private val hosting by lazy { build(registersDomains = true) }
+private val plain by lazy { build(registersDomains = false) }
+
+/**
+ * The session this process carries transfers in, for the Swift side to hand a
+ * relaunch over to. Null until a container exists, which is the only moment
+ * there is one.
+ */
+var uploadSession: BackgroundUploads? = null
+    private set
+
+fun appContainer(): AppContainer = plain
 
 /**
  * The app's own, which is the one that keeps the Files locations in step
@@ -34,10 +68,15 @@ fun appContainer(): AppContainer = container(registersDomains = false)
  * too, and an extension has no business registering domains -- it is the
  * thing inside them.
  */
-fun hostAppContainer(): AppContainer = container(registersDomains = true)
+fun hostAppContainer(): AppContainer = hosting
 
-private fun container(registersDomains: Boolean): AppContainer {
+private fun build(registersDomains: Boolean): AppContainer {
     val secure = KeychainSecureStore(accessGroup = sharedKeychainGroup())
+    // Built before the container because the container's transports close over
+    // it, and because there is exactly one session per process.
+    lateinit var holder: AppContainer
+    val uploads = BackgroundUploads { ticket, answer -> holder.backup.settle(ticket, answer) }
+    uploadSession = uploads
     return AppContainer(
     engine = { policy -> Darwin.create { handleChallenge(darwinTrust(policy)) } },
     secure = secure,
@@ -56,7 +95,19 @@ private fun container(registersDomains: Boolean): AppContainer {
     serversChanged = {
         if (registersDomains) refreshDomains(InstanceStore(secure).all().map(::rootOf))
     },
-    )
+    // The bytes leave through the system, not through this process: a
+    // transfer has to survive the app being suspended or killed, which is
+    // the whole of stratus-app#20.
+    transports = { connection, instance ->
+        // On the request and not in a plugin: the session runs outside this
+        // process and cannot ask anything of ours for a header.
+        val credentials = InstanceStore(secure).credentials(instance.id)?.let(::basicAuthHeader)
+        negotiateTus(connection.http, instance.baseUrl)
+            ?.let { BackgroundTusTransport(connection.http, it, uploads, credentials) }
+            ?: BackgroundPutTransport(instance.baseUrl, uploads, credentials)
+    },
+    liveTransfers = { uploads.live() },
+    ).also { holder = it }
 }
 
 /**

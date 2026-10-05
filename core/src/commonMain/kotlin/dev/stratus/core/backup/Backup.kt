@@ -36,6 +36,25 @@ class Backup(
     private val database: BackupDatabase,
     private val assets: AssetSource,
     private val connections: Connections,
+    /**
+     * How bytes leave this device, which is the one thing a platform may
+     * answer differently.
+     *
+     * Android negotiates between the two Ktor transports and is done. iOS
+     * hands the body to the system instead, because a transfer there has to
+     * outlive the app (stratus-app#20) -- so the composition root passes one
+     * that does, and nothing else here changes.
+     */
+    private val transports: suspend (Connection, Instance) -> Transport =
+        { connection, instance -> transportFor(connection, instance.baseUrl) },
+    /**
+     * What the platform says it is still carrying, or null where nothing is.
+     *
+     * Asked at the start of a pass. Null and empty are not the same: empty
+     * means "nothing is in flight, release everything", which is right after
+     * a reinstall and wrong on a platform that has no such notion at all.
+     */
+    private val liveTransfers: (suspend () -> Set<String>)? = null,
 ) {
     /** What to say about the backup, assembled from what the queue actually holds. */
     val status: BackupStatus by lazy { BackupStatus(database, assets) }
@@ -62,6 +81,7 @@ class Backup(
     ): PassOutcome {
         val run = run()
         var again = false
+        liveTransfers?.let { live -> reconcile(live()) }
         for (instance in enabled()) {
             if (!keepGoing()) break
             val report = run.once(instance, keepGoing, onStep)
@@ -105,7 +125,7 @@ class Backup(
             pending = database.pendingFor(instance.id),
             cache = database.cacheFor(instance.id),
             source = assets,
-            transport = transportFor(connection, instance.baseUrl),
+            transport = transports(connection, instance),
             directories = DavDirectoryMaker(connection.dav),
         )
     }
@@ -119,6 +139,32 @@ class Backup(
             dav = connections.to(instance)?.dav ?: return null,
         )
     }
+
+    /**
+     * The answer to a transfer the system was carrying, whoever it belongs to.
+     *
+     * **Built from the database alone**, with no connection: the upload has
+     * already happened, and refusing to write it down because a client could
+     * not be constructed -- the phone being in a tunnel, say -- would throw
+     * away the only record that it did.
+     *
+     * The ticket is opaque, so every instance is asked; there are rarely more
+     * than two, and one of them has the row.
+     */
+    suspend fun settle(ticket: String, answer: TransferAnswer): QueueStep {
+        for (instance in instances.all()) {
+            val step = records(instance.id).settle(ticket, answer)
+            if (step != QueueStep.Idle) return step
+        }
+        return QueueStep.Idle
+    }
+
+    /** Puts back everything the platform has forgotten it was carrying. */
+    suspend fun reconcile(live: Set<String>): Int =
+        instances.all().sumOf { records(it.id).reconcile(live) }
+
+    private suspend fun records(instanceId: String) =
+        UploadRecords(database.pendingFor(instanceId), database.cacheFor(instanceId))
 
     /** What has gone wrong, with what the server said about each, bounded. */
     suspend fun failures(instanceId: String, limit: Int = 20): List<PendingUpload> =
