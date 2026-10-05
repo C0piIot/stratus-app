@@ -41,6 +41,10 @@ class TusTransport(
     private val etagOf: suspend (path: String) -> String?,
 ) : Transport {
 
+    // The same two requests the background transport makes, so neither can
+    // grow its own idea of what tus is (stratus-app#20).
+    private val tus = TusProtocol(http, endpoint)
+
     override val resumable = true
 
     override suspend fun send(
@@ -50,10 +54,10 @@ class TusTransport(
     ): UploadOutcome = try {
         val existing = resume?.handle
         if (existing == null) {
-            begin(target)?.let { append(target, it, 0, open) }
+            tus.begin(target)?.let { append(target, it, 0, open) }
                 ?: UploadOutcome.Failed(FailureKind.Transient, "the server would not start the upload")
         } else {
-            when (val offset = offsetOf(existing)) {
+            when (val offset = tus.offsetOf(existing)) {
                 // Gone: either it finished and the file is there, or twelve hours
                 // passed. The ETag tells the two apart without guessing.
                 null -> etagOf(target.path)
@@ -72,29 +76,6 @@ class TusTransport(
     }
 
     /** Creates the upload and returns where to send it, from the `Location`. */
-    private suspend fun begin(target: UploadTarget): String? {
-        val response = http.request(endpoint) {
-            method = HttpMethod.Post
-            header(TUS_VERSION_HEADER, TUS_VERSION)
-            header("Upload-Length", target.size.toString())
-            // The destination is a path, and its folder has to exist -- which is
-            // why the queue makes the month's directory before every attempt.
-            header("Upload-Metadata", metadataOf(target))
-        }
-        if (response.status.value != 201) return null
-        return response.headers[HttpHeaders.Location]?.let { absolute(it) }
-    }
-
-    /** Where the server says it got to, or null if the upload is no longer there. */
-    private suspend fun offsetOf(handle: String): Long? {
-        val response = http.request(handle) {
-            method = HttpMethod.Head
-            header(TUS_VERSION_HEADER, TUS_VERSION)
-        }
-        if (!response.status.isTus()) return null
-        return response.headers[UPLOAD_OFFSET]?.toLongOrNull()
-    }
-
     /**
      * Sends everything that is left in one request.
      *
@@ -113,9 +94,9 @@ class TusTransport(
             http.request(handle) {
                 method = HttpMethod.Patch
                 asTransfer()
-                header(TUS_VERSION_HEADER, TUS_VERSION)
-                header(UPLOAD_OFFSET, from.toString())
-                header(HttpHeaders.ContentType, OFFSET_OCTET_STREAM)
+                header(TusProtocol.VERSION_HEADER, TusProtocol.VERSION)
+                header(TusProtocol.UPLOAD_OFFSET, from.toString())
+                header(HttpHeaders.ContentType, TusProtocol.OFFSET_OCTET_STREAM)
                 setBody(sourceBody(target.size - from, open(from)))
             }
         } catch (e: CancellationException) {
@@ -131,13 +112,13 @@ class TusTransport(
         // A conflict means the server is somewhere else than we thought, which a
         // timed-out retry produces. Ask rather than argue.
         if (response.status.value == 409) {
-            return UploadOutcome.Interrupted(Resume(handle, offsetOf(handle) ?: 0))
+            return UploadOutcome.Interrupted(Resume(handle, tus.offsetOf(handle) ?: 0))
         }
         if (!response.status.isTus()) {
-            return UploadOutcome.Failed(kindOf(response.status.value), "tus answered ${response.status.value}")
+            return UploadOutcome.Failed(TusProtocol.kindOf(response.status.value), "tus answered ${response.status.value}")
         }
 
-        val reached = response.headers[UPLOAD_OFFSET]?.toLongOrNull() ?: from
+        val reached = response.headers[TusProtocol.UPLOAD_OFFSET]?.toLongOrNull() ?: from
         return if (reached >= target.size) {
             UploadOutcome.Done(etagOf(target.path))
         } else {
@@ -145,23 +126,7 @@ class TusTransport(
         }
     }
 
-    /** A `Location` may be a path; everything after it has to be absolute. */
-    private fun absolute(location: String): String =
-        if (location.startsWith("http")) location else originOf(endpoint) + location
-
-    private fun kindOf(status: Int) =
-        if (status == 401 || status == 403) FailureKind.Permanent else FailureKind.Transient
-
-    private fun io.ktor.http.HttpStatusCode.isSuccessful() = value in 200..299
-
-    private fun io.ktor.http.HttpStatusCode.isTus() = isSuccessful()
-
-    private companion object {
-        const val TUS_VERSION_HEADER = "Tus-Resumable"
-        const val TUS_VERSION = "1.0.0"
-        const val UPLOAD_OFFSET = "Upload-Offset"
-        const val OFFSET_OCTET_STREAM = "application/offset+octet-stream"
-    }
+    private fun io.ktor.http.HttpStatusCode.isTus() = value in 200..299
 }
 
 /**

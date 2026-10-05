@@ -128,6 +128,15 @@ class UploadQueue(
      * transfer twice, and the second time there is simply no row with that
      * ticket any more.
      */
+    /**
+     * The same, from a platform that reports what it saw rather than what it
+     * concluded -- which is every platform that transfers out of process.
+     */
+    suspend fun settle(ticket: String, answer: TransferAnswer): QueueStep {
+        val upload = pending.byTicket(ticket) ?: return QueueStep.Idle
+        return settle(ticket, outcomeOf(upload, answer))
+    }
+
     suspend fun settle(ticket: String, outcome: UploadOutcome): QueueStep {
         val upload = pending.byTicket(ticket) ?: return QueueStep.Idle
         // Freed first: whatever is decided below, nobody else is carrying it.
