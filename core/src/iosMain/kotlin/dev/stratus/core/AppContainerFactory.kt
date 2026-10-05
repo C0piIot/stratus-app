@@ -15,6 +15,7 @@ import dev.stratus.core.cast.NoCaster
 import dev.stratus.core.share.IosLinkSharing
 import dev.stratus.core.store.KeychainSecureStore
 import io.ktor.client.engine.darwin.Darwin
+import kotlin.concurrent.Volatile
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSBundle
