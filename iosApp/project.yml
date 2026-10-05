@@ -34,6 +34,13 @@ targets:
         # to carry the team's prefix and only the build knows it, so each
         # process reads its own (see sharedKeychainGroup, stratus-app#105).
         AppIdentifierPrefix: $(AppIdentifierPrefix)
+        # Being woken to look at the camera roll (stratus-app#20). The system
+        # refuses to register a handler for an identifier it was not told
+        # about, and refuses the mode without the capability.
+        UIBackgroundModes:
+          - processing
+        BGTaskSchedulerPermittedIdentifiers:
+          - dev.stratus.backup
     settings:
       base:
         # The framework Gradle links, not one Xcode builds. Producing it is
