@@ -210,6 +210,15 @@ Three things in that shape are worth keeping:
   `begin` and `offsetOf` -- still Ktor, still shared through `TusProtocol` --
   and the bytes are the third request. Nothing had to be taken apart.
 
+**And somebody has to start a pass.** The session finishes what it was given
+with the app dead; what still needs it awake is looking at the camera roll and
+queueing what is new. `BGProcessingTaskRequest` asks for that, and asks again
+at the start of every pass -- a request is spent once granted, and one never
+renewed is a backup that worked for a day. It does not require external power:
+the system prefers a charger anyway, and insisting would mean somebody who
+charges from a battery bank never backs up. Unlike WorkManager's six hours
+this is a hint and not a schedule, which the README already says.
+
 The executor is Kotlin and not Swift, which is a practical choice and not a
 principled one: Kotlin/Native can implement an Objective-C protocol, and that
 is ninety seconds of an ordinary runner per iteration instead of seven minutes
