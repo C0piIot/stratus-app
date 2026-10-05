@@ -19,10 +19,10 @@ class PutTransport(private val dav: DavClient) : Transport {
     override suspend fun send(
         target: UploadTarget,
         resume: Resume?,
-        open: suspend (from: Long) -> RawSource,
+        body: UploadBody,
     ): UploadOutcome =
         try {
-            UploadOutcome.Done(dav.put(target.path, target.size, open(0), target.contentType))
+            UploadOutcome.Done(dav.put(target.path, target.size, body.open(0), target.contentType))
         } catch (e: DavError) {
             UploadOutcome.Failed(kindOf(e), e.message ?: "no detail")
         }

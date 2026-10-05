@@ -50,11 +50,11 @@ class TusTransport(
     override suspend fun send(
         target: UploadTarget,
         resume: Resume?,
-        open: suspend (from: Long) -> RawSource,
+        body: UploadBody,
     ): UploadOutcome = try {
         val existing = resume?.handle
         if (existing == null) {
-            tus.begin(target)?.let { append(target, it, 0, open) }
+            tus.begin(target)?.let { append(target, it, 0, body) }
                 ?: UploadOutcome.Failed(FailureKind.Transient, "the server would not start the upload")
         } else {
             when (val offset = tus.offsetOf(existing)) {
@@ -67,7 +67,7 @@ class TusTransport(
                 else -> if (offset >= target.size) {
                     UploadOutcome.Done(etagOf(target.path))
                 } else {
-                    append(target, existing, offset, open)
+                    append(target, existing, offset, body)
                 }
             }
         }
@@ -88,7 +88,7 @@ class TusTransport(
         target: UploadTarget,
         handle: String,
         from: Long,
-        open: suspend (from: Long) -> RawSource,
+        body: UploadBody,
     ): UploadOutcome {
         val response = try {
             http.request(handle) {
@@ -97,7 +97,7 @@ class TusTransport(
                 header(TusProtocol.VERSION_HEADER, TusProtocol.VERSION)
                 header(TusProtocol.UPLOAD_OFFSET, from.toString())
                 header(HttpHeaders.ContentType, TusProtocol.OFFSET_OCTET_STREAM)
-                setBody(sourceBody(target.size - from, open(from)))
+                setBody(sourceBody(target.size - from, body.open(from)))
             }
         } catch (e: CancellationException) {
             throw e

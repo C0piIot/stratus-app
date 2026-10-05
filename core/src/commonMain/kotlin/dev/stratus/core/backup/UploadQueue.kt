@@ -84,7 +84,7 @@ class UploadQueue(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return failure(upload, FailureKind.Transient, e.message ?: "could not make the folder")
+            return records.record(upload, UploadOutcome.Failed(FailureKind.Transient, e.message ?: "could not make the folder"))
         }
 
         // Resuming asks the transport to continue, never the local offset alone:
@@ -102,82 +102,40 @@ class UploadQueue(
             transport.send(
                 UploadTarget(upload.path, upload.size, upload.contentType),
                 resume,
-            ) { from -> source.open(upload.localId, upload.part, from) }
+                bodyOf(upload),
+            )
         } catch (e: CancellationException) {
             // The system stopping the pass is not the server refusing the file;
             // recorded as a failure it showed up in the Backup screen as one,
             // reading "Job was cancelled" (stratus-app#83).
             throw e
         } catch (e: Exception) {
-            return failure(upload, FailureKind.Transient, e.message ?: e::class.simpleName ?: "no detail")
+            return records.record(
+                upload,
+                UploadOutcome.Failed(FailureKind.Transient, e.message ?: e::class.simpleName ?: "no detail"),
+            )
         }
 
-        return record(upload, outcome)
+        return records.record(upload, outcome)
     }
 
     /**
-     * The answer to something handed over, whenever it turns up.
+     * Where a result is written down, whoever brings it (stratus-app#20).
      *
-     * A background transport cannot answer where it was asked -- it answers
-     * after the app has been suspended, killed and relaunched -- so this is
-     * the other door into **exactly the same decisions** [runNext] makes.
-     * That it is the same code is the point: a result recorded two ways would
-     * eventually disagree with itself.
-     *
-     * Unknown tickets are nothing, not errors. The platform may report a
-     * transfer twice, and the second time there is simply no row with that
-     * ticket any more.
+     * The queue owns one; the door a background transfer comes back through
+     * builds another over the same two tables. Both end in the same code,
+     * which is the point.
      */
-    /**
-     * The same, from a platform that reports what it saw rather than what it
-     * concluded -- which is every platform that transfers out of process.
-     */
-    suspend fun settle(ticket: String, answer: TransferAnswer): QueueStep {
-        val upload = pending.byTicket(ticket) ?: return QueueStep.Idle
-        return settle(ticket, outcomeOf(upload, answer))
-    }
+    private val records = UploadRecords(pending, cache, now)
 
-    suspend fun settle(ticket: String, outcome: UploadOutcome): QueueStep {
-        val upload = pending.byTicket(ticket) ?: return QueueStep.Idle
-        // Freed first: whatever is decided below, nobody else is carrying it.
-        pending.release(upload.path)
-        return record(upload, outcome)
-    }
+    suspend fun settle(ticket: String, answer: TransferAnswer): QueueStep = records.settle(ticket, answer)
 
-    /**
-     * Hands back anything the platform has forgotten, and answers how many.
-     *
-     * A row in flight is skipped by [PendingStore.next], so one whose answer
-     * is never coming -- the app reinstalled, the session dropped, the system
-     * having quietly discarded the task -- would sit there untouched for ever.
-     * Asked at the start of a pass, with whatever the platform says it still
-     * has.
-     */
-    suspend fun reconcile(live: Set<String>): Int = pending.releaseExcept(live)
+    suspend fun settle(ticket: String, outcome: UploadOutcome): QueueStep = records.settle(ticket, outcome)
+
+    suspend fun reconcile(live: Set<String>): Int = records.reconcile(live)
 
     /** What is outstanding, counted. */
     suspend fun summary(): PendingSummary = pending.summary(now())
-
-    private suspend fun record(upload: PendingUpload, outcome: UploadOutcome): QueueStep =
-        when (outcome) {
-            is UploadOutcome.Done -> {
-                cache.record(RemoteEntry(upload.path, outcome.etag, upload.size))
-                pending.remove(upload.path)
-                QueueStep.Uploaded(upload.path)
-            }
-
-            is UploadOutcome.Interrupted -> {
-                pending.recordProgress(upload.path, outcome.resume)
-                QueueStep.Progressed(upload.path, outcome.resume.offset)
-            }
-
-            is UploadOutcome.HandedOver -> {
-                pending.recordHandover(upload.path, outcome.ticket, outcome.resume)
-                QueueStep.HandedOver(upload.path)
-            }
-
-            is UploadOutcome.Failed -> failure(upload, outcome.kind, outcome.detail)
-        }
 
     /** Everything outstanding. Unbounded, so not for anything asked repeatedly. */
     suspend fun outstanding(): List<PendingUpload> = pending.all()
@@ -185,34 +143,16 @@ class UploadQueue(
     /** How much is left, counted rather than read. */
     suspend fun left(): Int = summary().total
 
-    private suspend fun failure(upload: PendingUpload, kind: FailureKind, detail: String): QueueStep =
-        if (kind == FailureKind.Permanent) {
-            // Rejected credentials do not improve by being asked again, and asking
-            // again costs a lockout on a server that counts failed logins. It stays
-            // in the list so somebody can be told, and is never picked up again.
-            pending.recordFailure(upload.path, detail, NEVER)
-            QueueStep.GaveUp(upload.path, detail)
-        } else {
-            val wait = backoff(upload.attempts + 1)
-            pending.recordFailure(upload.path, detail, now() + wait)
-            QueueStep.Retrying(upload.path, wait, detail)
-        }
-
-    /** Doubling from half a minute, capped at an hour: long enough to outlast an outage. */
-    private fun backoff(attempt: Int): Long {
-        var wait = FIRST_WAIT
-        repeat(minOf(attempt, 32) - 1) { wait = minOf(wait * 2, LONGEST_WAIT) }
-        return wait
+    /** One upload's bytes, either way a transport can take them. */
+    private fun bodyOf(upload: PendingUpload) = object : UploadBody {
+        override suspend fun open(from: Long) = source.open(upload.localId, upload.part, from)
+        override suspend fun writeTo(from: Long, toPath: String) =
+            source.writeTo(upload.localId, upload.part, from, toPath)
     }
 
     /** Sortable, so "newest first" is an index scan rather than a decode. */
     private fun stampOf(asset: Asset): String = asset.capturedAtEpochMs.toString().padStart(14, '0')
 
-    private companion object {
-        const val FIRST_WAIT = 30_000L
-        const val LONGEST_WAIT = 60 * 60_000L
-        const val NEVER = Long.MAX_VALUE
-    }
 }
 
 private data class Part(val part: AssetPart, val path: String, val size: Long, val type: String?)

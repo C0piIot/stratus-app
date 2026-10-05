@@ -26,11 +26,7 @@ private class RollOf(
 
 private class Always(private val outcome: UploadOutcome) : Transport {
     override val resumable = false
-    override suspend fun send(
-        target: UploadTarget,
-        resume: Resume?,
-        open: suspend (from: Long) -> RawSource,
-    ): UploadOutcome = outcome
+    override suspend fun send(target: UploadTarget, resume: Resume?, body: UploadBody): UploadOutcome = outcome
 }
 
 class BackupRunTest {

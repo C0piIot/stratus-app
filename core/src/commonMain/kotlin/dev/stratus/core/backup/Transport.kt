@@ -1,6 +1,9 @@
 package dev.stratus.core.backup
 
 import kotlinx.io.RawSource
+import kotlinx.io.buffered
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
 
 /** One file to put somewhere, and what the server needs to be told about it. */
 data class UploadTarget(
@@ -102,6 +105,39 @@ enum class FailureKind { Transient, Permanent }
  * it is somewhere it is not, so a queue that cannot express resuming would have
  * to be rewritten the day tus arrives rather than extended.
  */
+/**
+ * The bytes of one upload, asked for the way the transport can take them.
+ *
+ * Two shapes because the two transports genuinely differ: one streams into a
+ * request it is awaiting, and a background `URLSession` takes **a file and
+ * nothing else**, because it transfers after this process is gone
+ * (stratus-app#20). Handing the second one a stream would mean spooling it to
+ * a file anyway, one level further from the platform that may already have
+ * the bytes as one.
+ */
+interface UploadBody {
+    /** A stream from [from] onwards. */
+    suspend fun open(from: Long): RawSource
+
+    /** The same bytes, at [toPath], which the caller then owns. */
+    suspend fun writeTo(from: Long, toPath: String)
+}
+
+/**
+ * A body that is only a stream, spooled where a file is wanted.
+ *
+ * The honest fallback for a source that cannot do better, and what every
+ * in-process transport needs anyway.
+ */
+fun uploadBody(open: suspend (from: Long) -> RawSource): UploadBody = object : UploadBody {
+    override suspend fun open(from: Long): RawSource = open(from)
+    override suspend fun writeTo(from: Long, toPath: String) {
+        open(from).use { source ->
+            SystemFileSystem.sink(Path(toPath)).buffered().use { sink -> sink.transferFrom(source) }
+        }
+    }
+}
+
 interface Transport {
     /** False for `PUT`, where an interruption means starting again. */
     val resumable: Boolean
@@ -112,11 +148,7 @@ interface Transport {
      * [open] is called with the offset to start from, so nothing reads bytes
      * that are already on the server.
      */
-    suspend fun send(
-        target: UploadTarget,
-        resume: Resume?,
-        open: suspend (from: Long) -> RawSource,
-    ): UploadOutcome
+    suspend fun send(target: UploadTarget, resume: Resume?, body: UploadBody): UploadOutcome
 }
 
 /**

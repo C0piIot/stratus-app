@@ -2,7 +2,6 @@ package dev.stratus.core.backup
 
 import io.ktor.client.HttpClient
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.io.RawSource
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
 import platform.Foundation.setHTTPMethod
@@ -29,8 +28,6 @@ class BackgroundTusTransport(
     endpoint: String,
     private val uploads: BackgroundUploads,
     private val credentials: String?,
-    /** Puts the bytes from an offset where the session can read them. */
-    private val spool: suspend (from: Long, toPath: String) -> Unit,
 ) : Transport {
 
     private val tus = TusProtocol(http, endpoint)
@@ -40,7 +37,7 @@ class BackgroundTusTransport(
     override suspend fun send(
         target: UploadTarget,
         resume: Resume?,
-        open: suspend (from: Long) -> RawSource,
+        body: UploadBody,
     ): UploadOutcome {
         // Where the server is, asked rather than assumed -- the same rule the
         // in-process transport follows, and for the same reason: a client can
@@ -71,7 +68,7 @@ class BackgroundTusTransport(
             credentials?.let { setValue(it, forHTTPHeaderField = "Authorization") }
         }
 
-        val ticket = uploads.start(request) { body -> spool(from, body.toString()) }
+        val ticket = uploads.start(request) { spool -> body.writeTo(from, spool.toString()) }
         // The handle travels with the handover: the answer arrives in another
         // process, and the row is where it will look for where to carry on.
         return UploadOutcome.HandedOver(ticket, Resume(at, from))
@@ -91,7 +88,6 @@ class BackgroundPutTransport(
     private val baseUrl: String,
     private val uploads: BackgroundUploads,
     private val credentials: String?,
-    private val spool: suspend (from: Long, toPath: String) -> Unit,
 ) : Transport {
 
     override val resumable = false
@@ -99,7 +95,7 @@ class BackgroundPutTransport(
     override suspend fun send(
         target: UploadTarget,
         resume: Resume?,
-        open: suspend (from: Long) -> RawSource,
+        body: UploadBody,
     ): UploadOutcome {
         val url = baseUrl.trimEnd('/') + "/" + target.path.trimStart('/')
         val request = NSMutableURLRequest.requestWithURL(NSURL(string = url)).apply {
@@ -107,7 +103,7 @@ class BackgroundPutTransport(
             target.contentType?.let { setValue(it, forHTTPHeaderField = "Content-Type") }
             credentials?.let { setValue(it, forHTTPHeaderField = "Authorization") }
         }
-        val ticket = uploads.start(request) { body -> spool(0, body.toString()) }
+        val ticket = uploads.start(request) { spool -> body.writeTo(0, spool.toString()) }
         return UploadOutcome.HandedOver(ticket)
     }
 }
