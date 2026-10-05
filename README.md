@@ -12,8 +12,9 @@ private to Stratus.
 > **Early.** You can sign in to more than one server, switch between them, walk
 > their files, choose which folders feed each one and watch what the backup is
 > doing. On Android it runs in the background and reaches every server you turn
-> on; on iOS the photo library is not wired up at all, so there is nothing to
-> send yet. The sections below describe what it is
+> on. On iOS the app can now **see** the camera roll — it asks for the library,
+> lists your albums and knows what is in them — but it cannot send any of it
+> yet: the transport is next. The sections below describe what it is
 > meant to be; this warning shrinks as that stops being aspirational.
 
 ## Why it exists

@@ -150,6 +150,39 @@ What neither platform promises is synchronisation: no local copy of the tree,
 no offline edits, no conflict resolution. Both are clients that read when they
 are asked.
 
+## The camera roll (stratus-app#19, #20)
+
+Both platforms fill in a `MediaRow` and hand it to `assetOf`, and **that is
+where the only real judgement lives**: which timestamp to believe. A JVM test
+reaches it; what is left on each side is the part that genuinely needs a
+device.
+
+iOS adds two things Android has no equivalent of:
+
+- **A Live Photo is two `PHAssetResource`s** and is only a Live Photo with
+  both, so `MediaRow` carries the movie half. Android's motion photos are one
+  file with the video inside, so it is null there and nothing is lost.
+- **The size comes from an undocumented key**, `fileSize` by KVC on the
+  resource, and it is a decision rather than an oversight. PhotoKit publishes
+  no size; the only documented way to learn one is to read the whole
+  resource, which on a first pass means reading the entire camera roll to find
+  out how big it is. And the size is not cosmetic -- it is part of the remote
+  path's digest *and* the length tus declares, so a wrong one is an upload the
+  server refuses. It degrades: where the key stops answering, it measures, and
+  pays the read only for what it has to.
+
+Two more that are easy to get wrong and are written beside the code: the
+**original** is what gets uploaded rather than the rendered version of an
+edited photograph, and the resource request **allows network access**, without
+which a library kept in iCloud is unreadable in a way that looks like
+corruption.
+
+What a test can say about any of this is almost nothing -- a Kotlin/Native
+test binary has no bundle, so there is no authorisation and no usage
+description, and asking for one does not fail but kills the process. So
+`IosAssetSourceTest` proves the one thing it can: the unauthorised path
+degrades rather than throws. The rest is in stratus-app#117.
+
 ## State, and what is the record
 
 **The server is the record of what has been backed up.** The local database is a
