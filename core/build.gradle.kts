@@ -48,8 +48,16 @@ kotlin {
         }
     }
 
-    iosArm64()
-    iosSimulatorArm64()
+    // The framework the File Provider extension links (stratus-app#105).
+    // `:ui` produces one too, and an extension cannot use it: that one carries
+    // Compose, and an extension runs on a much shorter memory budget than an
+    // app. Static for the reason `:ui` gives -- one artifact to carry.
+    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "StratusCore"
+            isStatic = true
+        }
+    }
 
     // The trust manager is plain JDK code with no Android API in it, and Android
     // is where it ships -- so it lives where both the Android target and the JVM

@@ -54,7 +54,7 @@ class DocumentTreeTest {
         append("""<multistatus xmlns="DAV:">""")
         for ((href, isDir) in entries) {
             append("<response><href>$href</href><propstat><prop>")
-            append(if (isDir) "<resourcetype><collection/></resourcetype>" else "<resourcetype/><getcontentlength>7</getcontentlength><getcontenttype>text/plain</getcontenttype>")
+            append(if (isDir) "<resourcetype><collection/></resourcetype>" else "<resourcetype/><getcontentlength>7</getcontentlength><getcontenttype>text/plain</getcontenttype><getetag>\"abc123\"</getetag>")
             append("</prop><status>HTTP/1.1 200 OK</status></propstat></response>")
         }
         append("</multistatus>")
@@ -194,6 +194,9 @@ class DocumentTreeTest {
 
         assertEquals("a.txt", row?.name)
         assertEquals(7L, row?.size)
+        // Carried for iOS, where a File Provider item needs a version and this
+        // is the only honest one WebDAV gives (stratus-app#105).
+        assertEquals("abc123", row?.etag)
         assertEquals(before, seen.size, "asking about a row it had just been given cost a request")
     }
 }

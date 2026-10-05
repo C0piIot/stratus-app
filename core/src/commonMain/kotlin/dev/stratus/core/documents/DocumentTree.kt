@@ -35,6 +35,20 @@ data class DocumentRoot(
     val document get() = DocumentRef(instanceId, "")
 }
 
+/**
+ * One server as a root, which is a row in a picker's sidebar on Android and a
+ * File Provider domain on iOS (stratus-app#104, #105).
+ *
+ * Out here rather than inside [DocumentTree] because the iOS half registers
+ * domains from the composition root, where there is no tree yet, and the two
+ * must not disagree about what a server is called.
+ */
+fun rootOf(instance: Instance) = DocumentRoot(
+    instanceId = instance.id,
+    title = "Stratus",
+    summary = originOf(instance.baseUrl).substringAfter("://"),
+)
+
 /** One row of a listing. */
 data class DocumentRow(
     val ref: DocumentRef,
@@ -43,6 +57,14 @@ data class DocumentRow(
     val size: Long?,
     val contentType: String?,
     val lastModifiedEpochMs: Long?,
+    /**
+     * What the server says this content is, where it says anything.
+     *
+     * Android's picker has no use for it; iOS's File Provider does -- an
+     * item carries a version and that is the only honest one WebDAV offers
+     * (stratus-app#105).
+     */
+    val etag: String? = null,
 )
 
 /** What is known about a folder at this moment, which is not always its contents. */
@@ -86,9 +108,7 @@ class DocumentTree(
     private val fetching = mutableMapOf<DocumentRef, Job>()
 
     /** One per server somebody has signed in to. Empty is a legitimate answer. */
-    suspend fun roots(): List<DocumentRoot> = instances.all().map {
-        DocumentRoot(instanceId = it.id, title = TITLE, summary = summaryOf(it))
-    }
+    suspend fun roots(): List<DocumentRoot> = instances.all().map(::rootOf)
 
     /**
      * What is in a folder, and a fetch started if nobody has asked before.
@@ -101,6 +121,20 @@ class DocumentTree(
             listings[ref] = it
             start(ref)
         }
+    }
+
+    /**
+     * A folder's contents, waited for.
+     *
+     * [children] answers from a cache and tells the platform afterwards,
+     * which is what a `DocumentsProvider` needs because its query must return
+     * at once. A File Provider enumerator is the other shape: it is handed a
+     * callback and wants the answer in it (stratus-app#105). Same client, no
+     * cache in the way.
+     */
+    suspend fun listNow(ref: DocumentRef): List<DocumentRow> {
+        val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
+        return dav.list(ref.davPath).map { rowOf(ref.instanceId, it) }.sortedForPeople()
     }
 
     /** Throws the cached answer away and asks again. What pull-to-refresh is. */
@@ -224,9 +258,6 @@ class DocumentTree(
         }.getOrNull()
     }
 
-    /** What the platform shows when it has nowhere else to say it. */
-    fun summaryOf(instance: Instance): String = originOf(instance.baseUrl).substringAfter("://")
-
     private suspend fun invalidate(ref: DocumentRef) {
         lock.withLock {
             listings[ref] = Listing.Loading
@@ -239,11 +270,10 @@ class DocumentTree(
         fetching.remove(ref)?.cancel()
         fetching[ref] = scope.launch {
             val answer = try {
-                val dav = davFor(ref.instanceId)
-                if (dav == null) {
+                if (davFor(ref.instanceId) == null) {
                     Listing.Failed("that server is not signed in any more")
                 } else {
-                    Listing.Loaded(dav.list(ref.davPath).map { rowOf(ref.instanceId, it) }.sortedForPeople())
+                    Listing.Loaded(listNow(ref))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -267,7 +297,7 @@ class DocumentTree(
 
     private suspend fun rootRow(ref: DocumentRef): DocumentRow? {
         val instance = instances.instance(ref.instanceId) ?: return null
-        return DocumentRow(ref, summaryOf(instance), isDirectory = true, null, MIME_DIRECTORY, null)
+        return DocumentRow(ref, rootOf(instance).summary, isDirectory = true, null, MIME_DIRECTORY, null)
     }
 
     private fun rowOf(instanceId: String, entry: DavResource): DocumentRow {
@@ -279,6 +309,7 @@ class DocumentTree(
             size = entry.size,
             contentType = if (entry.isDirectory) MIME_DIRECTORY else entry.contentType,
             lastModifiedEpochMs = entry.lastModifiedEpochMs,
+            etag = entry.etag,
         )
     }
 
@@ -289,7 +320,6 @@ class DocumentTree(
         /** Android's own name for a folder, which the picker matches on exactly. */
         const val MIME_DIRECTORY = "vnd.android.document/directory"
 
-        private const val TITLE = "Stratus"
         private const val CHUNK = 64L * 1024
     }
 }
