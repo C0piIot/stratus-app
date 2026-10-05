@@ -15,7 +15,6 @@ import dev.stratus.core.cast.NoCaster
 import dev.stratus.core.share.IosLinkSharing
 import dev.stratus.core.store.KeychainSecureStore
 import io.ktor.client.engine.darwin.Darwin
-import kotlin.concurrent.Volatile
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSBundle
@@ -37,17 +36,29 @@ import platform.Foundation.NSUserDomainMask
  * callers in one process -- the interface, the File Provider and the delegate
  * a background transfer relaunches us to run -- so it matters more, not less.
  */
-@Volatile private var shared: AppContainer? = null
+/**
+ * One container per process, like the Android twin and for the reason it
+ * gives: two are two connections to one SQLite file, and the status poll met
+ * the backup's writes as `database is locked`. iOS now has three callers in
+ * one process -- the interface, the File Provider and the delegate a
+ * background transfer relaunches us to run -- so it matters more, not less.
+ *
+ * `lazy` rather than a volatile holder: it is thread-safe by default, it says
+ * "once" in the type rather than in a comment, and only one of the two is
+ * ever reached in a given process.
+ */
+private val hosting by lazy { build(registersDomains = true) }
+private val plain by lazy { build(registersDomains = false) }
 
 /**
- * The session this process is carrying transfers in, for the Swift side to
- * hand the relaunch over to. Set when the container is built, which is the
- * only moment there is one.
+ * The session this process carries transfers in, for the Swift side to hand a
+ * relaunch over to. Null until a container exists, which is the only moment
+ * there is one.
  */
-@Volatile var uploadSession: BackgroundUploads? = null
-    internal set
+var uploadSession: BackgroundUploads? = null
+    private set
 
-fun appContainer(): AppContainer = container(registersDomains = false)
+fun appContainer(): AppContainer = plain
 
 /**
  * The app's own, which is the one that keeps the Files locations in step
@@ -57,10 +68,7 @@ fun appContainer(): AppContainer = container(registersDomains = false)
  * too, and an extension has no business registering domains -- it is the
  * thing inside them.
  */
-fun hostAppContainer(): AppContainer = container(registersDomains = true)
-
-private fun container(registersDomains: Boolean): AppContainer =
-    shared ?: build(registersDomains).also { shared = it }
+fun hostAppContainer(): AppContainer = hosting
 
 private fun build(registersDomains: Boolean): AppContainer {
     val secure = KeychainSecureStore(accessGroup = sharedKeychainGroup())
