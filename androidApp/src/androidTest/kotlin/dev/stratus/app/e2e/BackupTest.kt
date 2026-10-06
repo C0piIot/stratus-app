@@ -75,7 +75,9 @@ class BackupTest : E2E() {
         val (path, _) = waitForTheServer("$unique.jpg")
 
         Stratus.delete(path)
-        openBackupAndRun()
+        // Already on the backup screen, so the strip is not there to be tapped
+        // a second time -- only the button is.
+        tap("Back up now")
         // The pass has to have finished before absence means anything.
         see("Everything is backed up", timeoutMs = 60_000)
 
