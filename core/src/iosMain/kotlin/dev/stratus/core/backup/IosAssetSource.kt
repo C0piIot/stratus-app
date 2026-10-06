@@ -6,8 +6,10 @@ import kotlinx.io.RawSource
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
+import platform.Foundation.NSDate
 import platform.Foundation.NSNumber
 import platform.Foundation.NSPredicate
+import platform.Foundation.NSSelectorFromString
 import platform.Foundation.NSSortDescriptor
 import platform.Foundation.valueForKey
 import platform.Foundation.NSTemporaryDirectory
@@ -38,6 +40,10 @@ import platform.Photos.PHFetchResult
 import platform.Photos.PHPhotoLibrary
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+/** Asked for once rather than built per photograph in a loop over a camera roll. */
+@OptIn(ExperimentalForeignApi::class)
+private val addedDateSelector = NSSelectorFromString("addedDate")
 
 /**
  * The camera roll, through PhotoKit (stratus-app#20).
@@ -105,8 +111,9 @@ class IosAssetSource : AssetSource {
     }
 
     override suspend fun assets(from: Set<String>, addedAfterEpochMs: Long): List<Asset> {
-        // Newest first, which is what lets the cutoff below stop early rather
-        // than read a whole library to throw most of it away.
+        // Newest taken first, which is the order a camera roll is read in.
+        // Not newest *added*: that is a key iOS 26 introduced and asking an
+        // older one to sort by it raises rather than degrades.
         val options = mediaOnly().apply {
             sortDescriptors = listOf(NSSortDescriptor.sortDescriptorWithKey("creationDate", ascending = false))
         }
@@ -125,12 +132,13 @@ class IosAssetSource : AssetSource {
         for (result in results) {
             for (index in 0UL until result.count) {
                 val asset = result.objectAtIndex(index) as? PHAsset ?: continue
-                // `creationDate` and not a date added, which iOS does not
-                // report. It is an optimisation and not a rule -- the cache
-                // stays the only authority on what was uploaded -- so the
-                // worst it costs is a slow pass, exactly as the contract says.
-                val taken = asset.creationDate?.let { (it.timeIntervalSince1970 * 1000).toLong() }
-                if (addedAfterEpochMs > 0 && taken != null && taken <= addedAfterEpochMs) break
+                // Skipped and never broken out of: the results are in taken
+                // order and a date added does not follow it, so there is no
+                // point past which the rest can be assumed old. What it saves
+                // is rowOf, which is the expensive half -- it enumerates the
+                // asset's resources and asks each one its size.
+                val added = addedAtOf(asset)
+                if (addedAfterEpochMs > 0 && added in 1..addedAfterEpochMs) continue
                 if (!seen.add(asset.localIdentifier)) continue
                 rowOf(asset)?.let { found += assetOf(it) }
             }
@@ -241,6 +249,28 @@ class IosAssetSource : AssetSource {
         return Resources(still, motion)
     }
 
+    /**
+     * When the library was given this photograph, or 0 where it will not say.
+     *
+     * `PHAsset.addedDate` is **iOS 26**, and the deployment target is 15, so it
+     * is asked for rather than called: on anything older the selector is not
+     * there and the answer is zero, which is what [BackupMark] reads as "do not
+     * move the bound" (stratus-app#124). `valueForKey` and not the property,
+     * because a property this SDK may not know is a compile error and a
+     * selector that is not there is a question with an answer.
+     *
+     * It is the date from the device that added the asset, so one synced down
+     * from an iPad carries the iPad's. That is exactly why it bounds the
+     * enumeration and decides nothing: a backdated arrival costs a photograph
+     * that is enumerated anyway, because the settled record is what says
+     * whether it has been sent.
+     */
+    private fun addedAtOf(asset: PHAsset): Long {
+        if (!asset.respondsToSelector(addedDateSelector)) return 0
+        val date = asset.valueForKey("addedDate") as? NSDate ?: return 0
+        return (date.timeIntervalSince1970 * 1000).toLong()
+    }
+
     private suspend fun rowOf(asset: PHAsset): MediaRow? {
         val (still, motion) = resourcesOf(asset)
         if (still == null) return null
@@ -251,11 +281,7 @@ class IosAssetSource : AssetSource {
             sizeBytes = size,
             bucketId = null,
             takenEpochMs = asset.creationDate?.let { (it.timeIntervalSince1970 * 1000).toLong() },
-            // iOS reports no date added, so there is no second-best to fall
-            // back to; `assetOf` only reaches for this when the first is
-            // absent, and an asset with no creation date is one PhotoKit
-            // barely knows anything about.
-            addedEpochSeconds = 0,
+            addedEpochSeconds = addedAtOf(asset) / 1_000,
             mimeType = typeOf(still),
             motion = motion?.let { movie ->
                 sizeOf(movie)?.let { MotionPart(movie.originalFilename, it, typeOf(movie)) }

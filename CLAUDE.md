@@ -232,10 +232,45 @@ one SQLite file.
 
 ## State, and what is the record
 
-**The server is the record of what has been backed up.** The local database is a
-cache of that, and it must be rebuildable by walking the server — because a
-reinstall, a restore to a new phone or a cleared app storage will all destroy it,
-and none of those should cause the whole camera roll to upload again.
+**What the phone keeps is what it has settled, not what the server holds**
+(stratus-app#124). The two look the same until somebody deletes a file on the
+server, and then they are the opposite: what is held is one photograph fewer,
+and what is settled is unchanged. A record of the first cannot tell "never sent"
+from "sent and then deleted", so it would put every deliberate deletion back on
+the next pass. So `settled` only ever grows: a path goes in when an upload
+finishes and when a walk finds the server holding it, and nothing takes one out.
+
+It is still a cache, and still rebuildable by walking the server — **a cold
+start is nothing settled**, which is a first pass and a lost file at once, and
+both want the same thing: ask before sending. That is a listing per month the
+camera roll touches, about a hundred and twenty for ten years, against
+re-uploading the lot. `BackupIndex.walk` had been written for exactly this and
+had no caller at all until #124; wiring it in was most of what that issue was.
+
+What a walk cannot recover is the deletions, so a file deleted on the server
+before the phone lost its file comes back once. That is the accepted price of
+keeping all of this on the phone, which is the other half of the same decision:
+there is no marker written into somebody's tree and nothing asked of the server
+that WebDAV does not already answer.
+
+**Three rules, and `BackupRulesTest` is where they are stated.** Deleting a
+photograph on the phone does not delete it on the server; deleting a file on the
+server does not delete it on the phone; and a file deleted on the server is not
+uploaded again. The first two hold because a pass enumerates and uploads and
+there is no delete anywhere in it — which is to say they held by accident, and
+the first feature to add a delete would have broken either without a test
+noticing.
+
+**How far back a pass looks is a bound and never an authority.** `BackupMark`
+remembers how far into the library the last pass got, so a phone with forty
+thousand photographs stops enumerating all of them to find the three that are
+new. It moves to the oldest thing still owed rather than the newest thing done,
+and **one photograph with no added date freezes it entirely**. That matters more
+than it sounds: `MediaStore.DATE_ADDED` is always there on Android, and on iOS
+`PHAsset.addedDate` is **iOS 26** while the deployment target is 15 — asked for
+through a selector check rather than called, so older versions answer zero and
+the bound simply never moves. Which is safe precisely because the bound decides
+nothing: the settled record does.
 
 **A listing asks for the five properties it reads and no others.** This was
 `allprop` on the reasoning that a round trip costs the same either way, which is

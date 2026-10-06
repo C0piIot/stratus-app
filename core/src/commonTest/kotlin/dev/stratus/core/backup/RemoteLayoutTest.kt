@@ -16,7 +16,7 @@ class RemoteLayoutTest {
         name: String = "IMG_0001.HEIC",
         size: Long = 4_012_345,
         motion: MotionPart? = null,
-    ) = Asset(localId, at, name, size, motion)
+    ) = Asset(localId, at, originalName = name, sizeBytes = size, motion = motion)
 
     @Test
     fun putsAPhotographWhereSomebodyWouldLookForIt() {

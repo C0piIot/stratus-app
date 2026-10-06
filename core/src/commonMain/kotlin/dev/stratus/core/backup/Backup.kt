@@ -20,6 +20,9 @@ fun interface Connections {
     suspend fun to(instance: Instance): Connection?
 }
 
+/** One instance's half of a pass: what to send, what the server has, how far to look. */
+class InstanceBackup(val queue: UploadQueue, val index: BackupIndex, val mark: BackupMark)
+
 /** Whether the system should bring us back, decided here rather than per platform. */
 enum class PassOutcome { Finished, ComeBackLater }
 
@@ -106,37 +109,34 @@ class Backup(
      */
     suspend fun run(): BackupRun = BackupRun(
         source = assets,
-        queueFor = { queueFor(it.id) },
+        prepareFor = { prepare(it.id) },
         journalFor = { database.journalFor(it.id) },
     )
 
     /**
-     * The queue for one instance, assembled from its own settings.
+     * Everything one instance's pass needs, assembled from its own settings.
      *
      * A queue per instance and never a shared one: a photograph owed to two
      * servers is two pieces of work, and an instance that is down must not hold
-     * up the other.
+     * up the other. The index comes out of the same connection rather than a
+     * second one, because building one is an HTTP client and an engine.
      */
-    suspend fun queueFor(instanceId: String): UploadQueue? {
+    suspend fun prepare(instanceId: String): InstanceBackup? {
         val instance = instances.instance(instanceId) ?: return null
         val connection = connections.to(instance) ?: return null
-        return UploadQueue(
-            layout = RemoteLayout(instance.backupRoot),
-            pending = database.pendingFor(instance.id),
-            cache = database.cacheFor(instance.id),
-            source = assets,
-            transport = transports(connection, instance),
-            directories = DavDirectoryMaker(connection.dav),
-        )
-    }
-
-    /** Null when nobody is signed in, or for one instance in particular. */
-    suspend fun index(instanceId: String? = null): BackupIndex? {
-        val instance = (instanceId?.let { instances.instance(it) } ?: instances.current()) ?: return null
-        return BackupIndex(
-            layout = RemoteLayout(instance.backupRoot),
-            cache = database.cacheFor(instance.id),
-            dav = connections.to(instance)?.dav ?: return null,
+        val layout = RemoteLayout(instance.backupRoot)
+        val cache = database.cacheFor(instance.id)
+        return InstanceBackup(
+            queue = UploadQueue(
+                layout = layout,
+                pending = database.pendingFor(instance.id),
+                cache = cache,
+                source = assets,
+                transport = transports(connection, instance),
+                directories = DavDirectoryMaker(connection.dav),
+            ),
+            index = BackupIndex(layout, cache, connection.dav),
+            mark = database.markFor(instance.id),
         )
     }
 

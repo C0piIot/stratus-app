@@ -62,7 +62,7 @@ class UploadQueueTest {
     }
 
     private fun asset(day: Int, name: String = "IMG_$day.HEIC", motion: MotionPart? = null) =
-        Asset("local-$day", utcMillis(2026, 9, day, 12, 0, 0), name, 100, motion)
+        Asset("local-$day", utcMillis(2026, 9, day, 12, 0, 0), originalName = name, sizeBytes = 100, motion = motion)
 
     // ---- Handed to the system, answered later (stratus-app#20) ------------
 
@@ -164,7 +164,7 @@ class UploadQueueTest {
         val here = asset(1)
         val there = asset(2)
         database.migrate()
-        database.cacheFor("instance-a").record(RemoteEntry(layout.pathFor(there), null, null))
+        database.cacheFor("instance-a").record(layout.pathFor(there))
 
         val queue = queue()
         assertEquals(1, queue.enqueue(listOf(here, there)))
@@ -219,7 +219,6 @@ class UploadQueueTest {
 
         assertEquals(emptyList(), queue.outstanding())
         assertTrue(database.cacheFor("instance-a").has(layout.pathFor(asset(5))))
-        assertEquals("etag", database.cacheFor("instance-a").entry(layout.pathFor(asset(5)))?.etag)
         assertEquals(QueueStep.Idle, queue.runNext())
     }
 

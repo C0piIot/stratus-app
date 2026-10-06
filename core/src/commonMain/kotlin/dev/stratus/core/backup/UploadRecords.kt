@@ -58,7 +58,7 @@ class UploadRecords(
     suspend fun record(upload: PendingUpload, outcome: UploadOutcome): QueueStep =
         when (outcome) {
             is UploadOutcome.Done -> {
-                cache.record(RemoteEntry(upload.path, outcome.etag, upload.size))
+                cache.record(upload.path)
                 pending.remove(upload.path)
                 QueueStep.Uploaded(upload.path)
             }

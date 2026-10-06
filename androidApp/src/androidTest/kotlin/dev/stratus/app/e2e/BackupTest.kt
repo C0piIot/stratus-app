@@ -55,6 +55,38 @@ class BackupTest : E2E() {
         assertEquals(bytes.size.toLong(), size)
     }
 
+    /**
+     * The rule stratus-app#124 is about, through the whole app: somebody
+     * deletes a backed-up photograph on the server and the next pass leaves it
+     * deleted.
+     *
+     * Worth an emulator because every layer is in it -- the settled record, the
+     * queue and a real server -- and because the failure it guards against is
+     * silent: a deletion that comes back looks like the app working.
+     */
+    @Test
+    fun aPhotographDeletedOnTheServerIsNotPutBack() {
+        Phone.photograph("$unique.jpg", unique, Random.nextBytes(10_000))
+        Phone.grantPhotos()
+        signedIn()
+        turnBackupOn()
+
+        openBackupAndRun()
+        val (path, _) = waitForTheServer("$unique.jpg")
+
+        Stratus.delete(path)
+        // Already on the backup screen, so the strip is not there to be tapped
+        // a second time -- only the button is.
+        tap("Back up now")
+        // The pass has to have finished before absence means anything.
+        see("Everything is backed up", timeoutMs = 60_000)
+
+        assertTrue(
+            Stratus.backedUp("$unique.jpg") == null,
+            "the deletion was undone: the root holds ${Stratus.underBackupRoot()}",
+        )
+    }
+
     // A server that is off is a reason to wait, not a verdict on the file.
     @Test
     fun aServerThatIsOffIsWaitedForAndTheBackupFinishesOnceItIsBack() {
