@@ -9,6 +9,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BackupIndexTest {
@@ -20,7 +21,7 @@ class BackupIndexTest {
         name: String = "IMG_0001.HEIC",
         size: Long = 4_012_345,
         motion: MotionPart? = null,
-    ) = Asset("local", at, name, size, motion)
+    ) = Asset("local", at, originalName = name, sizeBytes = size, motion = motion)
 
     /** Answers a PROPFIND for whatever the server is pretending to hold. */
     private fun serverHolding(vararg paths: String) = MockEngine { request ->
@@ -56,16 +57,41 @@ class BackupIndexTest {
         // The property the whole design exists for: no local state at all, and
         // the answer to "have I already uploaded this" comes back anyway.
         val photo = asset()
-        val (index, cache) = indexOver(serverHolding(layout.pathFor(photo)))
+        val (index, _) = indexOver(serverHolding(layout.pathFor(photo)))
 
-        assertEquals(1, index.rebuild(listOf(photo)))
+        assertEquals(1, index.walk(listOf(photo)))
         assertEquals(emptyList(), index.missing(listOf(photo)))
-        // And the ETag comes back with it, so a later check has something real
-        // to compare against rather than only a name.
-        assertEquals(
-            "etag-of-" + layout.pathFor(photo).substringAfterLast('/'),
-            cache.entry(layout.pathFor(photo))?.etag,
-        )
+    }
+
+    @Test
+    fun aWalkAddsToWhatIsSettledAndTakesNothingAway() = runTest {
+        // A photograph deleted on the server stays settled, or the next pass
+        // uploads it again and the deletion never sticks (stratus-app#124).
+        val deleted = asset(name = "IMG_DELETED.HEIC")
+        val kept = asset(name = "IMG_KEPT.HEIC")
+        val (index, cache) = indexOver(serverHolding(layout.pathFor(kept)))
+        cache.record(layout.pathFor(deleted))
+
+        index.walk(listOf(deleted, kept))
+
+        assertTrue(cache.has(layout.pathFor(deleted)))
+        assertEquals(emptyList(), index.missing(listOf(deleted, kept)))
+    }
+
+    @Test
+    fun onlyWalksWhenThisPhoneKnowsNothing() = runTest {
+        val photo = asset()
+        val engine = serverHolding(layout.pathFor(photo))
+        val (index, cache) = indexOver(engine)
+
+        assertEquals(1, index.warmUp(listOf(photo)))
+        val asked = engine.requestHistory.size
+
+        // Settled now, so there is nothing to ask about: a pass must not walk
+        // the server every time it runs.
+        assertNull(index.warmUp(listOf(photo)))
+        assertEquals(asked, engine.requestHistory.size)
+        assertTrue(cache.has(layout.pathFor(photo)))
     }
 
     @Test
@@ -75,7 +101,7 @@ class BackupIndexTest {
         val engine = serverHolding()
         val (index, _) = indexOver(engine)
 
-        index.rebuild(september + august)
+        index.walk(september + august)
         assertEquals(2, engine.requestHistory.size)
     }
 
@@ -85,7 +111,7 @@ class BackupIndexTest {
         // uploaded anything for yet.
         val photo = asset()
         val (index, _) = indexOver(serverHolding())
-        assertEquals(0, index.rebuild(listOf(photo)))
+        assertEquals(0, index.walk(listOf(photo)))
         assertEquals(listOf(photo), index.missing(listOf(photo)))
     }
 
@@ -95,7 +121,7 @@ class BackupIndexTest {
         val live = asset(motion = MotionPart("IMG_0001.MOV", 1_200_000))
         val (index, _) = indexOver(serverHolding(layout.pathFor(live)))
 
-        index.rebuild(listOf(live))
+        index.walk(listOf(live))
         assertEquals(listOf(live), index.missing(listOf(live)))
     }
 
@@ -104,21 +130,8 @@ class BackupIndexTest {
         val live = asset(motion = MotionPart("IMG_0001.MOV", 1_200_000))
         val (index, _) = indexOver(serverHolding(layout.pathFor(live), layout.motionPathFor(live)!!))
 
-        index.rebuild(listOf(live))
+        index.walk(listOf(live))
         assertEquals(emptyList(), index.missing(listOf(live)))
     }
 
-    @Test
-    fun saysCannotVerifyRatherThanYesWhenTheServerOffersNoEtag() = runTest {
-        val photo = asset()
-        val (index, cache) = indexOver(serverHolding())
-        cache.record(RemoteEntry(layout.pathFor(photo), null, null))
-        assertEquals(Verification.PresentButUnverifiable, index.verification(photo))
-
-        cache.record(RemoteEntry(layout.pathFor(photo), "sha", photo.sizeBytes))
-        assertEquals(Verification.Present("sha"), index.verification(photo))
-
-        cache.record(RemoteEntry(layout.pathFor(photo), "sha", 1))
-        assertEquals(Verification.Differs, index.verification(photo))
-    }
 }

@@ -62,7 +62,7 @@ class UploadConformanceTest {
     // A megabyte, so the body goes out in chunks rather than in one write.
     private val bytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
 
-    private val asset = Asset("local-1", utcMillis(2026, 9, 18, 9, 30, 0), "IMG_1.HEIC", bytes.size.toLong())
+    private val asset = Asset("local-1", utcMillis(2026, 9, 18, 9, 30, 0), originalName = "IMG_1.HEIC", sizeBytes = bytes.size.toLong())
 
     private val source = object : AssetSource {
         override suspend fun access() = MediaAccess.Full
@@ -162,9 +162,9 @@ class UploadConformanceTest {
         assertTrue(onEach.all { !it.isNullOrEmpty() }, "a server gave no ETag")
         assertEquals(onEach[0], onEach[1])
 
-        // And each instance's cache kept the ETag its own server gave.
-        assertEquals(onEach[0], database.cacheFor("instance-one").entry(path)?.etag)
-        assertEquals(onEach[1], database.cacheFor("instance-two").entry(path)?.etag)
+        // And each instance settled it on its own, so neither will send it again.
+        assertTrue(database.cacheFor("instance-one").has(path))
+        assertTrue(database.cacheFor("instance-two").has(path))
     }
 
     @Test

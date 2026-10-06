@@ -1,6 +1,11 @@
 package dev.stratus.core.backup
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import dev.stratus.core.dav.DavClient
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpStatusCode
 import dev.stratus.core.instance.Instance
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
@@ -14,11 +19,15 @@ private class RollOf(
     private val access: MediaAccess = MediaAccess.Full,
 ) : AssetSource {
     val askedFor = mutableListOf<Set<String>>()
+    val boundedBy = mutableListOf<Long>()
     override suspend fun access() = access
     override suspend fun sources() = emptyList<MediaSource>()
     override suspend fun assets(from: Set<String>, addedAfterEpochMs: Long): List<Asset> {
         askedFor += from
-        return assets
+        boundedBy += addedAfterEpochMs
+        // The bound as both platforms apply it: no bound at zero, and a
+        // photograph whose arrival is unknown is never skipped by one.
+        return assets.filter { addedAfterEpochMs <= 0 || it.addedAtEpochMs <= 0 || it.addedAtEpochMs > addedAfterEpochMs }
     }
     override suspend fun open(localId: String, part: AssetPart, from: Long): RawSource =
         Buffer().apply { write(ByteArray(10), 0, 10) }
@@ -34,24 +43,34 @@ class BackupRunTest {
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
     private val instance = Instance("i-1", "https://host/dav/", "edu", sources = setOf("Camera"))
 
-    private fun asset(day: Int) =
-        Asset("local-$day", utcMillis(2026, 9, day), "IMG_$day.HEIC", 10)
+    private fun asset(day: Int, addedAt: Long = utcMillis(2026, 9, day)) =
+        Asset("local-$day", utcMillis(2026, 9, day), addedAt, "IMG_$day.HEIC", 10)
+
+    /** A server with nothing on it, which is what a first pass meets. */
+    private fun emptyServer() = MockEngine { respond("", HttpStatusCode.NotFound) }
 
     private suspend fun run(
         roll: RollOf,
         outcome: UploadOutcome = UploadOutcome.Done("etag"),
+        engine: MockEngine = emptyServer(),
     ): BackupRun {
         database.migrate()
         return BackupRun(
             source = roll,
-            queueFor = { forInstance ->
-                UploadQueue(
-                    layout = RemoteLayout(forInstance.backupRoot),
-                    pending = database.pendingFor(forInstance.id),
-                    cache = database.cacheFor(forInstance.id),
-                    source = roll,
-                    transport = Always(outcome),
-                    directories = { },
+            prepareFor = { forInstance ->
+                val layout = RemoteLayout(forInstance.backupRoot)
+                val cache = database.cacheFor(forInstance.id)
+                InstanceBackup(
+                    queue = UploadQueue(
+                        layout = layout,
+                        pending = database.pendingFor(forInstance.id),
+                        cache = cache,
+                        source = roll,
+                        transport = Always(outcome),
+                        directories = { },
+                    ),
+                    index = BackupIndex(layout, cache, DavClient(HttpClient(engine), "https://host/dav/")),
+                    mark = database.markFor(forInstance.id),
                 )
             },
             journalFor = { database.journalFor(it.id) },
@@ -143,5 +162,43 @@ class BackupRunTest {
 
         assertTrue(seen.any { it is QueueStep.Uploaded }, seen.toString())
         assertTrue(seen.last() is QueueStep.Idle, seen.toString())
+    }
+
+    @Test
+    fun theSecondPassOnlyLooksAtWhatArrivedAfterTheFirst() = runTest {
+        val roll = RollOf(listOf(asset(1), asset(2)))
+        val run = run(roll)
+        run.once(instance)
+        run.once(instance)
+
+        // The first pass looks at everything, and the second starts where it
+        // stopped: a phone with forty thousand photographs should not read all
+        // of them to find the three that are new.
+        assertEquals(0L, roll.boundedBy.first())
+        assertEquals(utcMillis(2026, 9, 2), roll.boundedBy.last())
+    }
+
+    @Test
+    fun theBoundStopsAtTheOldestThingStillOwed() = runTest {
+        // A photograph that will not send holds the bound behind it, or the
+        // next pass enumerates past it and nobody ever tries it again.
+        val roll = RollOf(listOf(asset(1), asset(2)))
+        val run = run(roll, UploadOutcome.Failed(FailureKind.Permanent, "refused"))
+        run.once(instance)
+        run.once(instance)
+
+        assertEquals(utcMillis(2026, 9, 1) - 1, roll.boundedBy.last())
+    }
+
+    @Test
+    fun aPhotographWithNoAddedDateFreezesTheBound() = runTest {
+        // Which is every iOS below 26, where PhotoKit has no such thing to
+        // report. The bound decides nothing, so standing still is only slower.
+        val roll = RollOf(listOf(asset(1, addedAt = 0), asset(2)))
+        val run = run(roll)
+        run.once(instance)
+        run.once(instance)
+
+        assertEquals(listOf(0L, 0L), roll.boundedBy)
     }
 }

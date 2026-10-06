@@ -63,7 +63,7 @@ class RebuildConformanceTest {
     }
 
     private fun asset(day: Int, month: Int = 9, name: String = "IMG_$day.HEIC", motion: MotionPart? = null) =
-        Asset("local-$day-$month", utcMillis(2026, month, day, 12, 0, day), name, 28, motion)
+        Asset("local-$day-$month", utcMillis(2026, month, day, 12, 0, day), originalName = name, sizeBytes = 28, motion = motion)
 
     @Test
     fun findsOutWhatItAlreadyUploadedWithNoLocalStateAtAll() = runTest {
@@ -71,7 +71,7 @@ class RebuildConformanceTest {
         for (a in assets) putAt(layout.pathFor(a))
 
         val index = emptyIndex()
-        assertEquals(3, index.rebuild(assets))
+        assertEquals(3, index.walk(assets))
         assertEquals(emptyList(), index.missing(assets))
     }
 
@@ -82,22 +82,25 @@ class RebuildConformanceTest {
         putAt(layout.pathFor(uploaded))
 
         val index = emptyIndex()
-        index.rebuild(listOf(uploaded, never))
+        index.walk(listOf(uploaded, never))
         assertEquals(listOf(never), index.missing(listOf(uploaded, never)))
     }
 
     @Test
-    fun keepsTheEtagTheServerActuallyGave() = runTest {
-        // Stratus answers with a SHA-256 of the bytes it stored, which is what
-        // makes a later check a real check rather than a guess about a name.
+    fun aPhotographDeletedOnTheServerStaysSettled() = runTest {
+        // The rule stratus-app#124 is about, against a real server: somebody
+        // deletes a file in the web UI, and the next pass must not put it back.
         val photo = asset(20)
         putAt(layout.pathFor(photo))
 
         val index = emptyIndex()
-        index.rebuild(listOf(photo))
-        val etag = dav.stat(layout.pathFor(photo)).etag
-        assertTrue(!etag.isNullOrEmpty(), "the server gave no ETag")
-        assertEquals(dev.stratus.core.backup.Verification.Present(etag), index.verification(photo))
+        index.walk(listOf(photo))
+        assertEquals(emptyList(), index.missing(listOf(photo)))
+
+        dav.delete(layout.pathFor(photo))
+        index.walk(listOf(photo))
+
+        assertEquals(emptyList(), index.missing(listOf(photo)), "a deletion was undone by the next walk")
     }
 
     @Test
@@ -106,11 +109,11 @@ class RebuildConformanceTest {
         putAt(layout.pathFor(live))
 
         val index = emptyIndex()
-        index.rebuild(listOf(live))
+        index.walk(listOf(live))
         assertEquals(listOf(live), index.missing(listOf(live)))
 
         putAt(layout.motionPathFor(live)!!)
-        index.rebuild(listOf(live))
+        index.walk(listOf(live))
         assertEquals(emptyList(), index.missing(listOf(live)))
     }
 }

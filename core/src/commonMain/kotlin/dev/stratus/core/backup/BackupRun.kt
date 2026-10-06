@@ -1,6 +1,7 @@
 package dev.stratus.core.backup
 
 import dev.stratus.core.instance.Instance
+import kotlinx.coroutines.CancellationException
 
 /** What a pass over the camera roll did, for whoever has to report it. */
 data class BackupReport(
@@ -47,7 +48,7 @@ enum class StoppedBecause {
  */
 class BackupRun(
     private val source: AssetSource,
-    private val queueFor: suspend (Instance) -> UploadQueue?,
+    private val prepareFor: suspend (Instance) -> InstanceBackup?,
     private val journalFor: suspend (Instance) -> BackupJournal,
     private val now: () -> Long = { io.ktor.util.date.getTimeMillis() },
 ) {
@@ -70,10 +71,31 @@ class BackupRun(
             journal.ended(now(), report.stopped, 0, 0)
             return report
         }
-        val queue = queueFor(instance) ?: return BackupReport(instance.id)
+        val prepared = prepareFor(instance) ?: return BackupReport(instance.id)
+        val queue = prepared.queue
 
         journal.began(now())
-        val assets = source.assets(instance.sources)
+        // Bounded by how far the last pass got, which is an optimisation and
+        // nothing more: everything already queued is in the database and goes
+        // out whatever this enumerates, and what has actually been sent is the
+        // settled record's answer (stratus-app#124).
+        val assets = source.assets(instance.sources, prepared.mark.read())
+
+        // A phone that has settled nothing asks the server before it sends
+        // anything, or a reinstall is somebody's whole camera roll going up
+        // again (stratus-app#124). If the asking fails there is no point
+        // guessing: uploading everything is the expensive mistake this is here
+        // to avoid, so the pass waits and tries again rather than paying it.
+        try {
+            prepared.index.warmUp(assets)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            val report = BackupReport(instance.id, stopped = StoppedBecause.WaitingToRetry)
+            journal.ended(now(), report.stopped, 0, 0)
+            return report
+        }
+
         var report = BackupReport(instance.id, queued = queue.enqueue(assets))
 
         while (keepGoing()) {
@@ -82,6 +104,7 @@ class BackupRun(
             report = when (step) {
                 is QueueStep.Idle -> {
                     val done = report.copy(stopped = stoppedFrom(queue))
+                    advance(prepared.mark, queue, assets)
                     journal.ended(now(), done.stopped, done.uploaded, done.failed)
                     return done
                 }
@@ -98,8 +121,30 @@ class BackupRun(
             journal.sending((step as? QueueStep.Uploaded)?.path)
         }
         val stopped = report.copy(stopped = StoppedBecause.AskedTo)
+        advance(prepared.mark, queue, assets)
         journal.ended(now(), stopped.stopped, stopped.uploaded, stopped.failed)
         return stopped
+    }
+
+    /**
+     * Moves the bound to the oldest thing still owed, or past everything seen
+     * when nothing is.
+     *
+     * Two rules, both of which are about never skipping a photograph. It stops
+     * at what is still owed rather than at the newest success, so a file that
+     * keeps failing holds the bound behind it instead of being enumerated away.
+     * And **one asset with no added date freezes it entirely**: that is every
+     * iOS below 26, where the platform has no such thing to report and a bound
+     * taken from a guess would be a photograph nobody backs up.
+     *
+     * What is already queued is unaffected either way. The queue is the
+     * database, so a row below the bound is still sent.
+     */
+    private suspend fun advance(mark: BackupMark, queue: UploadQueue, assets: List<Asset>) {
+        if (assets.isEmpty() || assets.any { it.addedAtEpochMs <= 0 }) return
+        val owed = queue.outstanding().mapTo(mutableSetOf()) { it.localId }
+        val oldestOwed = assets.filter { it.localId in owed }.minOfOrNull { it.addedAtEpochMs }
+        mark.advanceTo(oldestOwed?.minus(1) ?: assets.maxOf { it.addedAtEpochMs })
     }
 
     /**

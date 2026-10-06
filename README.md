@@ -56,6 +56,13 @@ Worth knowing before judging the app for it:
   still interfere.
 - **Originals are uploaded as they are**, including HEIC and Live Photos. A
   backup that transcodes is not a backup.
+- **A backup only ever adds.** Deleting a photograph on the phone does not
+  delete it on the server, and deleting a file on the server does not delete it
+  on the phone — nothing in the app has a way to remove either. A file you
+  delete on the server also stays deleted: the next pass will not put it back.
+  The one exception is reinstalling the app, which throws away what it knew; it
+  then asks the server what it already holds rather than re-uploading
+  everything, but anything deleted before that comes back once.
 - **A certificate nothing vouches for is a question, on both platforms.** Most
   self-hosted servers present one, so the app shows you its fingerprint and
   asks — once, for that address. What it will not do is accept it quietly:

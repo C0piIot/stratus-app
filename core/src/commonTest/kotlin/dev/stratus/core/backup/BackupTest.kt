@@ -29,7 +29,7 @@ private class OnePhoto : AssetSource {
     override suspend fun access() = MediaAccess.Full
     override suspend fun sources() = listOf(MediaSource("camera", "Camera", 1))
     override suspend fun assets(from: Set<String>, addedAfterEpochMs: Long) =
-        listOf(Asset("l-1", 1_600_000_000_000, "IMG_1.jpg", 3))
+        listOf(Asset("l-1", 1_600_000_000_000, originalName = "IMG_1.jpg", sizeBytes = 3))
     override suspend fun open(localId: String, part: AssetPart, from: Long): RawSource =
         Buffer().apply { write(byteArrayOf(1, 2, 3)) }
 }
@@ -58,6 +58,9 @@ class BackupTest {
                     respond("", HttpStatusCode.NoContent, headersOf("Tus-Resumable", "1.0.0"))
 
                 method == "OPTIONS" -> respond("", HttpStatusCode.MethodNotAllowed)
+                // The cold-start walk, against a server with nothing on it yet
+                // (stratus-app#124): a month that is not there is not an error.
+                method == "PROPFIND" -> respond("", HttpStatusCode.NotFound)
                 method == "POST" ->
                     respond("", HttpStatusCode.Created, headersOf("Location", "/tus/abc"))
 
@@ -113,7 +116,7 @@ class BackupTest {
         signedIn("i-2", "two")
         instances.update(first.copy(backupRoot = "/Pictures"))
 
-        backup.queueFor("i-1")!!.enqueue(OnePhoto().assets(emptySet(), 0))
+        backup.prepare("i-1")!!.queue.enqueue(OnePhoto().assets(emptySet(), 0))
         val queued = database.pendingFor("i-1").all().single().path
         assertTrue(queued.startsWith("/Pictures/"), "was $queued")
         assertEquals(emptyList(), database.pendingFor("i-2").all())

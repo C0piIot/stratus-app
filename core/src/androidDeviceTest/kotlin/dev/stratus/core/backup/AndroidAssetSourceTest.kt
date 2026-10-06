@@ -118,6 +118,29 @@ class AndroidAssetSourceTest {
     }
 
     @Test
+    fun everyRowSaysWhenItArrived() = runTest {
+        // What the bound is read from (stratus-app#124). DATE_ADDED is always
+        // there on Android -- unlike iOS, where it is a key only 26 has -- and
+        // zero would freeze the bound for ever.
+        val bucket = source.sources().single { it.label == folder }.id
+        val assets = source.assets(setOf(bucket))
+        assertTrue(assets.all { it.addedAtEpochMs > 0 }, assets.map { it.addedAtEpochMs }.toString())
+    }
+
+    @Test
+    fun honoursTheBoundOnWhenAPhotographArrived() = runTest {
+        val bucket = source.sources().single { it.label == folder }.id
+        val arrived = source.assets(setOf(bucket)).minOf { it.addedAtEpochMs }
+
+        // DATE_ADDED is in seconds and both rows landed in the same one, so a
+        // bound at that second takes both -- which is the honest answer, since
+        // the column cannot tell them apart. What it must not do is take
+        // nothing from a bound before them.
+        assertEquals(2, source.assets(setOf(bucket), arrived - 1_000).size)
+        assertEquals(emptyList(), source.assets(setOf(bucket), arrived + 1_000))
+    }
+
+    @Test
     fun honoursTheFolderFilter() = runTest {
         // A bucket nobody has: the answer is nothing, not everything.
         assertEquals(emptyList(), source.assets(setOf("no-such-bucket")))

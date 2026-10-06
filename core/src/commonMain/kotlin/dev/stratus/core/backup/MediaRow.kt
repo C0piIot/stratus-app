@@ -38,6 +38,11 @@ data class MediaRow(
 fun assetOf(row: MediaRow): Asset = Asset(
     localId = row.id,
     capturedAtEpochMs = row.takenEpochMs?.takeIf { it > 0 } ?: (row.addedEpochSeconds * 1_000),
+    // When it entered this library, which is a different question from when it
+    // was taken and the only one a pass can be bounded by: a photograph
+    // imported today was taken years ago (stratus-app#124). Zero where the
+    // platform will not say, and zero means the bound does not move.
+    addedAtEpochMs = row.addedEpochSeconds * 1_000,
     // A row with no name still has to land somewhere findable rather than be
     // dropped, and the digest keeps it from colliding with the next one.
     originalName = row.displayName?.takeIf { it.isNotBlank() } ?: "untitled",

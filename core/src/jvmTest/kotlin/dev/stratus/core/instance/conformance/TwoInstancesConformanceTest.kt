@@ -43,7 +43,7 @@ class TwoInstancesConformanceTest {
     private val layout = RemoteLayout("two-${Random.nextLong().toULong().toString(16)}")
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
 
-    private val asset = Asset("local", utcMillis(2026, 9, 18, 10, 0, 0), "IMG_1.HEIC", 28)
+    private val asset = Asset("local", utcMillis(2026, 9, 18, 10, 0, 0), originalName = "IMG_1.HEIC", sizeBytes = 28)
 
     private suspend fun indexFor(id: String, dav: DavClient): BackupIndex {
         database.migrate()
@@ -69,8 +69,8 @@ class TwoInstancesConformanceTest {
 
         val first = indexFor("instance-one", one)
         val second = indexFor("instance-two", two)
-        assertEquals(1, first.rebuild(listOf(asset)))
-        assertEquals(0, second.rebuild(listOf(asset)))
+        assertEquals(1, first.walk(listOf(asset)))
+        assertEquals(0, second.walk(listOf(asset)))
 
         assertEquals(emptyList(), first.missing(listOf(asset)))
         assertEquals(listOf(asset), second.missing(listOf(asset)))
@@ -83,11 +83,11 @@ class TwoInstancesConformanceTest {
 
         val first = indexFor("instance-one", one)
         val second = indexFor("instance-two", two)
-        first.rebuild(listOf(asset))
-        second.rebuild(listOf(asset))
+        first.walk(listOf(asset))
+        second.walk(listOf(asset))
 
         // A rebuild replaces everything it knows, and must stop at its own rows.
-        first.rebuild(listOf(asset))
+        first.walk(listOf(asset))
         assertEquals(emptyList(), second.missing(listOf(asset)))
     }
 }

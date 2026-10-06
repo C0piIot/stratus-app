@@ -6,7 +6,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -23,49 +22,51 @@ class BackupCacheTest {
     }
 
     @Test
-    fun remembersWhatTheServerHas() = runTest {
+    fun remembersWhatHasBeenSettled() = runTest {
         val cache = cache()
         assertFalse(cache.has("/Photos/2026/09/a.heic"))
 
-        cache.record(RemoteEntry("/Photos/2026/09/a.heic", "abc123", 4096))
+        cache.record("/Photos/2026/09/a.heic")
         assertTrue(cache.has("/Photos/2026/09/a.heic"))
-        assertEquals(RemoteEntry("/Photos/2026/09/a.heic", "abc123", 4096), cache.entry("/Photos/2026/09/a.heic"))
+        assertEquals(setOf("/Photos/2026/09/a.heic"), cache.paths())
     }
 
     @Test
-    fun keepsAServerThatOffersNoEtagUsableAnyway() = runTest {
+    fun writingTheSamePathTwiceLeavesOneRow() = runTest {
         val cache = cache()
-        cache.record(RemoteEntry("/Photos/2026/09/a.heic", null, null))
-        val entry = cache.entry("/Photos/2026/09/a.heic")!!
-        assertNull(entry.etag)
-        assertNull(entry.size)
-    }
-
-    @Test
-    fun writingTheSamePathTwiceUpdatesRatherThanDuplicates() = runTest {
-        val cache = cache()
-        cache.record(RemoteEntry("/a", "first", 1))
-        cache.record(RemoteEntry("/a", "second", 2))
+        cache.record("/a")
+        cache.record("/a")
         assertEquals(1L, cache.size())
-        assertEquals("second", cache.entry("/a")?.etag)
     }
 
     @Test
-    fun forgetsWhatWasRemoved() = runTest {
+    fun whatTheServerHoldsIsAddedToWhatIsAlreadySettled() = runTest {
+        // The rule this table exists for (stratus-app#124): a walk says what is
+        // on the server now, and what is on the server now is not what has been
+        // dealt with. Replacing would turn every deliberate deletion back into
+        // a missing file.
         val cache = cache()
-        cache.record(RemoteEntry("/a", null, null))
-        cache.forget("/a")
-        assertFalse(cache.has("/a"))
+        cache.record("/deleted-on-the-server")
+        cache.add(listOf("/kept", "/also"))
+
+        assertTrue(cache.has("/deleted-on-the-server"))
+        assertEquals(setOf("/deleted-on-the-server", "/kept", "/also"), cache.paths())
     }
 
     @Test
-    fun replacingLeavesOnlyWhatTheServerJustSaid() = runTest {
+    fun aPassOverTheSameServerTwiceAddsNothing() = runTest {
         val cache = cache()
-        cache.record(RemoteEntry("/gone", null, null))
-        cache.replaceAll(listOf(RemoteEntry("/kept", "e", 3), RemoteEntry("/also", null, null)))
+        cache.add(listOf("/a", "/b"))
+        cache.add(listOf("/a", "/b"))
+        assertEquals(2L, cache.size())
+    }
 
-        assertFalse(cache.has("/gone"))
-        assertEquals(setOf("/kept", "/also"), cache.paths())
+    @Test
+    fun nothingSettledIsHowAColdStartIsRecognised() = runTest {
+        val cache = cache()
+        assertTrue(cache.isEmpty())
+        cache.record("/a")
+        assertFalse(cache.isEmpty())
     }
 
     @Test
@@ -73,7 +74,7 @@ class BackupCacheTest {
         // One query and a set: asking per photograph is how a cheap check
         // becomes the slow part of a backup.
         val cache = cache()
-        repeat(500) { cache.record(RemoteEntry("/Photos/2026/09/$it.heic", null, null)) }
+        repeat(500) { cache.record("/Photos/2026/09/$it.heic") }
         assertEquals(500, cache.paths().size)
     }
 
@@ -85,33 +86,49 @@ class BackupCacheTest {
         val one = cache("instance-a")
         val other = cache("instance-b")
 
-        one.record(RemoteEntry("/Photos/2026/09/a.heic", "etag-one", 10))
+        one.record("/Photos/2026/09/a.heic")
         assertTrue(one.has("/Photos/2026/09/a.heic"))
         assertFalse(other.has("/Photos/2026/09/a.heic"))
-
-        other.record(RemoteEntry("/Photos/2026/09/a.heic", "etag-other", 20))
-        assertEquals("etag-one", one.entry("/Photos/2026/09/a.heic")?.etag)
-        assertEquals("etag-other", other.entry("/Photos/2026/09/a.heic")?.etag)
     }
 
     @Test
-    fun rebuildingOneInstanceLeavesTheOtherAlone() = runTest {
+    fun walkingOneInstanceLeavesTheOtherAlone() = runTest {
         val one = cache("instance-a")
         val other = cache("instance-b")
-        one.record(RemoteEntry("/kept", null, null))
-        other.record(RemoteEntry("/also-kept", null, null))
+        one.record("/kept")
+        other.record("/also-kept")
 
-        one.replaceAll(listOf(RemoteEntry("/replaced", null, null)))
+        one.add(listOf("/found"))
 
-        assertEquals(setOf("/replaced"), one.paths())
+        assertEquals(setOf("/kept", "/found"), one.paths())
         assertEquals(setOf("/also-kept"), other.paths())
     }
 
     @Test
+    fun carriesTheOldTableOverRatherThanMakingThePhoneUploadItAllAgain() = runTest {
+        // The previous shape held the ETag and the size beside the path and
+        // nothing read either. Dropping the columns must not drop what the
+        // phone had already settled, or the migration itself costs somebody
+        // their camera roll a second time.
+        val connection = BundledSQLiteDriver().open(":memory:")
+        connection.execSQL(
+            "CREATE TABLE uploaded (instance TEXT NOT NULL, path TEXT NOT NULL, etag TEXT, size INTEGER," +
+                " PRIMARY KEY (instance, path))",
+        )
+        connection.execSQL("INSERT INTO uploaded (instance, path) VALUES ('a', '/from-the-old-world')")
+        connection.execSQL("PRAGMA user_version = 4")
+
+        val database = BackupDatabase(connection)
+        database.migrate()
+
+        assertEquals(setOf("/from-the-old-world"), database.cacheFor("a").paths())
+        assertEquals(emptySet(), database.cacheFor("b").paths())
+    }
+
+    @Test
     fun throwsAwayATableOfTheOlderShapeRatherThanLivingWithIt() = runTest {
-        // A cache is rebuildable by asking the server, so a schema change costs a
-        // rebuild instead of a data migration -- and CREATE TABLE IF NOT EXISTS
-        // would have left this file silently on the shape without an instance.
+        // CREATE TABLE IF NOT EXISTS would have left this file silently on the
+        // shape without an instance, where two servers overwrite each other.
         val connection = BundledSQLiteDriver().open(":memory:")
         connection.execSQL("CREATE TABLE uploaded (path TEXT PRIMARY KEY, etag TEXT, size INTEGER)")
         connection.execSQL("INSERT INTO uploaded (path) VALUES ('/from-the-old-world')")
@@ -121,8 +138,8 @@ class BackupCacheTest {
 
         assertEquals(emptySet(), database.cacheFor("anyone").paths())
         // And it is the new shape, so two instances now fit.
-        database.cacheFor("a").record(RemoteEntry("/x", null, null))
-        database.cacheFor("b").record(RemoteEntry("/x", null, null))
+        database.cacheFor("a").record("/x")
+        database.cacheFor("b").record("/x")
         assertEquals(1L, database.cacheFor("a").size())
     }
 }

@@ -56,6 +56,11 @@ class BackupDatabase(
         return BackupJournal(connection, instanceId, io)
     }
 
+    suspend fun markFor(instanceId: String): BackupMark {
+        ready()
+        return BackupMark(connection, instanceId, io)
+    }
+
     /**
      * Brings the file up to the current schema.
      *
@@ -139,6 +144,41 @@ class BackupDatabase(
             connection.execSQL("ALTER TABLE pending ADD COLUMN ticket TEXT")
             connection.execSQL("PRAGMA user_version = 4")
         }
+        if (version() < 5) {
+            // What has been settled rather than what the server holds
+            // (stratus-app#124). The two are not the same question and only one
+            // of them can answer "was this deleted on purpose?", so the table
+            // is renamed for what it means and loses the two columns nothing
+            // read -- the ETag and the size, whose only reader was a
+            // verification nobody called.
+            connection.execSQL("DROP TABLE IF EXISTS settled")
+            connection.execSQL(
+                """
+                CREATE TABLE settled (
+                    instance TEXT NOT NULL,
+                    path     TEXT NOT NULL,
+                    PRIMARY KEY (instance, path)
+                )
+                """.trimIndent(),
+            )
+            connection.execSQL("INSERT OR IGNORE INTO settled (instance, path) SELECT instance, path FROM uploaded")
+            connection.execSQL("DROP TABLE uploaded")
+            connection.execSQL("PRAGMA user_version = 5")
+        }
+        if (version() < 6) {
+            // How far into the camera roll a pass has to look. A bound and not
+            // an authority -- see BackupMark -- which is why it may sit in a
+            // file a migration is allowed to throw away.
+            connection.execSQL(
+                """
+                CREATE TABLE marks (
+                    instance      TEXT PRIMARY KEY,
+                    added_through INTEGER NOT NULL DEFAULT 0
+                )
+                """.trimIndent(),
+            )
+            connection.execSQL("PRAGMA user_version = 6")
+        }
     }
 
     /** Drops everything an instance knew, for when it is forgotten. */
@@ -148,7 +188,7 @@ class BackupDatabase(
     }
 
     private suspend fun forgetRows(instanceId: String) = withContext(io) {
-        for (table in listOf("uploaded", "pending", "journal")) {
+        for (table in listOf("settled", "pending", "journal", "marks")) {
             connection.prepare("DELETE FROM $table WHERE instance = ?").use { statement ->
                 statement.bindText(1, instanceId)
                 statement.step()

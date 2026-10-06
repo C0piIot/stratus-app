@@ -82,6 +82,9 @@ object Stratus {
         }.getOrElse { listOf("(could not be read: $it)") }
     }
 
+    /** Deletes one file, the way somebody clearing space in the web UI would. */
+    fun delete(path: String) = runBlocking { dav.delete(path) }
+
     fun backedUp(originalName: String, root: String = "/phone_backup/"): Pair<String, Long>? = runBlocking {
         if (!exists(root)) return@runBlocking null
         for (year in dav.list(root).filter { it.isDirectory }) {
