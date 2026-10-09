@@ -5,8 +5,8 @@ import dev.stratus.core.backup.Connections
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.dav.DavResource
-import dev.stratus.core.instance.Instance
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.Server
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.originOf
 import dev.stratus.core.share.ShareLife
 import dev.stratus.core.share.ShareLinks
@@ -26,25 +26,23 @@ import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 
-/** One server, as a picker draws it in its sidebar. */
+/** The server, as a picker draws it in its sidebar. */
 data class DocumentRoot(
-    val instanceId: String,
     val title: String,
     val summary: String,
 ) {
-    val document get() = DocumentRef(instanceId, "")
+    val document get() = DocumentRef("")
 }
 
 /**
- * One server as a root, which is a row in a picker's sidebar on Android and a
+ * The server as a root, which is a row in a picker's sidebar on Android and a
  * File Provider domain on iOS (stratus-app#104, #105).
  *
  * Out here rather than inside [DocumentTree] because the iOS half registers
- * domains from the composition root, where there is no tree yet, and the two
- * must not disagree about what a server is called.
+ * the domain from the composition root, where there is no tree yet, and the
+ * two must not disagree about what the server is called.
  */
-fun rootOf(instance: Instance) = DocumentRoot(
-    instanceId = instance.id,
+fun rootOf(instance: Server) = DocumentRoot(
     title = "Stratus",
     summary = originOf(instance.baseUrl).substringAfter("://"),
 )
@@ -97,7 +95,7 @@ sealed interface Listing {
  * changed.
  */
 class DocumentTree(
-    private val instances: InstanceStore,
+    private val instances: ServerStore,
     private val connections: Connections,
     private val scope: CoroutineScope,
     /** Told when a folder's answer arrives or changes, so the platform can say so. */
@@ -107,8 +105,8 @@ class DocumentTree(
     private val listings = mutableMapOf<DocumentRef, Listing>()
     private val fetching = mutableMapOf<DocumentRef, Job>()
 
-    /** One per server somebody has signed in to. Empty is a legitimate answer. */
-    suspend fun roots(): List<DocumentRoot> = instances.all().map(::rootOf)
+    /** The server, or none when nobody is signed in -- a legitimate answer. */
+    suspend fun root(): DocumentRoot? = instances.instance()?.let(::rootOf)
 
     /**
      * What is in a folder, and a fetch started if nobody has asked before.
@@ -133,8 +131,8 @@ class DocumentTree(
      * cache in the way.
      */
     suspend fun listNow(ref: DocumentRef): List<DocumentRow> {
-        val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
-        return dav.list(ref.davPath).map { rowOf(ref.instanceId, it) }.sortedForPeople()
+        val dav = requireNotNull(dav()) { "no such server" }
+        return dav.list(ref.davPath).map(::rowOf).sortedForPeople()
     }
 
     /** Throws the cached answer away and asks again. What pull-to-refresh is. */
@@ -157,13 +155,13 @@ class DocumentTree(
         if (cached is Listing.Loaded) {
             cached.rows.firstOrNull { it.ref == ref }?.let { return it }
         }
-        val dav = davFor(ref.instanceId) ?: return null
-        return rowOf(ref.instanceId, dav.stat(ref.davPath))
+        val dav = dav() ?: return null
+        return rowOf(dav.stat(ref.davPath))
     }
 
     /** A folder for the directory type, an empty file for anything else. */
     suspend fun create(parent: DocumentRef, mimeType: String, displayName: String): DocumentRef {
-        val dav = requireNotNull(davFor(parent.instanceId)) { "no such server" }
+        val dav = requireNotNull(dav()) { "no such server" }
         val ref = parent.child(displayName)
         if (mimeType == MIME_DIRECTORY) {
             dav.makeCollection(ref.davPath)
@@ -177,7 +175,7 @@ class DocumentTree(
     /** A rename is a rename: one path element, never a move across the tree. */
     suspend fun rename(ref: DocumentRef, displayName: String): DocumentRef {
         require('/' !in displayName && displayName.isNotBlank()) { "a name is not a path" }
-        val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
+        val dav = requireNotNull(dav()) { "no such server" }
         val parent = requireNotNull(ref.parent()) { "a server's root has no name to change" }
         val destination = parent.child(displayName)
         dav.move(ref.davPath, destination.davPath)
@@ -186,7 +184,7 @@ class DocumentTree(
     }
 
     suspend fun delete(ref: DocumentRef) {
-        val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
+        val dav = requireNotNull(dav()) { "no such server" }
         dav.delete(ref.davPath)
         ref.parent()?.let { invalidate(it) }
     }
@@ -200,13 +198,13 @@ class DocumentTree(
      */
     fun reader(ref: DocumentRef, size: Long, scope: CoroutineScope): RangeReader =
         RangeReader(scope, size) { from, use ->
-            val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
+            val dav = requireNotNull(dav()) { "no such server" }
             dav.read(ref.davPath, from until size, use)
         }
 
     /** The whole file onto local disk, for the one case a range cannot serve. */
     suspend fun download(ref: DocumentRef, toPath: String) {
-        val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
+        val dav = requireNotNull(dav()) { "no such server" }
         dav.read(ref.davPath, null) { channel ->
             SystemFileSystem.sink(Path(toPath)).buffered().use { sink ->
                 while (!channel.exhausted()) {
@@ -225,7 +223,7 @@ class DocumentTree(
      * what keeps a four-gigabyte video out of memory.
      */
     suspend fun upload(ref: DocumentRef, fromPath: String, contentType: String?) {
-        val dav = requireNotNull(davFor(ref.instanceId)) { "no such server" }
+        val dav = requireNotNull(dav()) { "no such server" }
         val file = Path(fromPath)
         val size = SystemFileSystem.metadataOrNull(file)?.size ?: 0L
         SystemFileSystem.source(file).buffered().use { body ->
@@ -246,8 +244,8 @@ class DocumentTree(
      * knows how that address is spelled.
      */
     suspend fun thumbnail(ref: DocumentRef, width: Int): ByteArray? {
-        val instance = instances.instance(ref.instanceId) ?: return null
-        val credentials = instances.credentials(ref.instanceId) ?: return null
+        val instance = instances.instance() ?: return null
+        val credentials = instances.credentials() ?: return null
         val connection = connections.to(instance) ?: return null
         val url = ShareLinks(instance.baseUrl, credentials)
             .thumbnail(ref.davPath, width, ShareLife.ADay, 0) ?: return null
@@ -270,7 +268,7 @@ class DocumentTree(
         fetching.remove(ref)?.cancel()
         fetching[ref] = scope.launch {
             val answer = try {
-                if (davFor(ref.instanceId) == null) {
+                if (dav() == null) {
                     Listing.Failed("that server is not signed in any more")
                 } else {
                     Listing.Loaded(listNow(ref))
@@ -290,18 +288,18 @@ class DocumentTree(
         }
     }
 
-    private suspend fun davFor(instanceId: String): DavClient? = connectionFor(instanceId)?.dav
+    private suspend fun dav(): DavClient? = connection()?.dav
 
-    private suspend fun connectionFor(instanceId: String): Connection? =
-        instances.instance(instanceId)?.let { connections.to(it) }
+    private suspend fun connection(): Connection? =
+        instances.instance()?.let { connections.to(it) }
 
     private suspend fun rootRow(ref: DocumentRef): DocumentRow? {
-        val instance = instances.instance(ref.instanceId) ?: return null
+        val instance = instances.instance() ?: return null
         return DocumentRow(ref, rootOf(instance).summary, isDirectory = true, null, MIME_DIRECTORY, null)
     }
 
-    private fun rowOf(instanceId: String, entry: DavResource): DocumentRow {
-        val ref = DocumentRef.of(instanceId, entry.path)
+    private fun rowOf(entry: DavResource): DocumentRow {
+        val ref = DocumentRef.of(entry.path)
         return DocumentRow(
             ref = ref,
             name = ref.name,

@@ -8,7 +8,6 @@ import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
@@ -184,21 +183,26 @@ abstract class E2E {
     fun signedIn() {
         launch()
         signIn()
-        see("Servers")
+        see("Server")
         tap("files")
     }
 
-    fun openServers() = tap("Servers")
+    fun openServer() = tap("Server")
 
     /**
-     * Turns backup on for the first server and answers what the system asks on
-     * the way -- the notification permission the first time (stratus-app#81),
-     * and the library too if it was not granted. Left up, a dialog pauses the
-     * app and with it the status the tests read.
+     * Turns backup on and answers what the system asks on the way -- the
+     * notification permission the first time (stratus-app#81), and the library
+     * too if it was not granted. Left up, a dialog pauses the app and with it
+     * the status the tests read.
+     *
+     * Choosing folders is what turns it on (stratus-app#131); there is no
+     * switch to flip any more.
      */
     fun turnBackupOn(allow: Boolean = true) {
-        openServers()
-        ui.onAllNodes(isToggleable())[0].performClick()
+        openServer()
+        tap("Choose folders")
+        tap("Every folder")
+        tap("Save")
         Phone.answerAll(allow)
         tap("Back")
     }

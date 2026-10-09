@@ -52,8 +52,8 @@ class UploadQueueTest {
         database.migrate()
         return UploadQueue(
             layout = layout,
-            pending = database.pendingFor("instance-a"),
-            cache = database.cacheFor("instance-a"),
+            pending = database.pending(),
+            cache = database.cache(),
             source = assets,
             transport = transport,
             directories = directories,
@@ -88,7 +88,7 @@ class UploadQueueTest {
         val path = layout.pathFor(asset(1))
         assertEquals(QueueStep.Uploaded(path), queue.settle("t-1", UploadOutcome.Done("etag")))
         assertEquals(0, queue.summary().total)
-        assertEquals(listOf(path), database.cacheFor("instance-a").paths().toList())
+        assertEquals(listOf(path), database.cache().paths().toList())
     }
 
     @Test
@@ -164,7 +164,7 @@ class UploadQueueTest {
         val here = asset(1)
         val there = asset(2)
         database.migrate()
-        database.cacheFor("instance-a").record(layout.pathFor(there))
+        database.cache().record(layout.pathFor(there))
 
         val queue = queue()
         assertEquals(1, queue.enqueue(listOf(here, there)))
@@ -218,7 +218,7 @@ class UploadQueueTest {
         queue.runNext()
 
         assertEquals(emptyList(), queue.outstanding())
-        assertTrue(database.cacheFor("instance-a").has(layout.pathFor(asset(5))))
+        assertTrue(database.cache().has(layout.pathFor(asset(5))))
         assertEquals(QueueStep.Idle, queue.runNext())
     }
 
@@ -327,7 +327,7 @@ class UploadQueueTest {
 
         assertFailsWith<kotlinx.coroutines.CancellationException> { queue.runNext() }
 
-        val left = database.pendingFor("instance-a").next(clock)
+        val left = database.pending().next(clock)
         assertEquals(0, left?.attempts)
         assertNull(left?.lastError)
     }

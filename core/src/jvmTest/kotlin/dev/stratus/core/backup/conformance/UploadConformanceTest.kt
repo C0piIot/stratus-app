@@ -81,8 +81,8 @@ class UploadConformanceTest {
         database.migrate()
         return UploadQueue(
             layout = layout,
-            pending = database.pendingFor(id),
-            cache = database.cacheFor(id),
+            pending = database.pending(),
+            cache = database.cache(),
             source = source,
             transport = transport,
             directories = DavDirectoryMaker(dav),
@@ -163,8 +163,8 @@ class UploadConformanceTest {
         assertEquals(onEach[0], onEach[1])
 
         // And each instance settled it on its own, so neither will send it again.
-        assertTrue(database.cacheFor("instance-one").has(path))
-        assertTrue(database.cacheFor("instance-two").has(path))
+        assertTrue(database.cache().has(path))
+        assertTrue(database.cache().has(path))
     }
 
     @Test

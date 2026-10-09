@@ -1,15 +1,15 @@
-package dev.stratus.core.instance
+package dev.stratus.core.server
 
 import dev.stratus.core.net.Credentials
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-class InstanceBlobTest {
+class ServerBlobTest {
 
     private fun roundTrip(password: String) {
-        val instance = Instance("abc123", "https://host/dav/", "edu", "Camera", backupEnabled = true)
-        val decoded = InstanceBlob.decode(InstanceBlob.encode(instance, Credentials("edu", password)))
+        val instance = Server("https://host/dav/", "edu", "Camera", setOf("DCIM"))
+        val decoded = ServerBlob.decode(ServerBlob.encode(instance, Credentials("edu", password)))
         assertEquals(instance to Credentials("edu", password), decoded, "password was ${password.length} chars")
     }
 
@@ -27,20 +27,22 @@ class InstanceBlobTest {
 
     @Test
     fun carriesTheSettingsThatBelongToTheInstance() {
-        val instance = Instance("id", "https://host/dav/", "edu", "Pictures", backupEnabled = false)
-        val (read, _) = InstanceBlob.decode(InstanceBlob.encode(instance, Credentials("edu", "pw")))!!
+        val instance = Server("https://host/dav/", "edu", "Pictures", setOf("DCIM", "Camera"))
+        val (read, _) = ServerBlob.decode(ServerBlob.encode(instance, Credentials("edu", "pw")))!!
         assertEquals("Pictures", read.backupRoot)
-        assertEquals(false, read.backupEnabled)
+        assertEquals(setOf("DCIM", "Camera"), read.sources)
+        // Sources are the switch now (stratus-app#131): chosen means on.
+        assertEquals(true, read.backupEnabled)
     }
 
     @Test
     fun treatsAnythingItCannotReadAsSignedOut() {
         // Never an exception: a record from a version that wrote a different
         // shape means "sign in again", not a crash on first launch.
-        assertNull(InstanceBlob.decode(""))
-        assertNull(InstanceBlob.decode("nonsense"))
-        assertNull(InstanceBlob.decode("999:overrun"))
+        assertNull(ServerBlob.decode(""))
+        assertNull(ServerBlob.decode("nonsense"))
+        assertNull(ServerBlob.decode("999:overrun"))
         // The shape the store used before instances existed.
-        assertNull(InstanceBlob.decode("1:24:abcd3:edu2:pw"))
+        assertNull(ServerBlob.decode("1:24:abcd3:edu2:pw"))
     }
 }

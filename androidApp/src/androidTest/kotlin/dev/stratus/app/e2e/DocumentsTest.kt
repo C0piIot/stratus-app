@@ -35,7 +35,7 @@ class DocumentsTest : E2E() {
     private fun rootDocument(): String {
         launch()
         signIn()
-        see("Servers")
+        see("Server")
         resolver.query(DocumentsContract.buildRootsUri(authority), null, null, null, null)!!.use {
             assertTrue(it.moveToFirst(), "the provider offered no roots after signing in")
             assertEquals("Stratus", it.string(Root.COLUMN_TITLE))

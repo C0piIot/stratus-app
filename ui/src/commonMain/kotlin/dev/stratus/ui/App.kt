@@ -30,8 +30,8 @@ import dev.stratus.core.signin.SignInState
 import dev.stratus.ui.backup.BackupScreen
 import dev.stratus.ui.backup.BackupStrip
 import dev.stratus.ui.files.BrowserScreen
-import dev.stratus.ui.servers.ServersScreen
-import dev.stratus.ui.servers.SourcesScreen
+import dev.stratus.ui.server.ServerScreen
+import dev.stratus.ui.server.SourcesScreen
 import dev.stratus.ui.signin.SignInScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -40,8 +40,8 @@ import kotlinx.coroutines.launch
 private sealed interface Screen {
     data object Browser : Screen
     data object Backup : Screen
-    data object Servers : Screen
-    data class Sources(val instanceId: String) : Screen
+    data object Server : Screen
+    data object Sources : Screen
 }
 
 @Composable
@@ -90,17 +90,13 @@ fun App(
                     onBackUpNow = onBackUpNow,
                     onAsk = onAsk,
                     baseUrl = current.baseUrl,
-                    // Adding a server is the same screen as the first sign-in,
-                    // reached by putting the controller back where it starts.
-                    onAddAnother = signIn::addAnother,
-                    onEdit = { id -> scope.launch { signIn.edit(id) } },
+                    onEdit = { scope.launch { signIn.edit() } },
                     onInstancesChanged = { signIn.restore() },
                 )
 
                 else -> {
-                    // Opened from inside the app -- editing a server, or adding
-                    // one more -- the form has a way back, the system gesture
-                    // included.
+                    // Opened from inside the app -- editing the server --
+                    // the form has a way back, the system gesture included.
                     DisposableEffect(canGoBack) {
                         back.onBack = if (canGoBack) { { scope.launch { signIn.back() }; true } } else null
                         onDispose { back.onBack = null }
@@ -125,8 +121,7 @@ private fun SignedIn(
     onBackUpNow: (() -> Unit)?,
     onAsk: ((Set<Ask>) -> Unit)?,
     baseUrl: String,
-    onAddAnother: () -> Unit,
-    onEdit: (String) -> Unit,
+    onEdit: () -> Unit,
     onInstancesChanged: suspend () -> Unit,
 ) {
     // The main thread, for the reason the other one says.
@@ -141,12 +136,12 @@ private fun SignedIn(
 
     LaunchedEffect(Unit) { signedIn.start() }
 
-    // Rebuilt when the server being looked at changes, and only then -- which
-    // excludes the moment before the controller has said which one it is: built
-    // then as well, the root was listed twice on every sign-in and redrawn
-    // under the finger of whoever tapped first.
-    LaunchedEffect(baseUrl, state.currentId) {
-        if (state.currentId == null) return@LaunchedEffect
+    // Rebuilt when the server changes, and only then -- which excludes the
+    // moment before the controller has read it: built then as well, the root
+    // was listed twice on every sign-in and redrawn under the finger of
+    // whoever tapped first.
+    LaunchedEffect(baseUrl, state.server) {
+        if (state.server == null) return@LaunchedEffect
         browser = container.browser(scope)?.also { it.start() }
         cast = container.cast(scope)
     }
@@ -174,38 +169,37 @@ private fun SignedIn(
     DisposableEffect(screen, browser) {
         back.onBack = when (screen) {
             is Screen.Browser -> browser?.let { { it.goUp() } } ?: { false }
-            is Screen.Sources -> { { screen = Screen.Servers; true } }
+            is Screen.Sources -> { { screen = Screen.Server; true } }
             else -> { { screen = Screen.Browser; true } }
         }
         onDispose { back.onBack = null }
     }
 
-    when (val here = screen) {
+    when (screen) {
         is Screen.Backup -> BackupScreen(
-            statuses = state.statuses,
+            state = state.backupState,
+            failures = state.failures,
             onBackUpNow = onBackUpNow,
             onClose = { screen = Screen.Browser },
         )
 
-        is Screen.Servers -> ServersScreen(
-            servers = state.servers,
-            currentId = state.currentId,
-            onLookAt = { id -> scope.launch { signedIn.lookAt(id) } },
-            onEnableBackup = { id, on -> scope.launch { signedIn.enableBackup(id, on) } },
-            onChooseSources = { screen = Screen.Sources(it) },
-            onSignOut = { id ->
-                scope.launch {
-                    signedIn.signOut(id)
-                    onInstancesChanged()
-                    screen = Screen.Browser
-                }
-            },
-            onAddAnother = onAddAnother,
-            reporting = state.reporting.takeIf { CrashReports.available },
-            onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
-            onEdit = onEdit,
-            onClose = { screen = Screen.Browser },
-        )
+        is Screen.Server -> state.server?.let { server ->
+            ServerScreen(
+                server = server,
+                onChooseSources = { screen = Screen.Sources },
+                onSignOut = {
+                    scope.launch {
+                        signedIn.signOut()
+                        onInstancesChanged()
+                        screen = Screen.Browser
+                    }
+                },
+                reporting = state.reporting.takeIf { CrashReports.available },
+                onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
+                onEdit = onEdit,
+                onClose = { screen = Screen.Browser },
+            )
+        }
 
         is Screen.Sources -> {
             LaunchedEffect(Unit) { signedIn.openingFolders() }
@@ -213,14 +207,14 @@ private fun SignedIn(
                 available = state.folders,
                 access = state.access,
                 onRequestAccess = onAsk?.let { { signedIn.askForPhotos() } },
-                chosen = state.servers.firstOrNull { it.id == here.instanceId }?.sources.orEmpty(),
+                chosen = state.server?.sources.orEmpty(),
                 onSave = { chosen ->
                     scope.launch {
-                        signedIn.chooseSources(here.instanceId, chosen)
-                        screen = Screen.Servers
+                        signedIn.chooseSources(chosen)
+                        screen = Screen.Server
                     }
                 },
-                onClose = { screen = Screen.Servers },
+                onClose = { screen = Screen.Server },
             )
         }
 
@@ -237,12 +231,12 @@ private fun SignedIn(
             val open = browser
             if (open != null) {
                 Column {
-                    BackupStrip(state.overall) { screen = Screen.Backup }
+                    BackupStrip(state.backupState) { screen = Screen.Backup }
                     BrowserScreen(
                         open,
                         cast,
-                        onOpenServers = { screen = Screen.Servers },
-                        onEditServer = { state.currentId?.let(onEdit) },
+                        onOpenServer = { screen = Screen.Server },
+                        onEditServer = onEdit,
                     )
                 }
             }

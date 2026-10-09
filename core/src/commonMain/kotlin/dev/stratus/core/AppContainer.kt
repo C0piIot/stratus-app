@@ -14,8 +14,8 @@ import dev.stratus.core.documents.DocumentRef
 import dev.stratus.core.documents.DocumentTree
 import dev.stratus.core.files.BrowserController
 import dev.stratus.core.files.FileHandoff
-import dev.stratus.core.instance.Instance
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.Server
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.DavProber
 import dev.stratus.core.net.TrustPolicy
 import dev.stratus.core.net.hostPortOf
@@ -39,8 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 /**
  * Everything the app is made of, assembled where the platform pieces are known.
  *
- * It holds the several instances somebody has signed in to and which of them is
- * being looked at. Nothing below it assumes there is only one.
+ * It holds the one server somebody has signed in to (stratus-app#131).
  *
  * **Wiring only.** Nothing here can be tested -- it opens a database, builds
  * HTTP clients and reads the keychain -- so anything with a decision in it
@@ -56,15 +55,15 @@ class AppContainer(
     /** Where photographs come from on this platform. */
     val assets: AssetSource,
     /**
-     * Told when the set of servers changes, for a platform that lists them
-     * somewhere of its own -- Android's Files app does (stratus-app#104).
+     * Told when the server changes, for a platform that lists storage
+     * locations of its own -- Android's Files app does (stratus-app#104).
      */
     serversChanged: suspend () -> Unit = {},
     /** See [Backup]'s own parameter: the one thing a platform answers differently. */
-    private val transports: (suspend (Connection, Instance) -> Transport)? = null,
+    private val transports: (suspend (Connection, Server) -> Transport)? = null,
     private val liveTransfers: (suspend () -> Set<String>)? = null,
 ) {
-    private val instances = InstanceStore(secure, serversChanged)
+    private val instances = ServerStore(secure, serversChanged)
 
     // Opened once and kept: SQLite does not want a connection per question, and
     // the file is a cache, so losing it costs a rebuild and nothing else.
@@ -72,15 +71,15 @@ class AppContainer(
         BackupDatabase(BundledSQLiteDriver().open(databasePath))
     }
 
-    /** The one place an instance turns into something that can make requests. */
+    /** The one place a server turns into something that can make requests. */
     private val trust = TrustStore(secure)
 
     // Kept because the browser and the caster both ask, and the answer belongs
     // to the server rather than to either of them.
-    private var links: Pair<String, LinkSupport>? = null
+    private var links: LinkSupport? = null
 
     private val connections = Connections { instance ->
-        val credentials = instances.credentials(instance.id) ?: return@Connections null
+        val credentials = instances.credentials() ?: return@Connections null
         val pinned = TrustPolicy(trust.pins()[hostPortOf(instance.baseUrl)])
         val client = stratusHttpClient(engine(pinned), credentials)
         Connection(client, DavClient(client, instance.baseUrl))
@@ -106,47 +105,46 @@ class AppContainer(
     )
 
     fun signedIn(ask: ((Set<Ask>) -> Unit)?, reportingChanged: (Boolean) -> Unit) = SignedInController(
-        instances, backup, reporting, ::forget, ask, AskedOnce(secure, "notifications-asked"), reportingChanged,
+        instances, backup, reporting, ::signOut, ask, AskedOnce(secure, "notifications-asked"), reportingChanged,
     )
 
-    suspend fun instances(): List<Instance> = instances.all()
-
-    suspend fun current(): Instance? = instances.current()
-
-    suspend fun switchTo(id: String) = instances.switchTo(id)
+    suspend fun current(): Server? = instances.instance()
 
     /**
-     * Forgets an instance and everything cached about it.
+     * Signs out, forgetting the server and everything cached about it.
      *
-     * Both halves together, because an id is never handed out twice: rows left
-     * behind would be read by nobody and freed by nobody either.
+     * Both halves together, and the second is not tidying-up: signing out is
+     * the only way to a different server (stratus-app#131), and a different
+     * server has settled nothing -- carrying the record across would be a
+     * camera roll that never gets backed up again.
      */
-    suspend fun forget(id: String) {
-        instances.remove(id)
-        database.forget(id)
+    suspend fun signOut() {
+        instances.clear()
+        database.clear()
+        links = null
     }
 
     /**
-     * How to reach an instance carrying nothing at all.
+     * How to reach the server carrying nothing at all.
      *
      * The same trust as everywhere else -- a pinned certificate is still pinned
      * -- and deliberately no credentials: a check for whether a signed link
      * works would succeed against any server if it were authenticated.
      */
-    private suspend fun linkSupportFor(instance: Instance): LinkSupport {
-        links?.takeIf { it.first == instance.id }?.let { return it.second }
+    private suspend fun linkSupportFor(instance: Server): LinkSupport {
+        links?.let { return it }
         val policy = TrustPolicy(trust.pins()[hostPortOf(instance.baseUrl)])
-        return LinkSupport(stratusHttpClient(engine(policy), null)).also { links = instance.id to it }
+        return LinkSupport(stratusHttpClient(engine(policy), null)).also { links = it }
     }
 
     /**
-     * Casting for whichever instance is being looked at, or null when there is
-     * none. Built here because only the composition root knows both the
-     * certificate this instance was trusted by and the sender this phone has.
+     * Casting for the server, or null when there is none. Built here because
+     * only the composition root knows both the certificate it was trusted by
+     * and the sender this phone has.
      */
     suspend fun cast(scope: CoroutineScope): CastController? {
-        val instance = instances.current() ?: return null
-        val credentials = instances.credentials(instance.id) ?: return null
+        val instance = instances.instance() ?: return null
+        val credentials = instances.credentials() ?: return null
         return CastController(
             caster = caster,
             links = ShareLinks(instance.baseUrl, credentials),
@@ -171,9 +169,9 @@ class AppContainer(
 
     /** Null when nobody is signed in, which is the only state it can be built from. */
     suspend fun browser(scope: CoroutineScope): BrowserController? {
-        val instance = instances.current() ?: return null
+        val instance = instances.instance() ?: return null
         val connection = connections.to(instance) ?: return null
-        val credentials = instances.credentials(instance.id) ?: return null
+        val credentials = instances.credentials() ?: return null
         return BrowserController(
             connection.dav,
             handoff,

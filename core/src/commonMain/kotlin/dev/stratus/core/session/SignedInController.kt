@@ -5,8 +5,8 @@ import dev.stratus.core.backup.BackupState
 import dev.stratus.core.backup.MediaAccess
 import dev.stratus.core.backup.MediaSource
 import dev.stratus.core.backup.PendingUpload
-import dev.stratus.core.instance.Instance
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.Server
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.store.ReportingConsent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,18 +16,10 @@ import kotlinx.coroutines.flow.update
 /** What the platform is asked to request, together, since it can only show one request at a time. */
 enum class Ask { Photos, Notifications }
 
-/** One server and what its backup is doing. */
-data class InstanceStatus(
-    val instance: Instance,
-    val state: BackupState,
-    val failures: List<PendingUpload>,
-)
-
 data class SignedInState(
-    val servers: List<Instance> = emptyList(),
-    val currentId: String? = null,
-    val overall: BackupState = BackupState.NeverRun,
-    val statuses: List<InstanceStatus> = emptyList(),
+    val server: Server? = null,
+    val backupState: BackupState = BackupState.NeverRun,
+    val failures: List<PendingUpload> = emptyList(),
     val access: MediaAccess = MediaAccess.None,
     val folders: List<MediaSource> = emptyList(),
     val reporting: Boolean = false,
@@ -44,11 +36,11 @@ data class SignedInState(
  * changed without anything here being told.
  */
 class SignedInController(
-    private val instances: InstanceStore,
+    private val instances: ServerStore,
     private val backup: Backup,
     private val consent: ReportingConsent,
-    /** Forgets an instance and what is cached about it; see AppContainer.forget. */
-    private val forget: suspend (String) -> Unit,
+    /** Forgets the server and everything cached about it; see AppContainer.signOut. */
+    private val signOut: suspend () -> Unit,
     /** Asks the platform for permissions, or null where nothing can. */
     private val ask: ((Set<Ask>) -> Unit)?,
     /** Whether the notification permission has been asked for once already. */
@@ -75,34 +67,32 @@ class SignedInController(
 
     /** One pass of the status poll, which only runs while the app is in front. */
     suspend fun refresh() {
-        val servers = instances.all()
-        val statuses = servers.map {
-            InstanceStatus(it, backup.status.of(it), backup.failures(it.id))
-        }
+        val server = instances.instance()
+        val state = if (server == null) BackupState.NeverRun else backup.status.of()
+        val failures = if (server == null) emptyList() else backup.failures()
         mutable.update {
-            it.copy(
-                servers = servers,
-                currentId = instances.currentId(),
-                overall = backup.status.across(servers),
-                statuses = statuses,
-            )
+            it.copy(server = server, backupState = state, failures = failures)
         }
     }
 
     /** The folder list is about to be shown, so the answer has to be current. */
     suspend fun openingFolders() = readAccess()
 
-    suspend fun lookAt(id: String) {
-        instances.switchTo(id)
-        refresh()
-    }
+    /** The Folders screen's button, which is about the library and nothing else. */
+    fun askForPhotos() = ask?.invoke(setOf(Ask.Photos))
 
-    suspend fun enableBackup(id: String, enabled: Boolean) {
-        if (enabled) {
-            // The moment the library is needed is the moment to ask for it --
-            // and for the notification that says a backup is running, which
-            // from Android 13 is hidden without one (stratus-app#81). That one
-            // is asked once: a refusal is an answer, not a first attempt.
+    /**
+     * Which sources feed the backup, which is also what turns it on
+     * (stratus-app#131): choosing none is choosing no backup.
+     *
+     * Asking for permissions hangs off this rather than off a separate toggle,
+     * because this is now the moment the library is first needed -- and with
+     * it the notification that says a backup is running, which from Android 13
+     * is hidden without one (stratus-app#81). That one is asked once: a
+     * refusal is an answer, not a first attempt.
+     */
+    suspend fun chooseSources(sources: Set<String>) {
+        if (sources.isNotEmpty()) {
             val needed = buildSet {
                 if (mutable.value.access == MediaAccess.None) add(Ask.Photos)
                 if (!notificationsAsked.already()) add(Ask.Notifications)
@@ -112,20 +102,12 @@ class SignedInController(
                 if (Ask.Notifications in needed) notificationsAsked.remember()
             }
         }
-        backup.setEnabled(id, enabled)
+        backup.setSources(sources)
         refresh()
     }
 
-    /** The Folders screen's button, which is about the library and nothing else. */
-    fun askForPhotos() = ask?.invoke(setOf(Ask.Photos))
-
-    suspend fun chooseSources(id: String, sources: Set<String>) {
-        backup.setSources(id, sources)
-        refresh()
-    }
-
-    suspend fun signOut(id: String) {
-        forget(id)
+    suspend fun signOut() {
+        signOut.invoke()
         refresh()
     }
 

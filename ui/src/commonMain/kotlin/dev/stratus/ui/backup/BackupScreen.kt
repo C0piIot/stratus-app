@@ -20,13 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.backup.AttentionReason
 import dev.stratus.core.backup.BackupState
+import dev.stratus.core.backup.PendingUpload
 import dev.stratus.core.backup.WaitingReason
-import dev.stratus.core.session.InstanceStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupScreen(
-    statuses: List<InstanceStatus>,
+    state: BackupState,
+    failures: List<PendingUpload>,
     onBackUpNow: (() -> Unit)?,
     onClose: () -> Unit,
 ) {
@@ -46,24 +47,19 @@ fun BackupScreen(
                 Button(onClick = onBackUpNow) { Text("Back up now") }
             }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(statuses, key = { it.instance.id }) { status ->
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        // No switch here. This screen answers "is it working";
-                        // what it should be doing is the servers screen, and one
-                        // question per surface is what keeps either readable.
-                        Text(status.instance.baseUrl)
-                        Text(oneLine(status.state))
-                        Text(explain(status.state))
+            // No switch here. This screen answers "is it working"; what it
+            // should be doing is the server screen, and one question per
+            // surface is what keeps either readable.
+            Text(oneLine(state))
+            Text(explain(state))
+            Divider()
 
-                        // The failures, with what the server said about each. A
-                        // count on its own tells somebody they have a problem
-                        // and nothing about which one.
-                        for (failure in status.failures.take(20)) {
-                            Text("${failure.path.substringAfterLast('/')} — ${failure.lastError ?: "no reason given"}")
-                        }
-                    }
-                    Divider()
+            // The failures, with what the server said about each. A count on
+            // its own tells somebody they have a problem and nothing about
+            // which one.
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(failures.take(20), key = { it.path }) { failure ->
+                    Text("${failure.path.substringAfterLast('/')} — ${failure.lastError ?: "no reason given"}")
                 }
             }
         }

@@ -1,4 +1,4 @@
-package dev.stratus.ui.servers
+package dev.stratus.ui.server
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,14 +27,20 @@ import dev.stratus.core.backup.MediaAccess
 import dev.stratus.core.backup.MediaSource
 
 /**
- * Which folders feed one server.
+ * Which folders are backed up, which is also whether anything is
+ * (stratus-app#131).
  *
- * **"Everything" and "these ones" are a choice, not an empty set.** Stored, an
- * empty selection means every source; offered as a list of tick boxes it could
- * just as easily mean none, and a value that means two opposite things is the
- * kind of ambiguity that is eventually read the wrong way. So the screen asks
- * the question directly, and refuses to save a narrowed choice with nothing in
- * it -- backing nothing up is what turning the server off is for.
+ * **The set stored is the set ticked, and nothing is nothing.** It used to be
+ * that an empty selection meant *every* source and a switch elsewhere turned
+ * backup off -- two ways to say "not now", and an empty set that meant the
+ * opposite of what a list of empty tick boxes looks like. There is no switch
+ * now, so empty means what it looks like, and this screen is where backup is
+ * turned on and off.
+ *
+ * What that costs is worth knowing: "every folder" is a button that ticks what
+ * exists today rather than a standing instruction, so a folder made next month
+ * is not backed up until somebody says so. The alternative was keeping a value
+ * that means "whatever appears", which is the ambiguity this just removed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +52,6 @@ fun SourcesScreen(
     onSave: (Set<String>) -> Unit,
     onClose: () -> Unit,
 ) {
-    var everything by remember { mutableStateOf(chosen.isEmpty()) }
     var picked by remember { mutableStateOf(chosen) }
 
     Scaffold(
@@ -55,12 +59,7 @@ fun SourcesScreen(
             TopAppBar(
                 title = { Text("Folders") },
                 navigationIcon = { TextButton(onClick = onClose) { Text("Back") } },
-                actions = {
-                    TextButton(
-                        onClick = { onSave(if (everything) emptySet() else picked) },
-                        enabled = everything || picked.isNotEmpty(),
-                    ) { Text("Save") }
-                },
+                actions = { TextButton(onClick = { onSave(picked) }) { Text("Save") } },
             )
         },
     ) { padding ->
@@ -81,32 +80,30 @@ fun SourcesScreen(
                 return@Column
             }
 
-            Row(
-                Modifier.fillMaxWidth().clickable { everything = true },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = everything, onClick = { everything = true })
-                Text("Every folder")
-            }
-            Row(
-                Modifier.fillMaxWidth().clickable { everything = false },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = !everything, onClick = { everything = false })
-                Text("Only the ones I choose")
+            Text(
+                if (picked.isEmpty()) {
+                    "Nothing is backed up. Tick a folder to start."
+                } else {
+                    "${picked.size} of ${available.size} folders are backed up."
+                },
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { picked = available.mapTo(mutableSetOf()) { it.id } }) {
+                    Text("Every folder")
+                }
+                TextButton(onClick = { picked = emptySet() }) { Text("None") }
             }
 
             LazyColumn(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(available, key = { it.id }) { source ->
                     Row(
-                        Modifier.fillMaxWidth().clickable(enabled = !everything) {
+                        Modifier.fillMaxWidth().clickable {
                             picked = if (source.id in picked) picked - source.id else picked + source.id
                         },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
-                            checked = everything || source.id in picked,
-                            enabled = !everything,
+                            checked = source.id in picked,
                             onCheckedChange = { checked ->
                                 picked = if (checked) picked + source.id else picked - source.id
                             },

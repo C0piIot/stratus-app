@@ -42,7 +42,7 @@ class RebuildConformanceTest {
 
     private suspend fun emptyIndex() = BackupIndex(
         layout,
-        BackupDatabase(BundledSQLiteDriver().open(":memory:")).also { it.migrate() }.cacheFor("one"),
+        BackupDatabase(BundledSQLiteDriver().open(":memory:")).also { it.migrate() }.cache(),
         dav,
     )
 

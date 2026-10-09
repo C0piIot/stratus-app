@@ -1,11 +1,10 @@
 package dev.stratus.core.backup
 
-import dev.stratus.core.instance.Instance
+import dev.stratus.core.server.Server
 import kotlinx.coroutines.CancellationException
 
 /** What a pass over the camera roll did, for whoever has to report it. */
 data class BackupReport(
-    val instanceId: String,
     val queued: Int = 0,
     val uploaded: Int = 0,
     val failed: Int = 0,
@@ -48,8 +47,8 @@ enum class StoppedBecause {
  */
 class BackupRun(
     private val source: AssetSource,
-    private val prepareFor: suspend (Instance) -> InstanceBackup?,
-    private val journalFor: suspend (Instance) -> BackupJournal,
+    private val prepareFor: suspend () -> ServerBackup?,
+    private val journalFor: suspend () -> BackupJournal,
     private val now: () -> Long = { io.ktor.util.date.getTimeMillis() },
 ) {
     /**
@@ -61,17 +60,17 @@ class BackupRun(
      * database.
      */
     suspend fun once(
-        instance: Instance,
+        instance: Server,
         keepGoing: () -> Boolean = { true },
         onStep: (QueueStep) -> Unit = {},
     ): BackupReport {
-        val journal = journalFor(instance)
+        val journal = journalFor()
         if (source.access() == MediaAccess.None) {
-            val report = BackupReport(instance.id, stopped = StoppedBecause.NoAccessToTheLibrary)
+            val report = BackupReport(stopped = StoppedBecause.NoAccessToTheLibrary)
             journal.ended(now(), report.stopped, 0, 0)
             return report
         }
-        val prepared = prepareFor(instance) ?: return BackupReport(instance.id)
+        val prepared = prepareFor() ?: return BackupReport()
         val queue = prepared.queue
 
         journal.began(now())
@@ -91,12 +90,12 @@ class BackupRun(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            val report = BackupReport(instance.id, stopped = StoppedBecause.WaitingToRetry)
+            val report = BackupReport(stopped = StoppedBecause.WaitingToRetry)
             journal.ended(now(), report.stopped, 0, 0)
             return report
         }
 
-        var report = BackupReport(instance.id, queued = queue.enqueue(assets))
+        var report = BackupReport(queued = queue.enqueue(assets))
 
         while (keepGoing()) {
             val step = queue.runNext()

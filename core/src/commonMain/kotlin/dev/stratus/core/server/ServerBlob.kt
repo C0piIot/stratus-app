@@ -1,9 +1,9 @@
-package dev.stratus.core.instance
+package dev.stratus.core.server
 
 import dev.stratus.core.net.Credentials
 
 /**
- * One instance and its password as a single string.
+ * The server and its password as a single string.
  *
  * Length-prefixed rather than delimited, because a password may legally contain
  * any character worth choosing as a separator -- a newline included -- and a
@@ -11,24 +11,24 @@ import dev.stratus.core.net.Credentials
  * somebody else's phone. Counting is in UTF-16 units, which is what `length` and
  * `substring` both use, so a character outside the basic plane survives.
  */
-internal object InstanceBlob {
-    private const val VERSION = "4"
+internal object ServerBlob {
+    // 5 dropped the generated id and the separate backup flag (stratus-app#131).
+    // An older blob simply does not decode, which reads as "sign in again".
+    private const val VERSION = "5"
 
-    fun encode(instance: Instance, credentials: Credentials): String =
+    fun encode(instance: Server, credentials: Credentials): String =
         listOf(
             VERSION,
-            instance.id,
             instance.baseUrl,
             credentials.username,
             credentials.password,
             instance.backupRoot,
-            if (instance.backupEnabled) "1" else "0",
             // Newline-joined: a bucket id and an album identifier have none.
             instance.sources.joinToString("\n"),
         ).joinToString("") { "${it.length}:$it" }
 
     /** Null rather than an exception: an unreadable blob means "sign in again". */
-    fun decode(text: String): Pair<Instance, Credentials>? {
+    fun decode(text: String): Pair<Server, Credentials>? {
         val fields = mutableListOf<String>()
         var at = 0
         while (at < text.length) {
@@ -42,14 +42,12 @@ internal object InstanceBlob {
             fields += text.substring(start, end)
             at = end
         }
-        if (fields.size != 8 || fields[0] != VERSION) return null
-        return Instance(
-            id = fields[1],
-            baseUrl = fields[2],
-            username = fields[3],
-            backupRoot = fields[5],
-            backupEnabled = fields[6] == "1",
-            sources = fields[7].split("\n").filter { it.isNotBlank() }.toSet(),
-        ) to Credentials(fields[3], fields[4])
+        if (fields.size != 6 || fields[0] != VERSION) return null
+        return Server(
+            baseUrl = fields[1],
+            username = fields[2],
+            backupRoot = fields[4],
+            sources = fields[5].split("\n").filter { it.isNotBlank() }.toSet(),
+        ) to Credentials(fields[2], fields[3])
     }
 }

@@ -27,7 +27,7 @@ data class PendingSummary(
     val givenUpDetail: String? = null,
 )
 
-/** One outstanding piece of work: one part of one asset, for one instance. */
+/** One outstanding piece of work: one part of one asset. */
 data class PendingUpload(
     val path: String,
     val localId: String,
@@ -51,14 +51,10 @@ data class PendingUpload(
 )
 
 /**
- * The work still to do for one instance, kept where a restart cannot lose it.
- *
- * Scoped to an instance like [BackupCache], for the same reason: a photograph
- * owed to two servers is two pieces of work that succeed and fail apart.
+ * The work still to do, kept where a restart cannot lose it.
  */
 class PendingStore(
     private val connection: SQLiteConnection,
-    private val instanceId: String,
     private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
     /**
@@ -72,17 +68,16 @@ class PendingStore(
         connection.prepare(
             """
             INSERT OR IGNORE INTO pending
-                (instance, path, local_id, part, size, content_type, taken_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (path, local_id, part, size, content_type, taken_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """.trimIndent(),
         ).use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindText(2, upload.path)
-            statement.bindText(3, upload.localId)
-            statement.bindText(4, upload.part.name)
-            statement.bindLong(5, upload.size)
-            if (upload.contentType == null) statement.bindNull(6) else statement.bindText(6, upload.contentType)
-            statement.bindText(7, upload.takenAt)
+            statement.bindText(1, upload.path)
+            statement.bindText(2, upload.localId)
+            statement.bindText(3, upload.part.name)
+            statement.bindLong(4, upload.size)
+            if (upload.contentType == null) statement.bindNull(5) else statement.bindText(5, upload.contentType)
+            statement.bindText(6, upload.takenAt)
             statement.step()
         }
         Unit
@@ -99,24 +94,22 @@ class PendingStore(
         connection.prepare(
             """
             SELECT path, local_id, part, size, content_type, taken_at, offset_at, handle, attempts, last_error, ticket
-            FROM pending WHERE instance = ? AND next_at <= ? AND ticket IS NULL
+            FROM pending WHERE next_at <= ? AND ticket IS NULL
             ORDER BY taken_at DESC, path ASC LIMIT 1
             """.trimIndent(),
         ).use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindLong(2, now)
+            statement.bindLong(1, now)
             if (!statement.step()) return@withContext null
             read(statement)
         }
     }
 
     suspend fun recordProgress(path: String, resume: Resume) = withContext(io) {
-        connection.prepare("UPDATE pending SET offset_at = ?, handle = ? WHERE instance = ? AND path = ?")
+        connection.prepare("UPDATE pending SET offset_at = ?, handle = ? WHERE path = ?")
             .use { statement ->
                 statement.bindLong(1, resume.offset)
                 if (resume.handle == null) statement.bindNull(2) else statement.bindText(2, resume.handle)
-                statement.bindText(3, instanceId)
-                statement.bindText(4, path)
+                statement.bindText(3, path)
                 statement.step()
             }
         Unit
@@ -124,12 +117,11 @@ class PendingStore(
 
     suspend fun recordFailure(path: String, detail: String, nextAt: Long) = withContext(io) {
         connection.prepare(
-            "UPDATE pending SET attempts = attempts + 1, last_error = ?, next_at = ? WHERE instance = ? AND path = ?",
+            "UPDATE pending SET attempts = attempts + 1, last_error = ?, next_at = ? WHERE path = ?",
         ).use { statement ->
             statement.bindText(1, detail)
             statement.bindLong(2, nextAt)
-            statement.bindText(3, instanceId)
-            statement.bindText(4, path)
+            statement.bindText(3, path)
             statement.step()
         }
         Unit
@@ -144,13 +136,12 @@ class PendingStore(
      */
     suspend fun recordHandover(path: String, ticket: String, resume: Resume?) = withContext(io) {
         connection.prepare(
-            "UPDATE pending SET ticket = ?, offset_at = ?, handle = ? WHERE instance = ? AND path = ?",
+            "UPDATE pending SET ticket = ?, offset_at = ?, handle = ? WHERE path = ?",
         ).use { statement ->
             statement.bindText(1, ticket)
             statement.bindLong(2, resume?.offset ?: 0)
             if (resume?.handle == null) statement.bindNull(3) else statement.bindText(3, resume.handle)
-            statement.bindText(4, instanceId)
-            statement.bindText(5, path)
+            statement.bindText(4, path)
             statement.step()
         }
         Unit
@@ -161,11 +152,10 @@ class PendingStore(
         connection.prepare(
             """
             SELECT path, local_id, part, size, content_type, taken_at, offset_at, handle, attempts, last_error, ticket
-            FROM pending WHERE instance = ? AND ticket = ? LIMIT 1
+            FROM pending WHERE ticket = ? LIMIT 1
             """.trimIndent(),
         ).use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindText(2, ticket)
+            statement.bindText(1, ticket)
             if (!statement.step()) return@withContext null
             read(statement)
         }
@@ -173,9 +163,8 @@ class PendingStore(
 
     /** Back on the queue, for a result that is never going to arrive. */
     suspend fun release(path: String) = withContext(io) {
-        connection.prepare("UPDATE pending SET ticket = NULL WHERE instance = ? AND path = ?").use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindText(2, path)
+        connection.prepare("UPDATE pending SET ticket = NULL WHERE path = ?").use { statement ->
+            statement.bindText(1, path)
             statement.step()
         }
         Unit
@@ -195,9 +184,8 @@ class PendingStore(
     }
 
     suspend fun remove(path: String) = withContext(io) {
-        connection.prepare("DELETE FROM pending WHERE instance = ? AND path = ?").use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindText(2, path)
+        connection.prepare("DELETE FROM pending WHERE path = ?").use { statement ->
+            statement.bindText(1, path)
             statement.step()
         }
         Unit
@@ -208,10 +196,9 @@ class PendingStore(
         connection.prepare(
             """
             SELECT path, local_id, part, size, content_type, taken_at, offset_at, handle, attempts, last_error, ticket
-            FROM pending WHERE instance = ? ORDER BY taken_at DESC, path ASC
+            FROM pending ORDER BY taken_at DESC, path ASC
             """.trimIndent(),
         ).use { statement ->
-            statement.bindText(1, instanceId)
             while (statement.step()) found += read(statement)
         }
         found
@@ -233,13 +220,12 @@ class PendingStore(
                    COALESCE(SUM(size - offset_at), 0),
                    MIN(CASE WHEN next_at < ? THEN next_at ELSE NULL END),
                    MAX(CASE WHEN next_at >= ? THEN last_error ELSE NULL END)
-            FROM pending WHERE instance = ?
+            FROM pending
             """.trimIndent(),
         ).use { statement ->
             statement.bindLong(1, NEVER)
             statement.bindLong(2, NEVER)
             statement.bindLong(3, NEVER)
-            statement.bindText(4, instanceId)
             if (!statement.step()) return@withContext PendingSummary(0, 0, 0, 0, null)
             PendingSummary(
                 total = statement.getInt(0),
@@ -264,21 +250,19 @@ class PendingStore(
         connection.prepare(
             """
             SELECT path, local_id, part, size, content_type, taken_at, offset_at, handle, attempts, last_error, ticket
-            FROM pending WHERE instance = ? AND next_at >= ?
+            FROM pending WHERE next_at >= ?
             ORDER BY taken_at DESC LIMIT ?
             """.trimIndent(),
         ).use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindLong(2, NEVER)
-            statement.bindLong(3, limit.toLong())
+            statement.bindLong(1, NEVER)
+            statement.bindLong(2, limit.toLong())
             while (statement.step()) found += read(statement)
         }
         found
     }
 
     suspend fun size(): Long = withContext(io) {
-        connection.prepare("SELECT COUNT(*) FROM pending WHERE instance = ?").use { statement ->
-            statement.bindText(1, instanceId)
+        connection.prepare("SELECT COUNT(*) FROM pending").use { statement ->
             if (statement.step()) statement.getLong(0) else 0L
         }
     }

@@ -16,9 +16,9 @@ class BackupCacheTest {
 
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
 
-    private suspend fun cache(instance: String = "instance-a"): BackupCache {
+    private suspend fun cache(): BackupCache {
         database.migrate()
-        return database.cacheFor(instance)
+        return database.cache()
     }
 
     @Test
@@ -79,67 +79,36 @@ class BackupCacheTest {
     }
 
     @Test
-    fun keepsTwoInstancesOutOfEachOtherIsRows() = runTest {
-        // The collision that made this necessary: both servers hold the same
-        // photographs at the same paths, and without the instance column one
-        // would report the other's work as already done.
-        val one = cache("instance-a")
-        val other = cache("instance-b")
+    fun walkingAddsToWhatIsAlreadySettled() = runTest {
+        val cache = cache()
+        cache.record("/kept")
 
-        one.record("/Photos/2026/09/a.heic")
-        assertTrue(one.has("/Photos/2026/09/a.heic"))
-        assertFalse(other.has("/Photos/2026/09/a.heic"))
+        cache.add(listOf("/found"))
+
+        assertEquals(setOf("/kept", "/found"), cache.paths())
     }
 
     @Test
-    fun walkingOneInstanceLeavesTheOtherAlone() = runTest {
-        val one = cache("instance-a")
-        val other = cache("instance-b")
-        one.record("/kept")
-        other.record("/also-kept")
-
-        one.add(listOf("/found"))
-
-        assertEquals(setOf("/kept", "/found"), one.paths())
-        assertEquals(setOf("/also-kept"), other.paths())
-    }
-
-    @Test
-    fun carriesTheOldTableOverRatherThanMakingThePhoneUploadItAllAgain() = runTest {
-        // The previous shape held the ETag and the size beside the path and
-        // nothing read either. Dropping the columns must not drop what the
-        // phone had already settled, or the migration itself costs somebody
-        // their camera roll a second time.
+    fun throwsAwayAFileOfAnOlderShapeRatherThanMigratingIt() = runTest {
+        // One schema, rewritten rather than migrated (stratus-app#131): the
+        // six stepped versions this replaces carried an `instance` column
+        // through every table, and there is one server now. Nothing is
+        // deployed anywhere but a test phone, and this file is a cache -- what
+        // is in it is recovered by walking the server.
         val connection = BundledSQLiteDriver().open(":memory:")
         connection.execSQL(
-            "CREATE TABLE uploaded (instance TEXT NOT NULL, path TEXT NOT NULL, etag TEXT, size INTEGER," +
-                " PRIMARY KEY (instance, path))",
+            "CREATE TABLE settled (instance TEXT NOT NULL, path TEXT NOT NULL, PRIMARY KEY (instance, path))",
         )
-        connection.execSQL("INSERT INTO uploaded (instance, path) VALUES ('a', '/from-the-old-world')")
-        connection.execSQL("PRAGMA user_version = 4")
+        connection.execSQL("INSERT INTO settled (instance, path) VALUES ('a', '/from-the-old-world')")
+        connection.execSQL("PRAGMA user_version = 6")
 
         val database = BackupDatabase(connection)
         database.migrate()
 
-        assertEquals(setOf("/from-the-old-world"), database.cacheFor("a").paths())
-        assertEquals(emptySet(), database.cacheFor("b").paths())
-    }
-
-    @Test
-    fun throwsAwayATableOfTheOlderShapeRatherThanLivingWithIt() = runTest {
-        // CREATE TABLE IF NOT EXISTS would have left this file silently on the
-        // shape without an instance, where two servers overwrite each other.
-        val connection = BundledSQLiteDriver().open(":memory:")
-        connection.execSQL("CREATE TABLE uploaded (path TEXT PRIMARY KEY, etag TEXT, size INTEGER)")
-        connection.execSQL("INSERT INTO uploaded (path) VALUES ('/from-the-old-world')")
-
-        val database = BackupDatabase(connection)
-        database.migrate()
-
-        assertEquals(emptySet(), database.cacheFor("anyone").paths())
-        // And it is the new shape, so two instances now fit.
-        database.cacheFor("a").record("/x")
-        database.cacheFor("b").record("/x")
-        assertEquals(1L, database.cacheFor("a").size())
+        assertEquals(emptySet(), database.cache().paths())
+        // And it is the new shape, with the path as the whole key.
+        database.cache().record("/x")
+        database.cache().record("/x")
+        assertEquals(1L, database.cache().size())
     }
 }
