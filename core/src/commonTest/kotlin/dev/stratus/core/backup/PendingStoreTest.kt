@@ -18,7 +18,7 @@ class PendingStoreTest {
 
     private suspend fun store(): PendingStore {
         database.migrate()
-        return database.pendingFor("i-1")
+        return database.pending()
     }
 
     private suspend fun PendingStore.queue(path: String, size: Long = 100) = add(

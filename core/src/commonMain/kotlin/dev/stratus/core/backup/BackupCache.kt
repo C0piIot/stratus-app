@@ -8,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Every path this instance has settled, and will not send again.
+ * Every path that has been settled, and will not be sent again.
  *
  * **It only ever grows, and that is the point** (stratus-app#124). A path goes
  * in when an upload finishes and when the server is found to hold it, and
@@ -30,14 +30,12 @@ import kotlinx.coroutines.withContext
  */
 class BackupCache(
     private val connection: SQLiteConnection,
-    private val instanceId: String,
     private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
     suspend fun has(path: String): Boolean = withContext(io) {
-        connection.prepare("SELECT 1 FROM settled WHERE instance = ? AND path = ?").use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindText(2, path)
+        connection.prepare("SELECT 1 FROM settled WHERE path = ?").use { statement ->
+            statement.bindText(1, path)
             statement.step()
         }
     }
@@ -77,15 +75,14 @@ class BackupCache(
      */
     suspend fun paths(): Set<String> = withContext(io) {
         val found = mutableSetOf<String>()
-        connection.prepare("SELECT path FROM settled WHERE instance = ?").use { statement ->
-            statement.bindText(1, instanceId)
+        connection.prepare("SELECT path FROM settled").use { statement ->
             while (statement.step()) found += statement.getText(0)
         }
         found
     }
 
     /**
-     * Whether this instance has settled anything at all.
+     * Whether anything has been settled at all.
      *
      * What a cold start is: nothing settled means either a first run or a phone
      * that lost the file, and both want the server walked before anything is
@@ -94,17 +91,15 @@ class BackupCache(
     suspend fun isEmpty(): Boolean = size() == 0L
 
     suspend fun size(): Long = withContext(io) {
-        connection.prepare("SELECT COUNT(*) FROM settled WHERE instance = ?").use { statement ->
-            statement.bindText(1, instanceId)
+        connection.prepare("SELECT COUNT(*) FROM settled").use { statement ->
             if (statement.step()) statement.getLong(0) else 0L
         }
     }
 
     private fun recordIn(path: String) {
-        connection.prepare("INSERT OR IGNORE INTO settled (instance, path) VALUES (?, ?)")
+        connection.prepare("INSERT OR IGNORE INTO settled (path) VALUES (?)")
             .use { statement ->
-                statement.bindText(1, instanceId)
-                statement.bindText(2, path)
+                statement.bindText(1, path)
                 statement.step()
             }
     }

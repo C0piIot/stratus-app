@@ -85,9 +85,9 @@ class StratusDocumentsProvider : DocumentsProvider() {
 
     override fun queryRoots(projection: Array<String>?): Cursor {
         val cursor = MatrixCursor(projection ?: ROOT_COLUMNS)
-        for (root in runBlocking { tree.roots() }) {
+        runBlocking { tree.root() }?.let { root ->
             cursor.newRow()
-                .add(Root.COLUMN_ROOT_ID, root.instanceId)
+                .add(Root.COLUMN_ROOT_ID, DocumentRef.ROOT_ID)
                 .add(Root.COLUMN_DOCUMENT_ID, root.document.id)
                 .add(Root.COLUMN_TITLE, root.title)
                 .add(Root.COLUMN_SUMMARY, root.summary)

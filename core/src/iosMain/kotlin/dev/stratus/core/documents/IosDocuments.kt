@@ -31,7 +31,7 @@ class IosDocuments {
     private val tree = appContainer().documents(scope) { }
 
     /** Every server signed in to, which is one File Provider domain each. */
-    fun roots(done: (List<DocumentRoot>?, String?) -> Unit) = answer(done) { tree.roots() }
+    fun root(done: (DocumentRoot?, String?) -> Unit) = answer(done) { tree.root() }
 
     fun children(id: String, done: (List<DocumentRow>?, String?) -> Unit) =
         answer(done) { tree.listNow(DocumentRef.parse(id)) }

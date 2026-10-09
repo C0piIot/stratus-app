@@ -3,8 +3,8 @@ package dev.stratus.core.documents
 import dev.stratus.core.backup.Connection
 import dev.stratus.core.backup.Connections
 import dev.stratus.core.dav.DavClient
-import dev.stratus.core.instance.Instance
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.Server
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.Credentials
 import dev.stratus.core.store.SecureStore
 import io.ktor.client.HttpClient
@@ -30,9 +30,6 @@ private class MemoryStore : SecureStore {
 }
 
 class DocumentTreeTest {
-
-    private val one = "1111111111111111"
-    private val two = "2222222222222222"
 
     // Appended to from the tree's background fetches as well as from the test,
     // which is why every case below settles before it reads: with nothing in
@@ -87,9 +84,8 @@ class DocumentTreeTest {
         }
         val http = HttpClient(engine)
         val secure = MemoryStore()
-        val instances = InstanceStore(secure)
-        instances.put(Instance(one, "http://host/", "edu"), Credentials("edu", "secret"))
-        instances.put(Instance(two, "http://other/", "edu"), Credentials("edu", "secret"))
+        val instances = ServerStore(secure)
+        instances.put(Server("http://host/", "edu"), Credentials("edu", "secret"))
         val connections = Connections { instance ->
             Connection(http, DavClient(http, instance.baseUrl))
         }
@@ -97,18 +93,18 @@ class DocumentTreeTest {
     }
 
     @Test
-    fun everyServerIsARoot() = runTest {
-        // Several servers at once is something this app already has, so a
-        // picker that showed one would be showing the wrong half of a library.
+    fun theServerIsTheRoot() = runTest {
+        // One server (stratus-app#131), so one row in the sidebar -- and none
+        // at all when nobody is signed in, which is an answer and not an error.
         val tree = tree()
-        assertEquals(listOf(one, two), tree.roots().map { it.instanceId })
-        assertEquals(listOf("host", "other"), tree.roots().map { it.summary })
+        assertEquals("host", tree.root()?.summary)
+        assertEquals(DocumentRef.ROOT_ID, tree.root()?.document?.id)
     }
 
     @Test
     fun aListingIsAskedForOnceAndAnsweredFromThenOn() = runTest {
         val tree = tree()
-        val ref = DocumentRef(one, "files")
+        val ref = DocumentRef("files")
 
         // It comes back at once, because a picker that waited for a round trip
         // would look frozen.
@@ -133,7 +129,7 @@ class DocumentTreeTest {
     @Test
     fun refreshingIsWhatAsksAgain() = runTest {
         val tree = tree()
-        val ref = DocumentRef(one, "files")
+        val ref = DocumentRef("files")
         tree.children(ref)
         settle()
         val before = seen.size
@@ -147,7 +143,7 @@ class DocumentTreeTest {
     @Test
     fun aWriteIsWhatElseAsksAgain() = runTest {
         val tree = tree()
-        val parent = DocumentRef(one, "files")
+        val parent = DocumentRef("files")
         tree.children(parent)
         settle()
         val before = seen.size
@@ -163,7 +159,7 @@ class DocumentTreeTest {
     @Test
     fun eachOperationIsTheWebDavVerbItShouldBe() = runTest {
         val tree = tree()
-        val parent = DocumentRef(one, "files")
+        val parent = DocumentRef("files")
 
         // Settled after each one: every write invalidates its folder, so the
         // listing that follows would otherwise land on the request log in the
@@ -172,12 +168,12 @@ class DocumentTreeTest {
         settle()
         assertEquals("PUT", seen.last { it.method.value != "PROPFIND" }.method.value)
 
-        tree.rename(DocumentRef(one, "files/note.txt"), "other.txt")
+        tree.rename(DocumentRef("files/note.txt"), "other.txt")
         settle()
         val moved = seen.last { it.method.value == "MOVE" }
         assertEquals("http://host/files/other.txt", moved.headers["Destination"])
 
-        tree.delete(DocumentRef(one, "files/other.txt"))
+        tree.delete(DocumentRef("files/other.txt"))
         settle()
         assertEquals("DELETE", seen.last { it.method.value != "PROPFIND" }.method.value)
     }
@@ -187,20 +183,20 @@ class DocumentTreeTest {
         // The mistake this is here to prevent: a listing that failed and a
         // folder with nothing in it look identical to whoever is looking.
         val tree = tree()
-        tree.children(DocumentRef(one, "files/gone"))
+        tree.children(DocumentRef("files/gone"))
         settle()
-        val failed = assertIs<Listing.Failed>(tree.children(DocumentRef(one, "files/gone")))
+        val failed = assertIs<Listing.Failed>(tree.children(DocumentRef("files/gone")))
         assertTrue(failed.message.isNotBlank())
     }
 
     @Test
     fun oneDocumentComesOutOfItsParentsListingRatherThanAskingAgain() = runTest {
         val tree = tree()
-        tree.children(DocumentRef(one, "files"))
+        tree.children(DocumentRef("files"))
         settle()
         val before = seen.size
 
-        val row = tree.one(DocumentRef(one, "files/a.txt"))
+        val row = tree.one(DocumentRef("files/a.txt"))
         settle()
 
         assertEquals("a.txt", row?.name)

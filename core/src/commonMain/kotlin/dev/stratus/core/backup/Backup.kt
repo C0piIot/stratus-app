@@ -1,8 +1,8 @@
 package dev.stratus.core.backup
 
 import dev.stratus.core.dav.DavClient
-import dev.stratus.core.instance.Instance
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.Server
+import dev.stratus.core.server.ServerStore
 import io.ktor.client.HttpClient
 
 /** An instance, reached: both clients, because tus is negotiated off the raw one. */
@@ -17,11 +17,11 @@ class Connection(val http: HttpClient, val dav: DavClient)
  * `commonTest` implements it with a mock engine and no keychain at all.
  */
 fun interface Connections {
-    suspend fun to(instance: Instance): Connection?
+    suspend fun to(instance: Server): Connection?
 }
 
 /** One instance's half of a pass: what to send, what the server has, how far to look. */
-class InstanceBackup(val queue: UploadQueue, val index: BackupIndex, val mark: BackupMark)
+class ServerBackup(val queue: UploadQueue, val index: BackupIndex, val mark: BackupMark)
 
 /** Whether the system should bring us back, decided here rather than per platform. */
 enum class PassOutcome { Finished, ComeBackLater }
@@ -35,7 +35,7 @@ enum class PassOutcome { Finished, ComeBackLater }
  * in front of the part that needs a device, and tests around the rest.
  */
 class Backup(
-    private val instances: InstanceStore,
+    private val instances: ServerStore,
     private val database: BackupDatabase,
     private val assets: AssetSource,
     private val connections: Connections,
@@ -48,7 +48,7 @@ class Backup(
      * outlive the app (stratus-app#20) -- so the composition root passes one
      * that does, and nothing else here changes.
      */
-    private val transports: suspend (Connection, Instance) -> Transport =
+    private val transports: suspend (Connection, Server) -> Transport =
         { connection, instance -> transportFor(connection, instance.baseUrl) },
     /**
      * What the platform says it is still carrying, or null where nothing is.
@@ -62,42 +62,32 @@ class Backup(
     /** What to say about the backup, assembled from what the queue actually holds. */
     val status: BackupStatus by lazy { BackupStatus(database, assets) }
 
-    /** The instances a pass is owed to. Backup is per instance and opt-in. */
-    suspend fun enabled(): List<Instance> = instances.all().filter { it.backupEnabled }
+    /** The server a pass is owed to, if there is one and it has sources. */
+    suspend fun enabled(): Server? = instances.instance()?.takeIf { it.backupEnabled }
 
     /**
-     * One pass over every instance that wants one.
+     * One pass over the camera roll.
      *
-     * The loop lives here rather than in each platform's scheduler, which is
-     * where it was: which instances get a pass, in what order, and whether to
-     * ask to be woken again are decisions, and a decision in a `Worker` is a
-     * decision no test can reach. The platform is left holding a notification
-     * and a return value.
-     *
-     * An instance that is unreachable does not stop the others: it produces a
-     * queue whose work is waiting to be retried, which is what asks for the
-     * next pass.
+     * It lives here rather than in each platform's scheduler, which is where
+     * it was: whether a pass happens at all and whether to ask to be woken
+     * again are decisions, and a decision in a `Worker` is a decision no test
+     * can reach. The platform is left holding a notification and a return
+     * value.
      */
     suspend fun pass(
         keepGoing: () -> Boolean = { true },
         onStep: (QueueStep) -> Unit = {},
     ): PassOutcome {
-        val run = run()
-        var again = false
         liveTransfers?.let { live -> reconcile(live()) }
-        for (instance in enabled()) {
-            if (!keepGoing()) break
-            val report = run.once(instance, keepGoing, onStep)
-            // InFlight too, and not because the system needs reminding about
-            // what it is carrying -- it does not. A pass that ended with
-            // something in flight may also have left rows serving out a
-            // backoff, and that reason is the one that got reported.
-            if (report.stopped == StoppedBecause.WaitingToRetry ||
-                report.stopped == StoppedBecause.InFlight
-            ) {
-                again = true
-            }
-        }
+        val instance = enabled() ?: return PassOutcome.Finished
+        if (!keepGoing()) return PassOutcome.Finished
+        val report = run().once(instance, keepGoing, onStep)
+        // InFlight too, and not because the system needs reminding about what
+        // it is carrying -- it does not. A pass that ended with something in
+        // flight may also have left rows serving out a backoff, and that
+        // reason is the one that got reported.
+        val again = report.stopped == StoppedBecause.WaitingToRetry ||
+            report.stopped == StoppedBecause.InFlight
         return if (again) PassOutcome.ComeBackLater else PassOutcome.Finished
     }
 
@@ -109,34 +99,32 @@ class Backup(
      */
     suspend fun run(): BackupRun = BackupRun(
         source = assets,
-        prepareFor = { prepare(it.id) },
-        journalFor = { database.journalFor(it.id) },
+        prepareFor = { prepare() },
+        journalFor = { database.journal() },
     )
 
     /**
-     * Everything one instance's pass needs, assembled from its own settings.
+     * Everything a pass needs, assembled from the server's own settings.
      *
-     * A queue per instance and never a shared one: a photograph owed to two
-     * servers is two pieces of work, and an instance that is down must not hold
-     * up the other. The index comes out of the same connection rather than a
-     * second one, because building one is an HTTP client and an engine.
+     * The index comes out of the same connection rather than a second one,
+     * because building one is an HTTP client and an engine.
      */
-    suspend fun prepare(instanceId: String): InstanceBackup? {
-        val instance = instances.instance(instanceId) ?: return null
+    suspend fun prepare(): ServerBackup? {
+        val instance = instances.instance() ?: return null
         val connection = connections.to(instance) ?: return null
         val layout = RemoteLayout(instance.backupRoot)
-        val cache = database.cacheFor(instance.id)
-        return InstanceBackup(
+        val cache = database.cache()
+        return ServerBackup(
             queue = UploadQueue(
                 layout = layout,
-                pending = database.pendingFor(instance.id),
+                pending = database.pending(),
                 cache = cache,
                 source = assets,
                 transport = transports(connection, instance),
                 directories = DavDirectoryMaker(connection.dav),
             ),
             index = BackupIndex(layout, cache, connection.dav),
-            mark = database.markFor(instance.id),
+            mark = database.mark(),
         )
     }
 
@@ -147,50 +135,29 @@ class Backup(
      * already happened, and refusing to write it down because a client could
      * not be constructed -- the phone being in a tunnel, say -- would throw
      * away the only record that it did.
-     *
-     * The ticket is opaque, so every instance is asked; there are rarely more
-     * than two, and one of them has the row.
      */
-    suspend fun settle(ticket: String, answer: TransferAnswer): QueueStep {
-        for (instance in instances.all()) {
-            val step = records(instance.id).settle(ticket, answer)
-            if (step != QueueStep.Idle) return step
-        }
-        return QueueStep.Idle
-    }
+    suspend fun settle(ticket: String, answer: TransferAnswer): QueueStep =
+        records().settle(ticket, answer)
 
     /** Puts back everything the platform has forgotten it was carrying. */
-    suspend fun reconcile(live: Set<String>): Int =
-        instances.all().sumOf { records(it.id).reconcile(live) }
+    suspend fun reconcile(live: Set<String>): Int = records().reconcile(live)
 
-    private suspend fun records(instanceId: String) =
-        UploadRecords(database.pendingFor(instanceId), database.cacheFor(instanceId))
+    private suspend fun records() = UploadRecords(database.pending(), database.cache())
 
     /** What has gone wrong, with what the server said about each, bounded. */
-    suspend fun failures(instanceId: String, limit: Int = 20): List<PendingUpload> =
-        database.pendingFor(instanceId).failures(limit)
+    suspend fun failures(limit: Int = 20): List<PendingUpload> =
+        database.pending().failures(limit)
 
     /**
-     * Turns backup on or off for one instance.
+     * Which sources feed the backup, which is also the switch.
      *
-     * Separate from being signed in, because an instance can be worth browsing
-     * without being worth sending a camera roll to.
+     * **Empty means no backup at all.** There is no separate flag beside it:
+     * two ways to say "not now" is one of them eventually disagreeing with the
+     * other, and the question somebody is actually answering on that screen is
+     * which photographs they want kept.
      */
-    suspend fun setEnabled(id: String, enabled: Boolean) {
-        val instance = instances.instance(id) ?: return
-        instances.update(instance.copy(backupEnabled = enabled))
-    }
-
-    /**
-     * Which sources feed this instance.
-     *
-     * **Empty means every source**, and that is the only meaning it has: to back
-     * up nothing, turn backup off. The screen offering the choice is what keeps
-     * the other reading -- "chosen: none" -- from being representable at all,
-     * because a set that meant both would be a rule somebody eventually breaks.
-     */
-    suspend fun setSources(id: String, sources: Set<String>) {
-        val instance = instances.instance(id) ?: return
+    suspend fun setSources(sources: Set<String>) {
+        val instance = instances.instance() ?: return
         instances.update(instance.copy(sources = sources))
     }
 

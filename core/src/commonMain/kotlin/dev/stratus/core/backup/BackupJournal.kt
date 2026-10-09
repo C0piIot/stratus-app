@@ -31,21 +31,19 @@ data class JournalEntry(
  */
 class BackupJournal(
     private val connection: SQLiteConnection,
-    private val instanceId: String,
     private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
     suspend fun began(at: Long) = withContext(io) {
         connection.prepare(
             """
-            INSERT INTO journal (instance, running, started_at, uploaded, failed, current_path)
-            VALUES (?, 1, ?, 0, 0, NULL)
-            ON CONFLICT(instance) DO UPDATE SET
+            INSERT INTO journal (id, running, started_at, uploaded, failed, current_path)
+            VALUES (0, 1, ?, 0, 0, NULL)
+            ON CONFLICT(id) DO UPDATE SET
                 running = 1, started_at = excluded.started_at,
                 uploaded = 0, failed = 0, current_path = NULL
             """.trimIndent(),
         ).use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindLong(2, at)
+            statement.bindLong(1, at)
             statement.step()
         }
         Unit
@@ -53,9 +51,8 @@ class BackupJournal(
 
     /** One update per file, which at seconds per file costs nothing. */
     suspend fun sending(path: String?) = withContext(io) {
-        connection.prepare("UPDATE journal SET current_path = ? WHERE instance = ?").use { statement ->
+        connection.prepare("UPDATE journal SET current_path = ? WHERE id = 0").use { statement ->
             if (path == null) statement.bindNull(1) else statement.bindText(1, path)
-            statement.bindText(2, instanceId)
             statement.step()
         }
         Unit
@@ -66,14 +63,13 @@ class BackupJournal(
             """
             UPDATE journal SET running = 0, finished_at = ?, outcome = ?,
                 uploaded = ?, failed = ?, current_path = NULL
-            WHERE instance = ?
+            WHERE id = 0
             """.trimIndent(),
         ).use { statement ->
             statement.bindLong(1, at)
             statement.bindText(2, outcome.name)
             statement.bindLong(3, uploaded.toLong())
             statement.bindLong(4, failed.toLong())
-            statement.bindText(5, instanceId)
             statement.step()
         }
         Unit
@@ -83,10 +79,9 @@ class BackupJournal(
         connection.prepare(
             """
             SELECT running, started_at, finished_at, outcome, uploaded, failed, current_path
-            FROM journal WHERE instance = ?
+            FROM journal WHERE id = 0
             """.trimIndent(),
         ).use { statement ->
-            statement.bindText(1, instanceId)
             if (!statement.step()) return@withContext null
             JournalEntry(
                 running = statement.getLong(0) != 0L,

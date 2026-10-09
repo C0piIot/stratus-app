@@ -28,7 +28,7 @@ class EditServerTest : E2E() {
         ui.onNode(node).performTextInput(value)
     }
 
-    private fun serversListed(address: String) =
+    private fun shownAs(address: String) =
         ui.onAllNodes(hasText(address, substring = true)).fetchSemanticsNodes().size
 
     @Test
@@ -47,39 +47,39 @@ class EditServerTest : E2E() {
 
         replace("Password", Stratus.otherPassword)
         tap("Save")
-        see("Servers")
+        see("Server")
         gone("no longer accepts this sign-in")
 
-        openServers()
-        assertEquals(1, serversListed(link.address), "editing added a second server")
+        openServer()
+        assertEquals(1, shownAs(link.address), "the server screen shows it more than once")
     }
 
     // A server moved to a new address is the same server.
     @Test
     fun aNewAddressKeepsTheSameServer() {
         signedIn()
-        openServers()
+        openServer()
         tap("Edit")
         replace("Server address", moved.address)
         // The same host, so the plain-http answer already given still stands.
         tap("Save")
-        see("Servers")
+        see("Server")
 
-        openServers()
-        assertEquals(1, serversListed(moved.address))
-        assertEquals(0, serversListed(link.address), "the old address is still listed")
+        openServer()
+        assertEquals(1, shownAs(moved.address))
+        assertEquals(0, shownAs(link.address), "the old address is still shown")
     }
 
     @Test
     fun cancellingAnEditChangesNothing() {
         signedIn()
-        openServers()
+        openServer()
         tap("Edit")
         replace("Username", "somebody-else")
         tap("Cancel")
-        see("Servers")
+        see("Server")
 
-        openServers()
+        openServer()
         see(link.address)
         gone("somebody-else", timeoutMs = 1_000)
     }

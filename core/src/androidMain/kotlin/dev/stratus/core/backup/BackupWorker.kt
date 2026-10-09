@@ -35,7 +35,7 @@ class BackupWorker(
 
     override suspend fun doWork(): Result {
         val backup = appContainer(applicationContext).backup
-        if (backup.enabled().isEmpty()) return Result.success()
+        if (backup.enabled() == null) return Result.success()
 
         setForeground(getForegroundInfo())
 

@@ -7,7 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * How far into the library a pass needs to look, for one instance.
+ * How far into the library a pass needs to look.
  *
  * **A bound and not an authority** (stratus-app#124). What has actually been
  * sent is [BackupCache]'s answer; this only says where re-reading the camera
@@ -23,13 +23,11 @@ import kotlinx.coroutines.withContext
  */
 class BackupMark(
     private val connection: SQLiteConnection,
-    private val instanceId: String,
     private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
     /** Milliseconds, or 0 for "look at everything", which is where it starts. */
     suspend fun read(): Long = withContext(io) {
-        connection.prepare("SELECT added_through FROM marks WHERE instance = ?").use { statement ->
-            statement.bindText(1, instanceId)
+        connection.prepare("SELECT added_through FROM marks WHERE id = 0").use { statement ->
             if (statement.step()) statement.getLong(0) else 0L
         }
     }
@@ -42,11 +40,10 @@ class BackupMark(
      */
     suspend fun advanceTo(epochMs: Long) = withContext(io) {
         connection.prepare(
-            "INSERT INTO marks (instance, added_through) VALUES (?, ?) " +
-                "ON CONFLICT (instance) DO UPDATE SET added_through = MAX(added_through, excluded.added_through)",
+            "INSERT INTO marks (id, added_through) VALUES (0, ?) " +
+                "ON CONFLICT (id) DO UPDATE SET added_through = MAX(added_through, excluded.added_through)",
         ).use { statement ->
-            statement.bindText(1, instanceId)
-            statement.bindLong(2, epochMs)
+            statement.bindLong(1, epochMs)
             statement.step()
         }
         Unit

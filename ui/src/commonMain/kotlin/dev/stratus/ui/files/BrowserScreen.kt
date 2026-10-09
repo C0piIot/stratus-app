@@ -45,7 +45,7 @@ import dev.stratus.core.share.ShareLife
 fun BrowserScreen(
     controller: BrowserController,
     cast: CastController?,
-    onOpenServers: () -> Unit,
+    onOpenServer: () -> Unit,
     /** For a server that stopped accepting the sign-in this app holds. */
     onEditServer: () -> Unit = {},
 ) {
@@ -62,7 +62,7 @@ fun BrowserScreen(
                 navigationIcon = {
                     if (state.path != "/") TextButton(onClick = { controller.goUp() }) { Text("Up") }
                 },
-                actions = { TextButton(onClick = onOpenServers) { Text("Servers") } },
+                actions = { TextButton(onClick = onOpenServer) { Text("Server") } },
             )
         },
     ) { padding ->

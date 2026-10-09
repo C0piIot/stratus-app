@@ -8,67 +8,72 @@ import kotlin.test.assertTrue
 
 class DocumentRefTest {
 
-    private val server = "0123456789abcdef"
-
     @Test
     fun survivesBeingWrittenDownAndReadBack() {
         // Android stores a document id, hands it to another app and gives it
         // back later, so this is the property the whole thing rests on.
         for (ref in listOf(
-            DocumentRef(server, ""),
-            DocumentRef(server, "files"),
-            DocumentRef(server, "files/holiday/a b & c.jpg"),
+            DocumentRef(""),
+            DocumentRef("files"),
+            DocumentRef("files/holiday/a b & c.jpg"),
         )) {
             assertEquals(ref, DocumentRef.parse(ref.id))
         }
     }
 
     @Test
-    fun theServerIsTheFirstSegmentAndNeedsNoEscaping() {
-        // An instance id is sixteen hexadecimal characters, so the first slash
-        // is always the separator however odd the path is.
-        val ref = DocumentRef.parse("$server/files/a/b.txt")
-        assertEquals(server, ref.instanceId)
+    fun anIdIsThePathWithItsLeadingSlash() {
+        val ref = DocumentRef.parse("/files/a/b.txt")
         assertEquals("files/a/b.txt", ref.path)
         assertEquals("/files/a/b.txt", ref.davPath)
         assertEquals("b.txt", ref.name)
     }
 
     @Test
-    fun aServersRootIsTheIdOnItsOwn() {
-        val root = DocumentRef(server, "")
-        assertEquals(server, root.id)
+    fun theRootIsASlashAndNeverEmpty() {
+        // An id has to be something, and the root's path is nothing -- which
+        // is the whole reason the leading slash is there (stratus-app#131).
+        val root = DocumentRef("")
+        assertEquals("/", root.id)
+        assertEquals(DocumentRef.ROOT_ID, root.id)
         assertEquals("/", root.davPath)
         assertNull(root.parent())
-        assertEquals(root, DocumentRef.parse(server))
+        assertEquals(root, DocumentRef.parse("/"))
+    }
+
+    @Test
+    fun aFileCalledRootIsNotTheRoot() {
+        // What a sentinel id would have got wrong.
+        val file = DocumentRef("root")
+        assertEquals("/root", file.id)
+        assertEquals(file, DocumentRef.parse(file.id))
     }
 
     @Test
     fun walksUpAndDownTheTree() {
-        val folder = DocumentRef(server, "files/holiday")
-        assertEquals(DocumentRef(server, "files/holiday/x.jpg"), folder.child("x.jpg"))
-        assertEquals(DocumentRef(server, "files"), folder.parent())
-        assertEquals(DocumentRef(server, ""), DocumentRef(server, "files").parent())
+        val folder = DocumentRef("files/holiday")
+        assertEquals(DocumentRef("files/holiday/x.jpg"), folder.child("x.jpg"))
+        assertEquals(DocumentRef("files"), folder.parent())
+        assertEquals(DocumentRef(""), DocumentRef("files").parent())
     }
 
     @Test
     fun takesAWebDavPathWithItsLeadingSlash() {
-        assertEquals(DocumentRef(server, "files/x"), DocumentRef.of(server, "/files/x"))
-        assertEquals(DocumentRef(server, "files"), DocumentRef.of(server, "/files/"))
-        assertEquals(DocumentRef(server, ""), DocumentRef.of(server, "/"))
+        assertEquals(DocumentRef("files/x"), DocumentRef.of("/files/x"))
+        assertEquals(DocumentRef("files"), DocumentRef.of("/files/"))
+        assertEquals(DocumentRef(""), DocumentRef.of("/"))
     }
 
     @Test
     fun aTreeGrantCoversWhatIsUnderItAndNothingElse() {
-        val folder = DocumentRef(server, "files/holiday")
-        assertTrue(DocumentRef(server, "files/holiday/x.jpg").isUnder(folder))
-        assertTrue(DocumentRef(server, "files/holiday/deep/x.jpg").isUnder(folder))
+        val folder = DocumentRef("files/holiday")
+        assertTrue(DocumentRef("files/holiday/x.jpg").isUnder(folder))
+        assertTrue(DocumentRef("files/holiday/deep/x.jpg").isUnder(folder))
         // A prefix of the name is not a child, or a grant on `holiday` would
         // open `holiday2` -- the same trap the server's share links have.
-        assertFalse(DocumentRef(server, "files/holiday2/x.jpg").isUnder(folder))
+        assertFalse(DocumentRef("files/holiday2/x.jpg").isUnder(folder))
         assertFalse(folder.isUnder(folder))
-        assertFalse(DocumentRef("deadbeefdeadbeef", "files/holiday/x.jpg").isUnder(folder))
-        // A server's root holds everything on that server.
-        assertTrue(folder.isUnder(DocumentRef(server, "")))
+        // The root holds everything.
+        assertTrue(folder.isUnder(DocumentRef("")))
     }
 }

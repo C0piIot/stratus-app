@@ -4,44 +4,44 @@ import platform.FileProvider.NSFileProviderDomain
 import platform.FileProvider.NSFileProviderManager
 
 /**
- * One domain per server, which is what puts each of them under Locations in
- * Files (stratus-app#105).
+ * The domain that puts the server under Locations in Files (stratus-app#105).
  *
- * The exact twin of Android's "one root per server": there, the same hook
- * tells the resolver the roots changed; here it adds and removes domains.
- * Both hang off `InstanceStore`'s `changed`, because the moment a server is
- * added or forgotten is the only moment this can be wrong.
+ * The exact twin of Android's root: there, the same hook tells the resolver
+ * the roots changed; here it adds or removes the domain. Both hang off
+ * `ServerStore`'s `changed`, because signing in or out is the only moment
+ * this can be wrong.
  *
- * A domain is named by the instance id, which is also that server's own root
- * document -- so the extension can read the root container straight off the
- * domain it was asked in, with nothing to look up.
+ * **One domain with a fixed identifier** (stratus-app#131). It used to be
+ * named by the server's generated id, and there is no id any more -- which
+ * also means an older install's domain is a stale one, removed by the same
+ * comparison as any other.
  *
  * Idempotent on purpose: it is called after every change and compares rather
  * than remembers, because what the system holds outlives this process.
  */
-internal fun refreshDomains(roots: List<DocumentRoot>) {
+internal fun refreshDomains(root: DocumentRoot?) {
     NSFileProviderManager.getDomainsWithCompletionHandler { existing, _ ->
         val have = existing.orEmpty().filterIsInstance<NSFileProviderDomain>()
-        val wanted = roots.associateBy { it.instanceId }
 
         for (domain in have) {
-            if (domain.identifier !in wanted) {
+            if (root == null || domain.identifier != DOMAIN) {
                 NSFileProviderManager.removeDomain(domain) { }
             }
         }
-        for ((id, root) in wanted) {
-            if (have.none { it.identifier == id }) {
-                NSFileProviderManager.addDomain(
-                    // The path is the domain's own corner of the document
-                    // storage group; the id serves, being unique and never
-                    // handed out twice.
-                    NSFileProviderDomain(
-                        identifier = id,
-                        displayName = root.summary,
-                        pathRelativeToDocumentStorage = id,
-                    ),
-                ) { }
-            }
+        if (root != null && have.none { it.identifier == DOMAIN }) {
+            NSFileProviderManager.addDomain(
+                // The path is the domain's own corner of the document storage
+                // group, and the identifier serves for it as well.
+                NSFileProviderDomain(
+                    identifier = DOMAIN,
+                    displayName = root.summary,
+                    pathRelativeToDocumentStorage = DOMAIN,
+                ),
+            ) { }
         }
     }
 }
+
+/** The one domain's identifier, which is a constant now rather than an id. */
+private const val DOMAIN = "stratus"
+

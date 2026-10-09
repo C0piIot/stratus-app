@@ -186,11 +186,18 @@ final class FileProviderExtension: NSFileProviderExtension {
         Enumerator(documents: documents, identifier: identifierOf(identifier))
     }
 
-    /// The root of a domain is one server, and a domain is named by the
-    /// instance's id -- which is also that server's own root document.
+    /// The root container is the server's own root document, which is "/"
+    /// (stratus-app#131). It used to be the domain's identifier, back when a
+    /// domain was named by the server's generated id and that id was also its
+    /// root document; there is one server and no id now, so the root is a
+    /// constant and the domain's name is not read for it.
     private func identifierOf(_ identifier: NSFileProviderItemIdentifier) -> String {
         guard identifier == .rootContainer else { return identifier.rawValue }
-        return domain?.identifier.rawValue ?? identifier.rawValue
+        // "/" rather than `DocumentRef.companion.ROOT_ID`: a Kotlin `const`
+        // reaches Swift through cinterop in a shape nothing here can check
+        // without a Mac, and this is one character. `DocumentRef` is where the
+        // rule lives.
+        return "/"
     }
 
     private func encode(_ identifier: String) -> String {

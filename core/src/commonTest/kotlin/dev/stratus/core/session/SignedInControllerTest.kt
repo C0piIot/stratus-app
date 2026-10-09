@@ -9,8 +9,8 @@ import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.Connections
 import dev.stratus.core.backup.MediaAccess
 import dev.stratus.core.backup.MediaSource
-import dev.stratus.core.instance.Instance
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.Server
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.Credentials
 import dev.stratus.core.store.ReportingConsent
 import dev.stratus.core.store.SecureStore
@@ -19,6 +19,7 @@ import kotlinx.io.RawSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private class SessionMemoryStore : SecureStore {
@@ -44,7 +45,7 @@ private class Roll : AssetSource {
 class SignedInControllerTest {
 
     private val store = SessionMemoryStore()
-    private val instances = InstanceStore(store)
+    private val instances = ServerStore(store)
     private val roll = Roll()
     private val backup = Backup(
         instances,
@@ -54,20 +55,20 @@ class SignedInControllerTest {
     )
     private val asked = mutableListOf<Set<Ask>>()
     private val reported = mutableListOf<Boolean>()
-    private val forgotten = mutableListOf<String>()
+    private var signedOut = false
 
     private val controller = SignedInController(
         instances = instances,
         backup = backup,
         consent = ReportingConsent(store),
-        forget = { forgotten += it; instances.remove(it) },
+        signOut = { signedOut = true; instances.clear() },
         ask = { asked += it },
         notificationsAsked = AskedOnce(store, "notifications-asked"),
         reportingChanged = { reported += it },
     )
 
-    private suspend fun signedIn(id: String) =
-        instances.put(Instance(id, "https://$id.example/dav/", "edu"), Credentials("edu", "secret"))
+    private suspend fun signedIn(host: String = "home") =
+        instances.put(Server("https://$host.example/dav/", "edu"), Credentials("edu", "secret"))
 
     // stratus-app#75: granted in Settings, and the Folders screen still said no.
     @Test
@@ -106,40 +107,42 @@ class SignedInControllerTest {
     }
 
     @Test
-    fun turningBackupOnWithoutAccessAsksForIt() = runTest {
-        signedIn("home")
+    fun choosingFoldersWithoutAccessAsksForIt() = runTest {
+        signedIn()
         controller.start()
 
-        controller.enableBackup("home", false)
-        assertEquals(emptyList(), asked, "turning it off needs nothing")
+        // Choosing none is choosing no backup (stratus-app#131), so there is
+        // nothing to ask permission for.
+        controller.chooseSources(emptySet())
+        assertEquals(emptyList(), asked, "choosing nothing needs nothing")
 
-        controller.enableBackup("home", true)
+        controller.chooseSources(setOf("dcim"))
         // One request for both, because Android shows one at a time.
         assertEquals(listOf(setOf(Ask.Photos, Ask.Notifications)), asked)
-        assertTrue(controller.state.value.servers.single().backupEnabled)
+        assertTrue(controller.state.value.server!!.backupEnabled)
     }
 
     @Test
-    fun turningBackupOnWithAccessAsksNothing() = runTest {
-        signedIn("home")
+    fun choosingFoldersWithAccessAsksNothingMore() = runTest {
+        signedIn()
         roll.access = MediaAccess.Full
         controller.start()
 
-        controller.enableBackup("home", true)
+        controller.chooseSources(setOf("dcim"))
         assertEquals(listOf(setOf(Ask.Notifications)), asked, "the library was already readable")
     }
 
     // stratus-app#81: a refusal is an answer, so it is asked once and not on
-    // every toggle.
+    // every change.
     @Test
     fun theNotificationPermissionIsAskedForOnceAndThenLeftAlone() = runTest {
-        signedIn("home")
+        signedIn()
         roll.access = MediaAccess.Full
         controller.start()
 
-        controller.enableBackup("home", true)
-        controller.enableBackup("home", false)
-        controller.enableBackup("home", true)
+        controller.chooseSources(setOf("dcim"))
+        controller.chooseSources(emptySet())
+        controller.chooseSources(setOf("dcim"))
 
         assertEquals(listOf(setOf(Ask.Notifications)), asked)
     }
@@ -165,13 +168,12 @@ class SignedInControllerTest {
 
     @Test
     fun signingOutForgetsTheServerAndShowsItGone() = runTest {
-        signedIn("home")
-        signedIn("vps")
+        signedIn()
         controller.start()
 
-        controller.signOut("home")
+        controller.signOut()
 
-        assertEquals(listOf("home"), forgotten)
-        assertEquals(listOf("vps"), controller.state.value.servers.map { it.id })
+        assertTrue(signedOut)
+        assertNull(controller.state.value.server)
     }
 }

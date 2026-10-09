@@ -2,7 +2,7 @@ package dev.stratus.core.backup
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import dev.stratus.core.dav.DavClient
-import dev.stratus.core.instance.Instance
+import dev.stratus.core.server.Server
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -31,7 +31,7 @@ import kotlin.test.assertTrue
 class BackupRulesTest {
 
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
-    private val instance = Instance("i-1", "https://host/dav/", "edu", sources = setOf("Camera"))
+    private val instance = Server("i-1", "https://host/dav/", "edu", sources = setOf("Camera"))
     private val layout = RemoteLayout(instance.backupRoot)
 
     private fun asset(day: Int) =
@@ -100,23 +100,23 @@ class BackupRulesTest {
         database.migrate()
         return BackupRun(
             source = roll,
-            prepareFor = { forInstance ->
-                val cache = database.cacheFor(forInstance.id)
-                val dav = DavClient(HttpClient(server.engine), forInstance.baseUrl)
-                InstanceBackup(
+            prepareFor = {
+                val cache = database.cache()
+                val dav = DavClient(HttpClient(server.engine), "https://host/dav/")
+                ServerBackup(
                     queue = UploadQueue(
                         layout = layout,
-                        pending = database.pendingFor(forInstance.id),
+                        pending = database.pending(),
                         cache = cache,
                         source = roll,
                         transport = PutTransport(dav),
                         directories = DavDirectoryMaker(dav),
                     ),
                     index = BackupIndex(layout, cache, dav),
-                    mark = database.markFor(forInstance.id),
+                    mark = database.mark(),
                 )
             },
-            journalFor = { database.journalFor(it.id) },
+            journalFor = { database.journal() },
         )
     }
 
@@ -179,7 +179,7 @@ class BackupRulesTest {
         passOver(roll, server).once(instance)
         assertEquals(1, roll.opened)
 
-        database.forget(instance.id)
+        database.clear()
         passOver(roll, server).once(instance)
 
         assertEquals(1, roll.opened, "it read the photograph again instead of asking the server")

@@ -48,7 +48,7 @@ class BackupIndexTest {
 
     private suspend fun indexOver(engine: MockEngine): Pair<BackupIndex, BackupCache> {
         val database = BackupDatabase(BundledSQLiteDriver().open(":memory:")).also { it.migrate() }
-        val cache = database.cacheFor("instance-a")
+        val cache = database.cache()
         return BackupIndex(layout, cache, DavClient(HttpClient(engine), "http://host/dav/")) to cache
     }
 

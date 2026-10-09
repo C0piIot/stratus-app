@@ -8,7 +8,7 @@ import dev.stratus.core.signin.SignInFailure
 import dev.stratus.core.signin.Tried
 import dev.stratus.core.signin.SignInForm
 import dev.stratus.core.signin.SignInState
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.store.ConsentStore
 import dev.stratus.core.store.TrustStore
 import dev.stratus.core.store.InMemorySecureStore
@@ -44,7 +44,7 @@ class SignInConformanceTest {
         val secure = InMemorySecureStore()
         return SignInController(
             prober = DavProber { credentials, _ -> stratusHttpClient(CIO.create(), credentials) },
-            instances = InstanceStore(secure),
+            instances = ServerStore(secure),
             consent = ConsentStore(secure),
             trust = TrustStore(secure),
             scope = scope,

@@ -6,7 +6,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpStatusCode
-import dev.stratus.core.instance.Instance
+import dev.stratus.core.server.Server
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
 import kotlinx.io.RawSource
@@ -41,7 +41,7 @@ private class Always(private val outcome: UploadOutcome) : Transport {
 class BackupRunTest {
 
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
-    private val instance = Instance("i-1", "https://host/dav/", "edu", sources = setOf("Camera"))
+    private val instance = Server("i-1", "https://host/dav/", "edu", sources = setOf("Camera"))
 
     private fun asset(day: Int, addedAt: Long = utcMillis(2026, 9, day)) =
         Asset("local-$day", utcMillis(2026, 9, day), addedAt, "IMG_$day.HEIC", 10)
@@ -57,23 +57,23 @@ class BackupRunTest {
         database.migrate()
         return BackupRun(
             source = roll,
-            prepareFor = { forInstance ->
-                val layout = RemoteLayout(forInstance.backupRoot)
-                val cache = database.cacheFor(forInstance.id)
-                InstanceBackup(
+            prepareFor = {
+                val layout = RemoteLayout(Server.DEFAULT_BACKUP_ROOT)
+                val cache = database.cache()
+                ServerBackup(
                     queue = UploadQueue(
                         layout = layout,
-                        pending = database.pendingFor(forInstance.id),
+                        pending = database.pending(),
                         cache = cache,
                         source = roll,
                         transport = Always(outcome),
                         directories = { },
                     ),
                     index = BackupIndex(layout, cache, DavClient(HttpClient(engine), "https://host/dav/")),
-                    mark = database.markFor(forInstance.id),
+                    mark = database.mark(),
                 )
             },
-            journalFor = { database.journalFor(it.id) },
+            journalFor = { database.journal() },
         )
     }
 

@@ -8,7 +8,7 @@ import dev.stratus.core.backup.negotiateTus
 import dev.stratus.core.backup.BackgroundUploads
 import dev.stratus.core.backup.BackgroundTusTransport
 import dev.stratus.core.backup.BackgroundPutTransport
-import dev.stratus.core.instance.InstanceStore
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.documents.rootOf
 import dev.stratus.core.documents.refreshDomains
 import dev.stratus.core.cast.NoCaster
@@ -93,7 +93,7 @@ private fun build(registersDomains: Boolean): AppContainer {
     // yet here. It is a view of the keychain and holds nothing, so a second
     // one costs nothing either.
     serversChanged = {
-        if (registersDomains) refreshDomains(InstanceStore(secure).all().map(::rootOf))
+        if (registersDomains) refreshDomains(ServerStore(secure).instance()?.let(::rootOf))
     },
     // The bytes leave through the system, not through this process: a
     // transfer has to survive the app being suspended or killed, which is
@@ -101,7 +101,7 @@ private fun build(registersDomains: Boolean): AppContainer {
     transports = { connection, instance ->
         // On the request and not in a plugin: the session runs outside this
         // process and cannot ask anything of ours for a header.
-        val credentials = InstanceStore(secure).credentials(instance.id)?.let(::basicAuthHeader)
+        val credentials = ServerStore(secure).credentials()?.let(::basicAuthHeader)
         negotiateTus(connection.http, instance.baseUrl)
             ?.let { BackgroundTusTransport(connection.http, it, uploads, credentials) }
             ?: BackgroundPutTransport(instance.baseUrl, uploads, credentials)

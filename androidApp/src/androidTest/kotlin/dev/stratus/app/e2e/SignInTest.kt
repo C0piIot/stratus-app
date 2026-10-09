@@ -8,7 +8,7 @@ class SignInTest : E2E() {
     fun signsInOverPlainHttpOnceTheRiskIsAccepted() {
         launch()
         signIn()
-        see("Servers")
+        see("Server")
         // No photo permission yet, and the strip says that before anything else.
         see("cannot read your photographs")
     }
@@ -47,7 +47,7 @@ class SignInTest : E2E() {
         link.up()
         tap("Sign in")
         tap("Send anyway")
-        see("Servers")
+        see("Server")
     }
 
     // stratus-backend#279: the origin is a collection of collections, and the
@@ -69,11 +69,11 @@ class SignInTest : E2E() {
     fun theSessionSurvivesTheAppBeingClosed() {
         launch()
         signIn()
-        see("Servers")
+        see("Server")
         // Back from the first screen leaves the app, which is the point here;
         // signedIn() would have walked a level down from it.
         Phone.device.pressBack()
         Phone.toHomeAndBack()
-        see("Servers")
+        see("Server")
     }
 }

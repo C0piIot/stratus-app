@@ -8,7 +8,6 @@ import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
@@ -131,6 +130,10 @@ abstract class E2E {
         }
     }
 
+    /** Whether it is on screen now, for a step that depends on what came before. */
+    fun showing(text: String) =
+        ui.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+
     fun gone(text: String, timeoutMs: Long = 15_000) = ui.waitUntil(timeoutMs) {
         ui.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isEmpty()
     }
@@ -184,22 +187,43 @@ abstract class E2E {
     fun signedIn() {
         launch()
         signIn()
-        see("Servers")
+        see("Server")
         tap("files")
     }
 
-    fun openServers() = tap("Servers")
+    fun openServer() = tap("Server")
 
     /**
-     * Turns backup on for the first server and answers what the system asks on
-     * the way -- the notification permission the first time (stratus-app#81),
-     * and the library too if it was not granted. Left up, a dialog pauses the
-     * app and with it the status the tests read.
+     * Turns backup on and answers what the system asks on the way -- the
+     * library if it was not granted, and the notification that says a backup
+     * is running (stratus-app#81). Left up, a dialog pauses the app and with
+     * it the status the tests read.
+     *
+     * Choosing folders is what turns it on (stratus-app#131); there is no
+     * switch to flip. Which means the library has to be readable first --
+     * with no access there are no folders to tick, and the screen's own button
+     * is the way through that.
      */
     fun turnBackupOn(allow: Boolean = true) {
-        openServers()
-        ui.onAllNodes(isToggleable())[0].performClick()
-        Phone.answerAll(allow)
+        openServer()
+        chooseEveryFolder(allow)
         tap("Back")
+    }
+
+    /** On the server screen already, which is where every caller of this is. */
+    fun chooseEveryFolder(allow: Boolean = true) {
+        tap("Choose folders")
+        if (showing("Allow access to photos")) {
+            tap("Allow access to photos")
+            Phone.answerAll(allow)
+        }
+        if (!allow) {
+            tap("Back")
+            return
+        }
+        tap("Every folder")
+        tap("Save")
+        // The notification permission, asked once when backup first goes on.
+        Phone.answerAll(allow)
     }
 }

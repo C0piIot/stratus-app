@@ -1,8 +1,7 @@
 package dev.stratus.core.signin
 
-import dev.stratus.core.instance.Instance
-import dev.stratus.core.instance.InstanceStore
-import dev.stratus.core.instance.newInstanceId
+import dev.stratus.core.server.Server
+import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.Prober
 import dev.stratus.core.store.ConsentStore
 import dev.stratus.core.store.TrustStore
@@ -19,18 +18,16 @@ import kotlinx.coroutines.launch
  * A plain class rather than an androidx `ViewModel`: it needs no lifecycle
  * dependency, and it lives in `:core` where the JVM target can test it.
  *
- * Signing in **adds** an instance rather than replacing the one there, which is
- * the whole difference between one server and several.
+ * Signing in is for when there is no server (stratus-app#131): getting to a
+ * different one means signing out, which is also what drops the backup record.
+ * Editing the one that is here keeps it.
  */
 class SignInController(
     private val prober: Prober,
-    private val instances: InstanceStore,
+    private val instances: ServerStore,
     private val consent: ConsentStore,
     private val trust: TrustStore,
     private val scope: CoroutineScope,
-    // Injected so a test can assert on a whole stored record. Minting it here
-    // rather than in the machine is what keeps the machine a pure function.
-    private val mintId: () -> String = ::newInstanceId,
 ) {
     private val mutable = MutableStateFlow<SignInState>(SignInState.Idle)
     val state: StateFlow<SignInState> = mutable.asStateFlow()
@@ -38,8 +35,8 @@ class SignInController(
     private var running: Job? = null
 
     /**
-     * The instance being edited, if the form is open on one rather than on a
-     * new server -- and what to fill it with (stratus-app#87).
+     * What the form is filled with when it is open on the server that exists
+     * rather than on a new one (stratus-app#87).
      */
     private val editingFlow = MutableStateFlow<Editing?>(null)
     val editing: StateFlow<Editing?> = editingFlow.asStateFlow()
@@ -50,28 +47,22 @@ class SignInController(
     val canGoBack: StateFlow<Boolean> = backable.asStateFlow()
 
     /**
-     * Opens the form on an instance that exists, filled with what it has now.
+     * Opens the form on the server that exists, filled with what it has now.
      *
      * Everything is editable -- address, username, password -- and all of it is
      * proved again the way a first sign-in is, because a new address may be a
-     * new certificate or a first time over plain http. What does not change is
-     * the id: a server moved to a new domain is the same server, and its backup
-     * history follows it there.
+     * new certificate or a first time over plain http. **Editing keeps the
+     * backup record**: a server moved to a new domain is the same server, and
+     * what has been settled follows it there. Signing out is the other answer,
+     * and it is the one that throws the record away.
      */
-    suspend fun edit(id: String) {
-        val instance = instances.instance(id) ?: return
-        val credentials = instances.credentials(id) ?: return
+    suspend fun edit() {
+        val instance = instances.instance() ?: return
+        val credentials = instances.credentials() ?: return
         running?.cancel()
-        editingFlow.value = Editing(id, SignInForm(instance.baseUrl, instance.username, credentials.password))
+        editingFlow.value = Editing(SignInForm(instance.baseUrl, instance.username, credentials.password))
         backable.value = true
         mutable.value = SignInState.Idle
-    }
-
-    /** Opens an empty form for one more server, with a way back. */
-    fun addAnother() {
-        cancel()
-        editingFlow.value = null
-        backable.value = true
     }
 
     /** Leaves the form without changing anything. */
@@ -83,12 +74,12 @@ class SignInController(
     }
 
     /**
-     * Reads the state back out of storage: which instance is being looked at, or
-     * none. Called at startup and after anything that adds or forgets one, so
-     * there is a single way for the screen to learn what is true.
+     * Reads the state back out of storage: the server, or none. Called at
+     * startup and after signing in or out, so there is a single way for the
+     * screen to learn what is true.
      */
-    suspend fun restore(): Instance? {
-        val instance = instances.current()
+    suspend fun restore(): Server? {
+        val instance = instances.instance()
         mutable.value = instance?.let { SignInState.Done(it.baseUrl) } ?: SignInState.Idle
         return instance
     }
@@ -96,6 +87,12 @@ class SignInController(
     fun submit(form: SignInForm) {
         running?.cancel()
         running = scope.launch {
+            // One server (stratus-app#131). The interface never offers a blank
+            // form while one is signed in -- the only way back to this screen
+            // is `edit`, which fills it -- and this is the backstop under that,
+            // because a sign-in that quietly replaced the server would take its
+            // backup record with it and say nothing.
+            if (editingFlow.value == null && instances.instance() != null) return@launch
             advance(SignInEvent.Submitted(form, consent.consentedHosts(), trust.pins()))
         }
     }
@@ -126,11 +123,11 @@ class SignInController(
             is SignInEffect.Pin -> trust.pin(effect.hostPort, effect.fingerprint)
 
             is SignInEffect.Store -> {
-                // Edited, it keeps its id and its backup settings; new, it
+                // Edited, it keeps its backup root and its sources; new, it
                 // gets both from scratch.
-                val existing = editingFlow.value?.let { instances.instance(it.id) }
+                val existing = editingFlow.value?.let { instances.instance() }
                 val instance = existing?.copy(baseUrl = effect.baseUrl, username = effect.credentials.username)
-                    ?: Instance(id = mintId(), baseUrl = effect.baseUrl, username = effect.credentials.username)
+                    ?: Server(baseUrl = effect.baseUrl, username = effect.credentials.username)
                 instances.put(instance, effect.credentials)
                 editingFlow.value = null
                 backable.value = false

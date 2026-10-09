@@ -135,10 +135,10 @@ Three decisions in it are worth keeping:
   This reads through, like Android. Apple pushes the other way for new work,
   so this is knowingly something that gets rewritten one day; what it buys is
   having it now.
-- **A domain per server**, registered from the same `InstanceStore` hook that
-  tells Android its roots changed. A domain is named by the instance id, which
-  *is* that server's root document, so the extension reads the root container
-  off the domain it was asked in with nothing to look up.
+- **One domain**, registered from the same `ServerStore` hook that tells
+  Android its root changed. Its identifier is a constant since there is one
+  server to name (stratus-app#131), so the extension's root container is the
+  constant `/` rather than something read off the domain.
 - **The keychain needs an access group**, or the app and the extension see
   different ones and the provider finds no servers at all. It is built from
   `$(AppIdentifierPrefix)` in each target's Info.plist, because a group
@@ -372,8 +372,8 @@ Three surfaces, and no more than three:
    which folders are watched for backup. Editing a server is the sign-in form
    again, filled in and with every field open, so a new address or password is
    proved the way a first sign-in is -- a new certificate, a first time over
-   plain http -- and the instance keeps its id and its backup record, which
-   removing it and signing in again would throw away (stratus-app#87).
+   plain http -- and the server keeps its backup record, which signing out
+   and in again would throw away (stratus-app#87, stratus-app#131).
 
 What that implies, in the order it will be discovered:
 
@@ -720,9 +720,9 @@ would need a device, it should not be the thing on the device.
 opens a database, builds HTTP clients and reads the keychain, which means no test
 can construct one -- so anything that drifts in there has left the tested part of
 the app without anybody deciding that it should. It happened twice: the choice
-between tus and `PUT` lived in the container, and the fan-out over instances --
-which of them get a pass, and whether to ask the system to come back -- lived in
-`BackupWorker`, where iOS would have had to reimplement it. Both are in `Backup`
+between tus and `PUT` lived in the container, and whether a pass happens at all
+and whether to ask the system to come back lived in `BackupWorker`, where iOS
+would have had to reimplement it. Both are in `Backup`
 now, behind a `Connections` seam whose only job is to be the part that needs an
 engine and a keychain. The container is wiring, the platform holds a
 notification and a return value, and everything in between is in `commonTest`.
@@ -755,31 +755,55 @@ way. `configure` must succeed everywhere so that shared code, JVM tests and
 linting work on any machine, and let the iOS link step be the only thing that
 demands a Mac.
 
-## More than one Stratus
+## One Stratus
 
-The app holds **several instances** and somebody switches between them, and the
-backup reaches every instance they mark rather than only the one they are looking
-at -- a camera roll that ends up on the NAS at home *and* on the VPS, which is
-the only redundancy a self-hosted backup can offer.
+The app holds **one server** (stratus-app#131). It held several, with a
+switcher and a backup that reached every instance somebody marked, and the
+thing that could not be made to work was the question the app exists to answer:
+"is my backup working?" had no single answer -- it was per instance, opt-in per
+instance and failing per instance, and the menu asked somebody to understand a
+list before they could ask a question they did not think was a list.
 
-Two consequences that decide code rather than merely describing it.
+**What was given up with it, said plainly** so nobody rediscovers the argument
+that put it there: a camera roll that lands on the NAS at home *and* on the VPS
+was the only redundancy a self-hosted backup can offer. If it comes back, the
+answer is a second pass rather than a second instance.
 
-**An instance is identified by a generated opaque id, never by its address.**
-Somebody who moves their server to a new domain still has the same instance and
-its backup history has to follow them there. Identity by URL is free today and a
-migration with real photographs behind it later.
+**There is no identifier either**, and that is the part worth being exact
+about. An opaque generated id, never the address, was right while there were
+several: it said which server a row belonged to, so a server moved to a new
+domain kept its backup history. With one server the rows belong to the server
+and the question does not arise. What the id really distinguished -- *the same
+server at a new address* from *a different server* -- was never the id's doing
+but the user's action, and that is now the whole rule:
 
-**The unit of backup work is a (photograph, instance) pair, not a photograph.**
-One asset with two destinations is two pieces of work that succeed and fail
-independently: an instance that is down must not hold up the other. The bytes are
-read once per destination, because two servers cannot share one upload stream and
-keeping a four-gigabyte video in a temporary file to avoid a second read from the
-photo library is the worse trade on a phone.
+**Editing the address keeps the backup record; signing out drops it.** Signing
+in is refused while a server is here (`SignInController.submit`), so the only
+way to a different one is `AppContainer.signOut`, which clears the record and
+the rows together. It has to: `settled` only ever grows, so carrying one
+server's record onto another is a camera roll that never gets backed up.
 
-Everything cached about the server is keyed by that id, and a rebuild stops at
-its own rows. Plaintext consent is the deliberate exception: it is keyed by
-**host**, because the risk belongs to the machine at the other end and two
-instances on the same host share the answer with good reason.
+Three things follow in the code. The backup tables have no `instance` column,
+and the schema was **rewritten rather than migrated** -- nothing is installed
+anywhere but a test phone, and the file is a cache, so an older one is dropped
+(`BackupDatabase`). A document id is a path, which cannot be empty at the root,
+so **an id is the path with a leading slash and the root is `/`** -- no
+sentinel, and so nothing to collide with a file called `root`. And each
+platform publishes one storage location rather than a list: one Android root,
+one `NSFileProviderDomain` under a fixed identifier.
+
+Plaintext consent stays keyed by **host** and is untouched: that risk always
+belonged to the machine at the other end rather than to the server record, and
+it outlives signing out for the same reason.
+
+**Backup is on when folders are chosen**, and there is no switch beside that.
+An empty set used to mean *every* source, with a separate flag turning backup
+off -- two ways to say "not now", and an empty set that meant the opposite of
+what an unticked list looks like. Now the set stored is the set ticked and
+nothing means nothing. The cost is that "every folder" is a button that ticks
+what exists today rather than a standing instruction, so a folder made next
+month is not backed up until somebody says so; the alternative was keeping a
+value that means "whatever appears", which is the ambiguity this removed.
 
 ## What the queue decides
 
@@ -819,8 +843,8 @@ request per pass is not worth that.
 
 **Credentials live in the Keychain on iOS and under an Android Keystore key on
 Android**, behind a `SecureStore` interface narrow enough to fake -- "put this
-string somewhere safe and give it back". One record per instance over that same
-interface, which is why holding several cost no platform code at all: the two
+string somewhere safe and give it back". One record over that interface, which
+is why going from several servers to one cost no platform code either: the two
 halves that CI cannot test did not have to change. Two choices inside that are this app's
 purpose talking rather than defaults: the Keychain item is
 `kSecAttrAccessibleAfterFirstUnlock` and the Keystore key requires no user

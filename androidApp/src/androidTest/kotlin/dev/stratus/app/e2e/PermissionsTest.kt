@@ -1,6 +1,5 @@
 package dev.stratus.app.e2e
 
-import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.performClick
 import org.junit.Test
 import kotlin.test.assertTrue
@@ -11,8 +10,8 @@ class PermissionsTest : E2E() {
     private fun seedAFolder() = Phone.photograph("$unique.jpg", unique, ByteArray(1_000) { 1 })
 
     private fun openFolders() {
-        openServers()
-        tap("All folders")
+        openServer()
+        tap("Choose folders")
         see("Folders")
     }
 
@@ -30,32 +29,30 @@ class PermissionsTest : E2E() {
         see(unique)
     }
 
-    @Test
-    fun turningBackupOnWithoutAccessAsksForIt() {
-        signedIn()
-        openServers()
-        ui.onAllNodes(isToggleable())[0].performClick()
-        assertTrue(Phone.permissionDialogShown(), "turning backup on asked for nothing")
-        Phone.answerAll(allow = false)
-        see("Back up to this server")
-    }
-
     // stratus-app#81: without it, from Android 13, a backup runs with its
-    // notification hidden. Asked once; a second toggle does not ask again.
+    // notification hidden. Asked once; choosing folders again does not ask.
     @Test
-    fun turningBackupOnAsksOnceToShowItsNotification() {
+    fun choosingFoldersAsksOnceToShowTheBackupsNotification() {
         Phone.grantPhotos()
         signedIn()
-        openServers()
-        val toggle = { ui.onAllNodes(isToggleable())[0].performClick() }
+        // Choosing folders is what turns backup on (stratus-app#131), so
+        // "again" is opening the screen and saving the same choice. Already on
+        // the server screen by then, so there is nothing to open first.
+        val chooseAgain = {
+            tap("Choose folders")
+            tap("Every folder")
+            tap("Save")
+        }
 
-        toggle()
+        openFolders()
+        tap("Every folder")
+        tap("Save")
         assertTrue(Phone.permissionDialogShown(), "nothing asked to show the backup's notification")
         Phone.allowAll()
         ui.waitUntil(5_000) { Phone.granted(android.Manifest.permission.POST_NOTIFICATIONS) }
 
-        toggle()
-        toggle()
+        chooseAgain()
+        chooseAgain()
         assertTrue(!Phone.permissionDialogShown(timeoutMs = 3_000), "it asked a second time")
     }
 

@@ -9,10 +9,9 @@ same rule: it talks **standard WebDAV**, so it works against any WebDAV server �
 Stratus, Nextcloud, a box running rclone serve — and it never calls anything
 private to Stratus.
 
-> **Early.** You can sign in to more than one server, switch between them, walk
-> their files, choose which folders feed each one and watch what the backup is
-> doing. On Android it runs in the background and reaches every server you turn
-> on. **On iOS it now backs up too**: the camera roll goes out through a
+> **Early.** You can sign in to a server, walk its files, choose which folders
+> are backed up and watch what the backup is doing. On Android it runs in the
+> background. **On iOS it now backs up too**: the camera roll goes out through a
 > background transfer that the system finishes while the app is closed, and
 > which has never been run by anybody on a real phone — see
 > [#117](https://github.com/C0piIot/stratus-app/issues/117). The sections below
@@ -118,7 +117,7 @@ discards along with everything else.
 
 `make e2e` drives the whole app through its screens on that same emulator,
 against a backend container the script starts and stops: signing in, browsing,
-renaming and deleting, several servers, the permission dialogs, a backup
+renaming and deleting, signing out, the permission dialogs, a backup
 reaching the server, and the server going away mid-way — switched off, wedged,
 cut halfway through an upload or a download, or the phone losing its network.
 It needs KVM and an x86_64 host, so on an ARM machine it runs in CI only.
