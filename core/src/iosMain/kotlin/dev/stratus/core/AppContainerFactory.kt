@@ -101,7 +101,7 @@ private fun build(registersDomains: Boolean): AppContainer {
     transports = { connection, instance ->
         // On the request and not in a plugin: the session runs outside this
         // process and cannot ask anything of ours for a header.
-        val credentials = ServerStore(secure).credentials(instance.id)?.let(::basicAuthHeader)
+        val credentials = ServerStore(secure).credentials()?.let(::basicAuthHeader)
         negotiateTus(connection.http, instance.baseUrl)
             ?.let { BackgroundTusTransport(connection.http, it, uploads, credentials) }
             ?: BackgroundPutTransport(instance.baseUrl, uploads, credentials)

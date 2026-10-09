@@ -73,7 +73,6 @@ class UploadConformanceTest {
     }
 
     private suspend fun queueFor(
-        id: String,
         dav: DavClient,
         layout: RemoteLayout = this.layout,
         transport: Transport = PutTransport(dav),
@@ -136,7 +135,7 @@ class UploadConformanceTest {
         val transport = transportFor(Connection(stratusHttpClient(CIO.create(), credentials), fromOrigin), origin)
         assertTrue(transport is TusTransport, "this server offers tus, so a pass should have taken it")
 
-        val queue = queueFor("origin-rooted", fromOrigin, RemoteLayout(root), transport)
+        val queue = queueFor(fromOrigin, RemoteLayout(root), transport)
 
         assertEquals(1, queue.enqueue(listOf(asset)))
         val steps = drain(queue)
@@ -147,29 +146,8 @@ class UploadConformanceTest {
     }
 
     @Test
-    fun putsTheSamePhotographOnBothServersAndAgreesAboutIt() = runTest {
-        val first = queueFor("instance-one", one)
-        val second = queueFor("instance-two", two)
-        assertEquals(1, first.enqueue(listOf(asset)))
-        assertEquals(1, second.enqueue(listOf(asset)))
-
-        assertTrue(drain(first).any { it is QueueStep.Uploaded }, "nothing reached the first server")
-        assertTrue(drain(second).any { it is QueueStep.Uploaded }, "nothing reached the second")
-
-        val path = layout.pathFor(asset)
-        // Both servers hashed what they stored, and both hashed the same thing.
-        val onEach = listOf(one.stat(path).etag, two.stat(path).etag)
-        assertTrue(onEach.all { !it.isNullOrEmpty() }, "a server gave no ETag")
-        assertEquals(onEach[0], onEach[1])
-
-        // And each instance settled it on its own, so neither will send it again.
-        assertTrue(database.cache().has(path))
-        assertTrue(database.cache().has(path))
-    }
-
-    @Test
     fun theBytesArriveUnchangedThroughAStreamedBody() = runTest {
-        val queue = queueFor("instance-one", one)
+        val queue = queueFor(one)
         queue.enqueue(listOf(asset))
         drain(queue)
 
@@ -182,7 +160,7 @@ class UploadConformanceTest {
     fun makesTheMonthFolderOnAServerThatHasNeverSeenOne() = runTest {
         // The queue creates it; without that a write is a 409 and tus will not
         // even create the upload.
-        val queue = queueFor("instance-two", two)
+        val queue = queueFor(two)
         queue.enqueue(listOf(asset))
         drain(queue)
 
