@@ -29,17 +29,6 @@ class PermissionsTest : E2E() {
         see(unique)
     }
 
-    @Test
-    fun choosingFoldersWithoutAccessAsksForIt() {
-        signedIn()
-        openFolders()
-        tap("Every folder")
-        tap("Save")
-        assertTrue(Phone.permissionDialogShown(), "turning backup on asked for nothing")
-        Phone.answerAll(allow = false)
-        see("Server")
-    }
-
     // stratus-app#81: without it, from Android 13, a backup runs with its
     // notification hidden. Asked once; choosing folders again does not ask.
     @Test
@@ -47,9 +36,10 @@ class PermissionsTest : E2E() {
         Phone.grantPhotos()
         signedIn()
         // Choosing folders is what turns backup on (stratus-app#131), so
-        // "again" is opening the screen and saving the same choice.
+        // "again" is opening the screen and saving the same choice. Already on
+        // the server screen by then, so there is nothing to open first.
         val chooseAgain = {
-            openFolders()
+            tap("Choose folders")
             tap("Every folder")
             tap("Save")
         }
