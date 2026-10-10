@@ -31,7 +31,7 @@ import kotlin.test.assertTrue
 class BackupRulesTest {
 
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
-    private val instance = Server("i-1", "https://host/dav/", "edu", sources = setOf("Camera"))
+    private val instance = Server("https://host/dav/", "edu", sources = setOf("Camera"))
     private val layout = RemoteLayout(instance.backupRoot)
 
     private fun asset(day: Int) =

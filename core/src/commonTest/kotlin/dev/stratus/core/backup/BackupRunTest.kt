@@ -33,6 +33,14 @@ private class RollOf(
         Buffer().apply { write(ByteArray(10), 0, 10) }
 }
 
+/** Everything the log said, with the end of a pass in its place among it. */
+private class Collected : LogSink {
+    val lines = mutableListOf<String>()
+    val passes = mutableListOf<List<String>>()
+    override fun line(text: String) { lines += text }
+    override fun pass(summary: String, trail: List<String>) { passes += trail }
+}
+
 private class Always(private val outcome: UploadOutcome) : Transport {
     override val resumable = false
     override suspend fun send(target: UploadTarget, resume: Resume?, body: UploadBody): UploadOutcome = outcome
@@ -41,7 +49,7 @@ private class Always(private val outcome: UploadOutcome) : Transport {
 class BackupRunTest {
 
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
-    private val instance = Server("i-1", "https://host/dav/", "edu", sources = setOf("Camera"))
+    private val instance = Server("https://host/dav/", "edu", sources = setOf("Camera"))
 
     private fun asset(day: Int, addedAt: Long = utcMillis(2026, 9, day)) =
         Asset("local-$day", utcMillis(2026, 9, day), addedAt, "IMG_$day.HEIC", 10)
@@ -53,6 +61,7 @@ class BackupRunTest {
         roll: RollOf,
         outcome: UploadOutcome = UploadOutcome.Done("etag"),
         engine: MockEngine = emptyServer(),
+        sink: LogSink = Collected(),
     ): BackupRun {
         database.migrate()
         return BackupRun(
@@ -74,6 +83,7 @@ class BackupRunTest {
                 )
             },
             journalFor = { database.journal() },
+            logFor = { BackupLog(it.baseUrl, sink) },
         )
     }
 
@@ -188,6 +198,45 @@ class BackupRunTest {
         run.once(instance)
 
         assertEquals(utcMillis(2026, 9, 1) - 1, roll.boundedBy.last())
+    }
+
+    @Test
+    fun narratesWhatItSentAndHowMuchIsBehindIt() = runTest {
+        // The question a count alone cannot answer: forty files re-sent every
+        // six hours and forty new ones look the same from the outside.
+        val log = Collected()
+        val mine = instance.copy(baseUrl = "https://${BackupLog.NARRATED_HOST}/")
+        run(RollOf(listOf(asset(1), asset(2))), sink = log).once(mine)
+
+        val lines = log.lines
+        assertTrue(lines.any { it.startsWith("pass began: 2 seen, 2 queued") }, lines.toString())
+        // Newest first, so the second day's photograph goes with one behind it.
+        assertTrue(lines.any { "IMG_2" in it && "1 left" in it }, lines.toString())
+        assertTrue(lines.any { "IMG_1" in it && "0 left" in it }, lines.toString())
+        assertTrue(lines.any { it.startsWith("pass ended NothingLeft: 2 sent") }, lines.toString())
+    }
+
+    @Test
+    fun aPassIsOneThingToReportAndNotAHundred() = runTest {
+        // What goes to Sentry on Android: one event an ending, carrying every
+        // line of the pass that ended. A line is not an event.
+        val log = Collected()
+        val mine = instance.copy(baseUrl = "https://${BackupLog.NARRATED_HOST}/")
+        run(RollOf(listOf(asset(1), asset(2))), sink = log).once(mine)
+
+        assertEquals(1, log.passes.size, log.passes.toString())
+        assertEquals(log.lines, log.passes.single(), "the trail is what was said, in order")
+    }
+
+    @Test
+    fun saysNothingAtAllAboutAnybodyElsesPhotographs() = runTest {
+        // The whole privacy story of the log: the filenames are somebody's
+        // camera roll, and one address asked for them.
+        val log = Collected()
+        run(RollOf(listOf(asset(1))), sink = log).once(instance)
+
+        assertEquals(emptyList(), log.lines)
+        assertEquals(emptyList(), log.passes)
     }
 
     @Test

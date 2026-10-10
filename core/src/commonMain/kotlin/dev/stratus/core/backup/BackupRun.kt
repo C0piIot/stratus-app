@@ -50,6 +50,14 @@ class BackupRun(
     private val prepareFor: suspend () -> ServerBackup?,
     private val journalFor: suspend () -> BackupJournal,
     private val now: () -> Long = { io.ktor.util.date.getTimeMillis() },
+    /**
+     * What this pass says about itself, for the one address that is narrated.
+     *
+     * A seam rather than a constructor call so a test can read the lines --
+     * which is the only way to prove the half that matters, that every other
+     * address gets none.
+     */
+    private val logFor: (Server) -> BackupLog = { BackupLog(it.baseUrl) },
 ) {
     /**
      * Runs one pass for [instance].
@@ -65,9 +73,11 @@ class BackupRun(
         onStep: (QueueStep) -> Unit = {},
     ): BackupReport {
         val journal = journalFor()
+        val log = logFor(instance)
         if (source.access() == MediaAccess.None) {
             val report = BackupReport(stopped = StoppedBecause.NoAccessToTheLibrary)
             journal.ended(now(), report.stopped, 0, 0)
+            log.summarise("pass: the library cannot be read")
             return report
         }
         val prepared = prepareFor() ?: return BackupReport()
@@ -92,19 +102,26 @@ class BackupRun(
         } catch (_: Exception) {
             val report = BackupReport(stopped = StoppedBecause.WaitingToRetry)
             journal.ended(now(), report.stopped, 0, 0)
+            log.summarise("pass: could not ask the server what it already has; waiting")
             return report
         }
 
         var report = BackupReport(queued = queue.enqueue(assets))
+        // Seen against queued is the whole diagnosis: a pass that enumerates
+        // forty photographs and queues none of them is working, and one that
+        // queues the same forty every time is sending them again.
+        if (log.on) log.say("pass began: ${assets.size} seen, ${report.queued} queued, ${queue.left()} to send")
 
         while (keepGoing()) {
             val step = queue.runNext()
             onStep(step)
+            narrate(log, step, queue)
             report = when (step) {
                 is QueueStep.Idle -> {
                     val done = report.copy(stopped = stoppedFrom(queue))
                     advance(prepared.mark, queue, assets)
                     journal.ended(now(), done.stopped, done.uploaded, done.failed)
+                    narrateEnd(log, done, queue)
                     return done
                 }
                 is QueueStep.Uploaded -> report.copy(uploaded = report.uploaded + 1)
@@ -122,7 +139,40 @@ class BackupRun(
         val stopped = report.copy(stopped = StoppedBecause.AskedTo)
         advance(prepared.mark, queue, assets)
         journal.ended(now(), stopped.stopped, stopped.uploaded, stopped.failed)
+        narrateEnd(log, stopped, queue)
         return stopped
+    }
+
+    /**
+     * One line per file, naming it and saying how much is behind it.
+     *
+     * The count is asked of the queue rather than carried along, because a
+     * number kept beside the table is a number that eventually disagrees with
+     * it -- and a log that disagrees with the screen is worse than no log. It
+     * costs one query per file, paid only where the log is on.
+     */
+    private suspend fun narrate(log: BackupLog, step: QueueStep, queue: UploadQueue) {
+        if (!log.on) return
+        val left = queue.left()
+        log.say(
+            when (step) {
+                is QueueStep.Idle -> return
+                is QueueStep.Uploaded -> "sent ${step.path} -- $left left"
+                is QueueStep.Progressed -> "part of ${step.path}, at ${step.offset} -- $left left"
+                is QueueStep.HandedOver -> "handed ${step.path} to the system -- $left left"
+                is QueueStep.Retrying -> "retrying ${step.path} in ${step.inMillis}ms (${step.detail}) -- $left left"
+                is QueueStep.GaveUp -> "gave up on ${step.path} (${step.detail}) -- $left left"
+            },
+        )
+    }
+
+    /** The line the rest of the pass hangs from, and on Android the event. */
+    private suspend fun narrateEnd(log: BackupLog, report: BackupReport, queue: UploadQueue) {
+        if (!log.on) return
+        log.summarise(
+            "pass ended ${report.stopped}: ${report.uploaded} sent, " +
+                "${report.failed} failed, ${queue.left()} left",
+        )
     }
 
     /**

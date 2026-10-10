@@ -895,6 +895,51 @@ information is in the app's dSYM, which CI uploads with
 one there is until #5. The organisation and project are the ids in the DSN, so
 the token is the one secret it needs.
 
+## The backup log
+
+A line per file into the platform's log, naming what went and how much is
+behind it (`BackupLog`, written from `BackupRun`). It exists for one question
+nothing else here answers: **is it sending the same photographs over and
+over?** The Backup screen says what is left and the journal says what the last
+pass did, and neither names a file -- so forty re-sent every six hours and
+forty new ones are the same two numbers.
+
+**It is on for one address and off for every other**, and that constant is the
+whole privacy control. The lines are filenames out of somebody's camera roll;
+pointing them at your own server is a reasonable thing to do with your own
+photographs, and there is no screen to ask anybody else on -- the app has no
+developer settings, and building one to ask a question a single install has
+would be a surface to keep for ever. The test that matters is the second one:
+that a pass against any other host writes nothing at all.
+
+The count comes from the queue on every line rather than being carried along
+beside it. A number kept next to the table is one that eventually disagrees
+with it, and a log that disagrees with the screen is worse than no log -- the
+same rule the journal already follows. It costs a query per file, paid only
+where the log is on, which is why `BackupLog.on` is public: the caller has to
+be able to not ask.
+
+**A line is not an event, and three hundred of them are not three hundred.**
+The half that makes this readable at all is Sentry -- a backup is watched over
+days and the phone is plugged into nothing for most of them -- so the sink has
+two doors: a line as it happens, and the end of a pass carrying everything
+said on the way to it. Android puts the first in logcat and the second in one
+`captureMessage` with the trail in an extra, fingerprinted so every pass lands
+in one issue and reads as a list. It is the shape `AndroidCaster` already
+reports a cast in, and it was preferred to a breadcrumb per file for the
+reason breadcrumbs exist: they are capped by a ring buffer and only ever seen
+attached to a crash. The trail is bounded here too, at two hundred lines, and
+says how many it dropped rather than starting in the middle silently.
+
+Two things that follow and are easy to be surprised by. **It arrives only
+where crash reports are on**, because that is what initialises Sentry
+(stratus-app#73) -- with them off the log is logcat and nothing else, which is
+a sentence the README carries. And **iOS has no Sentry half at all**: the SDK
+lives in `:ui` precisely so that `:core`'s iOS test executable does not link
+Sentry Cocoa, and `:core` cannot reach upwards to call it, so that platform
+gets the console and a cable. Fixing it means a sink pushed down from `:ui` at
+startup, which is a mutable global in the one module that has none.
+
 ## Still open
 
 Decided later, deliberately not guessed at here: whether Nextcloud's chunked

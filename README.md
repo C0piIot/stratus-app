@@ -234,7 +234,8 @@ the same app, without the cast button.
 Off until you turn them on, under Servers. Then a crash sends the error and
 which phone it happened on to [Sentry](https://sentry.io), a service that is not
 your server. Never a photograph, a screenshot or a password, but an error can
-name a server address or a file.
+name a server address or a file — and on one address it also carries the backup
+log below, which is filenames by the hundred.
 
 Where they go is set when the app is built, by `SENTRY_DSN` in its environment.
 A build without it — a fork, a build on your own machine — has no reporting and
@@ -242,6 +243,28 @@ no switch offering it. CI reads it from the repository variable of the same
 name, and with a `SENTRY_AUTH_TOKEN` secret it also uploads the iOS debug
 symbols that turn a crash into Kotlin function names. Android needs none while
 its builds are not minified, which they are not.
+
+## The backup log
+
+A pass writes a line per file — what it sent and how much is behind it — which
+is what says whether a backup is making progress or sending the same
+photographs every six hours. Nothing else answers that: the Backup screen
+counts what is left and never names a file.
+
+It comes out in two places on Android. In logcat as it happens, under a tag of
+its own, so `adb logcat -s StratusBackup` is the whole filter. And as **one
+Sentry event per pass**, carrying every line of that pass, which is the half
+worth having: a backup is watched over days and the phone is plugged into
+nothing for most of them. That half needs crash reports switched on, since
+that is what starts Sentry at all; with them off, logcat is all there is. On
+iOS there is only the Xcode console — `:core` cannot reach Sentry, for the
+reason the section above gives.
+
+**It is off unless the server is `stratus.dropdatabase.es`**, which is one
+developer's own instance. The lines carry filenames out of a camera roll, and
+that is a reasonable thing to point at your own server and not at somebody
+else's. There is no setting: the address is a constant in `BackupLog`, and a
+fork that wants the lines changes it.
 
 ## Getting it onto an Android phone
 
