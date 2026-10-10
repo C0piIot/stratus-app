@@ -6,6 +6,7 @@ import dev.stratus.core.backup.Backup
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.Connection
 import dev.stratus.core.backup.Connections
+import dev.stratus.core.backup.Network
 import dev.stratus.core.backup.Transport
 import dev.stratus.core.cast.CastController
 import dev.stratus.core.cast.Caster
@@ -62,6 +63,8 @@ class AppContainer(
     /** See [Backup]'s own parameter: the one thing a platform answers differently. */
     private val transports: (suspend (Connection, Server) -> Transport)? = null,
     private val liveTransfers: (suspend () -> Set<String>)? = null,
+    /** What this connection costs, which only the platform knows (stratus-app#133). */
+    private val network: Network = Network { false },
 ) {
     private val instances = ServerStore(secure, serversChanged)
 
@@ -87,9 +90,9 @@ class AppContainer(
 
     val backup: Backup by lazy {
         if (transports == null) {
-            Backup(instances, database, assets, connections)
+            Backup(instances, database, assets, connections, network = network)
         } else {
-            Backup(instances, database, assets, connections, transports, liveTransfers)
+            Backup(instances, database, assets, connections, transports, liveTransfers, network)
         }
     }
 
@@ -104,8 +107,14 @@ class AppContainer(
         scope = scope,
     )
 
-    fun signedIn(ask: ((Set<Ask>) -> Unit)?, reportingChanged: (Boolean) -> Unit) = SignedInController(
-        instances, backup, reporting, ::signOut, ask, AskedOnce(secure, "notifications-asked"), reportingChanged,
+    fun signedIn(
+        ask: ((Set<Ask>) -> Unit)?,
+        /** Starts a pass now, which is the platform's to arrange. */
+        backUpNow: () -> Unit = {},
+        reportingChanged: (Boolean) -> Unit,
+    ) = SignedInController(
+        instances, backup, reporting, ::signOut, ask, AskedOnce(secure, "notifications-asked"),
+        reportingChanged, backUpNow,
     )
 
     suspend fun current(): Server? = instances.instance()

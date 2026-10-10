@@ -44,7 +44,14 @@ internal fun oneLine(state: BackupState): String = when (state) {
     is BackupState.Working ->
         "Backing up — ${state.left} to go" + (state.current?.let { ": ${it.substringAfterLast('/')}" } ?: "")
 
-    is BackupState.Waiting -> "${state.left} waiting, ${size(state.bytesLeft)}"
+    is BackupState.Waiting ->
+        if (state.reason == dev.stratus.core.backup.WaitingReason.ForWifi) {
+            // The one waiting reason worth naming in a line this short: it is
+            // the only one somebody can do something about from here.
+            "${state.left} waiting for wifi, ${size(state.bytesLeft)}"
+        } else {
+            "${state.left} waiting, ${size(state.bytesLeft)}"
+        }
 
     is BackupState.NeedsYou -> when (state.reason) {
         is dev.stratus.core.backup.AttentionReason.TheLibraryIsNotReadable ->

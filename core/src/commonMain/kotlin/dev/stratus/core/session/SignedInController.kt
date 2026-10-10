@@ -47,6 +47,8 @@ class SignedInController(
     private val notificationsAsked: AskedOnce,
     /** Starts or stops the reporter itself, which lives outside `:core`. */
     private val reportingChanged: (Boolean) -> Unit,
+    /** Starts a pass now. The platform arranges one; this decides when to ask. */
+    private val backUpNow: () -> Unit = {},
 ) {
     private val mutable = MutableStateFlow(SignedInState())
     val state: StateFlow<SignedInState> = mutable.asStateFlow()
@@ -103,6 +105,19 @@ class SignedInController(
             }
         }
         backup.setSources(sources)
+        refresh()
+    }
+
+    /**
+     * Whether a pass may spend somebody's data plan (stratus-app#133).
+     *
+     * Allowing it starts a pass rather than waiting for the next window: the
+     * moment somebody turns this off is the moment they want what is queued to
+     * go, and six hours later is not an answer.
+     */
+    suspend fun setOnlyOnWifi(only: Boolean) {
+        backup.setOnlyOnWifi(only)
+        if (!only) backUpNow()
         refresh()
     }
 

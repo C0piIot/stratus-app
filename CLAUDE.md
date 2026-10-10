@@ -828,6 +828,48 @@ no test can watch it. So it decides nothing, and all of this lives in
 - **A second look at the camera roll must not restart a large video**, which is
   why enqueuing ignores what is already queued rather than replacing it.
 
+## Not on somebody's data plan (stratus-app#133)
+
+`Server.onlyOnWifi`, **on by default**. A camera roll is the one thing on a
+phone big enough to matter on a data plan, and the default is the half of the
+choice that cannot be unmade later: nothing is installed anywhere but a test
+phone today, so making it conservative costs nothing now and would cost a
+behaviour change for everybody later.
+
+Three things about it are worth keeping.
+
+**It parks the sending, not the looking.** The pass still enumerates and
+enqueues on a metered connection and only then stops, because looking at the
+camera roll costs no data and a pass that parked before queueing would leave
+the backup screen saying nothing is waiting while the roll fills up. That is
+the surface's whole job.
+
+**The decision is in `BackupRun` and the platforms answer a fact.** `Network`
+is one question -- is this connection metered -- answered by
+`NET_CAPABILITY_NOT_METERED` on Android and `nw_path_is_expensive` on iOS,
+both of which catch a tethered hotspot that a check on the transport would
+call wifi. **Unknown counts as metered**, which sounds like the wrong way
+round and is not: in practice the platforms decline to answer when there is no
+connection at all, so parking costs nothing, and guessing the other way spends
+somebody's money on a question we could not answer.
+
+**Parked is not waiting to retry.** `StoppedBecause.WaitingForWifi` becomes
+`PassOutcome.WhenThereIsWifi`, and Android answers it with a one-time request
+constrained to `UNMETERED` rather than `Result.retry()` -- a retry comes back
+to the same metered connection and parks again, spending the backoff on
+nothing. `WaitingReason.ForWifi` is the same distinction on the screen, and it
+outranks a backoff: a row serving one out on a metered connection is not
+waiting on the backoff.
+
+The iOS half is thinner than it looks. `allowsCellularAccess` is set from the
+setting, in the `transports` lambda, which is the one place per pass that has
+the server in hand before anything is handed over -- but a background session
+*is* its configuration, so a change takes effect from the next launch of the
+process rather than the next pass. The setting is still obeyed meanwhile by
+the pass refusing to hand anything over; what the flag adds is stopping a
+transfer already running from continuing on cellular. Unverified, like
+everything else there, and written into stratus-app#117.
+
 The transport interface is shaped around "ask where you got to and continue",
 which `PUT` cannot do and tus can. It was written that way while `PUT` was the
 only implementation, and tus arrived as a second `Transport` plus a negotiation

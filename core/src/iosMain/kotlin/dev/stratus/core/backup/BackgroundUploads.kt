@@ -45,6 +45,20 @@ class BackgroundUploads(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
+     * Whether the system may carry these transfers over mobile data.
+     *
+     * Set before a pass hands anything over, from the server's own setting
+     * (stratus-app#133). **It is read when the session is built and not
+     * afterwards**, because a background session is its configuration -- so
+     * the honest statement is that it takes effect from the next launch of the
+     * process rather than the next pass. The setting is still obeyed in the
+     * meantime, by the pass refusing to hand anything over at all; this is what
+     * stops a transfer *already running* from continuing on cellular. Needs a
+     * device to confirm, which is stratus-app#117's.
+     */
+    var allowsCellular: Boolean = true
+
+    /**
      * The one session, by identifier.
      *
      * The identifier is what reconnects a relaunched process to transfers the
@@ -59,6 +73,7 @@ class BackgroundUploads(
                 // else would promise what iOS does not offer.
                 discretionary = true
                 sessionSendsLaunchEvents = true
+                allowsCellularAccess = allowsCellular
             },
             delegate = Delegate(),
             delegateQueue = null,

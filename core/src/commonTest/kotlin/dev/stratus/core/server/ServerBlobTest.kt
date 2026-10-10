@@ -36,6 +36,30 @@ class ServerBlobTest {
     }
 
     @Test
+    fun carriesWhetherMobileDataMayBeSpent() {
+        val instance = Server("https://host/", "edu", onlyOnWifi = false)
+        val (read, _) = ServerBlob.decode(ServerBlob.encode(instance, Credentials("edu", "pw")))!!
+        assertEquals(false, read.onlyOnWifi)
+    }
+
+    @Test
+    fun aRecordWrittenBeforeTheSettingExistedIsStillRead() {
+        // Signing somebody out costs them the record of what has been backed
+        // up, so the next pass walks the whole server to rebuild it. Paying
+        // that for a field with a default would be absurd (stratus-app#133).
+        val before = listOf("5", "https://host/", "edu", "pw", "files/phone_backup", "DCIM")
+            .joinToString("") { it.length.toString() + ":" + it }
+
+        val (read, credentials) = ServerBlob.decode(before)!!
+        assertEquals("https://host/", read.baseUrl)
+        assertEquals(setOf("DCIM"), read.sources)
+        assertEquals(Credentials("edu", "pw"), credentials)
+        // The safe half of the default: a phone that was sending over mobile
+        // data stops rather than carrying on unasked.
+        assertEquals(true, read.onlyOnWifi)
+    }
+
+    @Test
     fun treatsAnythingItCannotReadAsSignedOut() {
         // Never an exception: a record from a version that wrote a different
         // shape means "sign in again", not a crash on first launch.

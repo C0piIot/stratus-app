@@ -13,8 +13,15 @@ import dev.stratus.core.net.Credentials
  */
 internal object ServerBlob {
     // 5 dropped the generated id and the separate backup flag (stratus-app#131).
-    // An older blob simply does not decode, which reads as "sign in again".
-    private const val VERSION = "5"
+    // 6 added "only on wifi" (stratus-app#133).
+    //
+    // A 5 is still read, and that is the rule worth keeping rather than the
+    // version number: signing somebody out costs them the record of what has
+    // been backed up, so the next pass walks the whole server to rebuild it.
+    // Paying that for a field with a default would be absurd. A shape with no
+    // sensible default is what does not decode.
+    private const val VERSION = "6"
+    private const val WITHOUT_WIFI_SETTING = "5"
 
     fun encode(instance: Server, credentials: Credentials): String =
         listOf(
@@ -25,6 +32,7 @@ internal object ServerBlob {
             instance.backupRoot,
             // Newline-joined: a bucket id and an album identifier have none.
             instance.sources.joinToString("\n"),
+            if (instance.onlyOnWifi) "1" else "0",
         ).joinToString("") { "${it.length}:$it" }
 
     /** Null rather than an exception: an unreadable blob means "sign in again". */
@@ -42,12 +50,18 @@ internal object ServerBlob {
             fields += text.substring(start, end)
             at = end
         }
-        if (fields.size != 6 || fields[0] != VERSION) return null
+        val readable = (fields.size == 7 && fields[0] == VERSION) ||
+            (fields.size == 6 && fields[0] == WITHOUT_WIFI_SETTING)
+        if (!readable) return null
         return Server(
             baseUrl = fields[1],
             username = fields[2],
             backupRoot = fields[4],
             sources = fields[5].split("\n").filter { it.isNotBlank() }.toSet(),
+            // A record written before the setting existed takes the default,
+            // which is the safe half: a phone that was backing up over mobile
+            // data stops doing so rather than carrying on unasked.
+            onlyOnWifi = fields.getOrNull(6)?.let { it == "1" } ?: true,
         ) to Credentials(fields[2], fields[3])
     }
 }

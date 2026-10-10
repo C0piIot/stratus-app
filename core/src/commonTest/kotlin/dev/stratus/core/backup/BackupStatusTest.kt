@@ -21,8 +21,8 @@ class BackupStatusTest {
     private val database = BackupDatabase(BundledSQLiteDriver().open(":memory:"))
     private var clock = 1_000_000L
 
-    private fun status(access: MediaAccess = MediaAccess.Full) =
-        BackupStatus(database, Roll(access), now = { clock })
+    private fun status(access: MediaAccess = MediaAccess.Full, parked: Boolean = false) =
+        BackupStatus(database, Roll(access), now = { clock }, parked = { parked })
 
     private suspend fun queue(path: String, size: Long = 100) {
         database.migrate()
@@ -42,6 +42,29 @@ class BackupStatusTest {
         val state = status().of()
         assertTrue(state is BackupState.Waiting, "was $state")
         assertEquals(WaitingReason.InTheSystemsHands, state.reason)
+    }
+
+    @Test
+    fun saysItIsWaitingForWifiRatherThanForTheNextPass() = runTest {
+        // The next pass will park too, so "waiting for the next pass" over a
+        // backup somebody deliberately stopped is the silence this surface
+        // exists to remove (stratus-app#133).
+        queue(path = "/a.jpg")
+
+        val state = status(parked = true).of()
+        assertTrue(state is BackupState.Waiting, "was $state")
+        assertEquals(WaitingReason.ForWifi, state.reason)
+    }
+
+    @Test
+    fun aBackoffOnAMeteredConnectionIsStillAboutTheWifi() = runTest {
+        // The retry cannot happen either: what it is waiting for is the wifi.
+        queue(path = "/a.jpg")
+        database.pending().recordFailure("/a.jpg", "timeout", clock + 30_000)
+
+        val state = status(parked = true).of()
+        assertTrue(state is BackupState.Waiting, "was $state")
+        assertEquals(WaitingReason.ForWifi, state.reason)
     }
 
     @Test

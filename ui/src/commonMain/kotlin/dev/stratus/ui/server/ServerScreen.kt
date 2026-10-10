@@ -44,6 +44,9 @@ fun ServerScreen(
     onSignOut: () -> Unit,
     /** Opens the sign-in form on this server, filled in, to change any of it. */
     onEdit: () -> Unit,
+    /** Whether a pass may send over a connection somebody pays for by the byte. */
+    onlyOnWifi: Boolean,
+    onOnlyOnWifi: (Boolean) -> Unit,
     /** Whether crash reports are on, or null in a build that cannot send any. */
     reporting: Boolean?,
     onReporting: (Boolean) -> Unit,
@@ -84,6 +87,28 @@ fun ServerScreen(
                     // the dialog rather than guessed at from the word.
                     TextButton(onClick = { signingOut = true }) { Text("Sign out") }
                 }
+            }
+            Divider()
+
+            // Beside the folders rather than on the backup screen: that one
+            // answers "is it working", and this is part of what it should be
+            // doing. One question per surface (stratus-app#133).
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Only back up on wifi")
+                    Switch(checked = onlyOnWifi, onCheckedChange = onOnlyOnWifi)
+                }
+                Text(
+                    "A camera roll is the one thing on a phone big enough to " +
+                        "matter on a data plan. With this on, a pass on mobile " +
+                        "data still looks for new photographs and queues them — " +
+                        "it just waits for wifi to send them.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Divider()
 
