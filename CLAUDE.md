@@ -827,6 +827,25 @@ no test can watch it. So it decides nothing, and all of this lives in
   only exists while the app runs is a queue that does not exist.
 - **A second look at the camera roll must not restart a large video**, which is
   why enqueuing ignores what is already queued rather than replacing it.
+- **A photograph pays only for what was said about it** (stratus-app#134). The
+  queue makes the month folder before every file, and anything thrown there used
+  to be written down against the file -- so a `MKCOL` that merely timed out
+  spent its attempt and its doubling backoff. The split is whether the server
+  answered: a `DavError` is about that path and the row takes it, by the same
+  `kindOf` an upload is weighed by, and anything else is `QueueStep.Unreachable`
+  and ends the pass. Ending is the cheap half of it -- the next file would ask
+  the same silent server -- and `WaitingToRetry` already asks the system to come
+  back sooner.
+- **The folder is asked for once a pass, not once a photograph.** `Backup.prepare`
+  builds the `DavDirectoryMaker` per pass, so a set inside it has the pass for a
+  lifetime and needs no expiry. Fifty-four requests for one month were
+  fifty-four chances to time out.
+- **An offset that did not move is not progress.** Recording progress touches
+  neither the attempt count nor the next-attempt time, so a stalled transfer
+  reported as progress is offered again immediately and for ever; only an
+  advance buys another turn. This was found the other way round: the thing
+  breaking that loop in the wild was the folder timeout above, which means the
+  two had to be fixed together or the first fix would have exposed the second.
 
 The transport interface is shaped around "ask where you got to and continue",
 which `PUT` cannot do and tus can. It was written that way while `PUT` was the

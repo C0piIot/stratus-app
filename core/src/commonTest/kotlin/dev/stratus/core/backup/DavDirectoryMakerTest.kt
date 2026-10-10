@@ -75,6 +75,29 @@ class DavDirectoryMakerTest {
     }
 
     @Test
+    fun asksOncePerFolderHoweverManyPhotographsGoIntoIt() = runTest {
+        // One request per photograph is still fifty-four for one month across a
+        // pass, and each of them a chance to time out (stratus-app#134). One
+        // maker is one pass, so remembering what it made needs no expiry.
+        val server = Server("/files", "/files/phone_backup", "/files/phone_backup/2026", "/files/phone_backup/2026/10")
+        val maker = server.maker()
+        repeat(5) { maker.ensure("/files/phone_backup/2026/10/") }
+        assertEquals(listOf("/files/phone_backup/2026/10"), server.asked)
+    }
+
+    @Test
+    fun remembersTheFolderAndNotTheHabitOfAsking() = runTest {
+        val server = Server("/files", "/files/phone_backup", "/files/phone_backup/2026")
+        val maker = server.maker()
+        maker.ensure("/files/phone_backup/2026/10/")
+        maker.ensure("/files/phone_backup/2026/09/")
+        assertEquals(
+            listOf("/files/phone_backup/2026/10", "/files/phone_backup/2026/09"),
+            server.asked,
+        )
+    }
+
+    @Test
     fun theRootIsNobodysToMake() = runTest {
         val server = Server()
         server.maker().ensure("/")

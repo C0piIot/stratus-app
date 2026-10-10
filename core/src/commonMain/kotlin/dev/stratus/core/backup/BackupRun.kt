@@ -124,6 +124,18 @@ class BackupRun(
                     narrateEnd(log, done, queue)
                     return done
                 }
+                // Nothing was learned about any photograph, and the next file
+                // would ask the same unanswering server. Ending here is one
+                // timeout for an outage instead of one per file, and
+                // `WaitingToRetry` is what brings the system back sooner than
+                // the ordinary interval (stratus-app#134).
+                is QueueStep.Unreachable -> {
+                    val done = report.copy(stopped = StoppedBecause.WaitingToRetry)
+                    advance(prepared.mark, queue, assets)
+                    journal.ended(now(), done.stopped, done.uploaded, done.failed)
+                    narrateEnd(log, done, queue)
+                    return done
+                }
                 is QueueStep.Uploaded -> report.copy(uploaded = report.uploaded + 1)
                 is QueueStep.GaveUp -> report.copy(failed = report.failed + 1)
                 // A retry, a partial upload or one the system is now carrying
@@ -162,6 +174,7 @@ class BackupRun(
                 is QueueStep.HandedOver -> "handed ${step.path} to the system -- $left left"
                 is QueueStep.Retrying -> "retrying ${step.path} in ${step.inMillis}ms (${step.detail}) -- $left left"
                 is QueueStep.GaveUp -> "gave up on ${step.path} (${step.detail}) -- $left left"
+                is QueueStep.Unreachable -> "the server is not answering (${step.detail}) -- $left left"
             },
         )
     }

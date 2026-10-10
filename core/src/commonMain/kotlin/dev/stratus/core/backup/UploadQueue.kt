@@ -1,5 +1,6 @@
 package dev.stratus.core.backup
 
+import dev.stratus.core.dav.DavError
 import kotlinx.coroutines.CancellationException
 import io.ktor.util.date.getTimeMillis
 
@@ -18,6 +19,14 @@ sealed interface QueueStep {
     data class HandedOver(val path: String) : QueueStep
     data class Retrying(val path: String, val inMillis: Long, val detail: String) : QueueStep
     data class GaveUp(val path: String, val detail: String) : QueueStep
+
+    /**
+     * The server never answered, so nothing was learned about any photograph.
+     *
+     * No path on purpose: it is not about a file, and the whole bug it exists
+     * for was charging one for it (stratus-app#134).
+     */
+    data class Unreachable(val detail: String) : QueueStep
 }
 
 /**
@@ -79,12 +88,21 @@ class UploadQueue(
         // The server refuses a write whose parent does not exist -- measured, a
         // 409 -- and tus is stricter still: its destination is a path and the
         // folder has to be there before the upload is even created.
+        //
+        // Which failure this is decides who pays for it. A server that answered
+        // said something about *this path*, so the row takes it; a server that
+        // never answered -- a timeout, a reset, no DNS -- said nothing about any
+        // photograph, and charging one its attempt and its doubling backoff is
+        // how a file reaches a thirty-two minute wait without ever having been
+        // refused (stratus-app#134).
         try {
             directories.ensure(upload.path.substringBeforeLast('/') + "/")
         } catch (e: CancellationException) {
             throw e
+        } catch (e: DavError) {
+            return records.record(upload, UploadOutcome.Failed(kindOf(e), e.message ?: "could not make the folder"))
         } catch (e: Exception) {
-            return records.record(upload, UploadOutcome.Failed(FailureKind.Transient, e.message ?: "could not make the folder"))
+            return QueueStep.Unreachable(e.message ?: "the server did not answer")
         }
 
         // Resuming asks the transport to continue, never the local offset alone:
