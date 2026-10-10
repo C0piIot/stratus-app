@@ -62,6 +62,7 @@ class BackupRunTest {
         outcome: UploadOutcome = UploadOutcome.Done("etag"),
         engine: MockEngine = emptyServer(),
         sink: LogSink = Collected(),
+        directories: DirectoryMaker = DirectoryMaker { },
     ): BackupRun {
         database.migrate()
         return BackupRun(
@@ -76,7 +77,7 @@ class BackupRunTest {
                         cache = cache,
                         source = roll,
                         transport = Always(outcome),
-                        directories = { },
+                        directories = directories,
                     ),
                     index = BackupIndex(layout, cache, DavClient(HttpClient(engine), "https://host/dav/")),
                     mark = database.mark(),
@@ -226,6 +227,28 @@ class BackupRunTest {
 
         assertEquals(1, log.passes.size, log.passes.toString())
         assertEquals(log.lines, log.passes.single(), "the trail is what was said, in order")
+    }
+
+    @Test
+    fun aServerThatIsNotAnsweringEndsThePassRatherThanEveryFile() = runTest {
+        // The next file would ask the same silent server, so going on is one
+        // timeout per photograph instead of one per outage -- and every one of
+        // them charged to a file that was never refused (stratus-app#134).
+        val log = Collected()
+        val roll = RollOf(listOf(asset(1), asset(2), asset(3)))
+        val report = run(
+            roll,
+            sink = log,
+            directories = DirectoryMaker { throw IllegalStateException("Request timeout has expired") },
+        ).once(instance.copy(baseUrl = "https://${BackupLog.NARRATED_HOST}/"))
+
+        assertEquals(StoppedBecause.WaitingToRetry, report.stopped)
+        assertEquals(0, report.uploaded)
+        // WaitingToRetry is what asks the system to come back sooner.
+        assertTrue(
+            log.lines.any { it.startsWith("the server is not answering") },
+            "said ${log.lines}",
+        )
     }
 
     @Test

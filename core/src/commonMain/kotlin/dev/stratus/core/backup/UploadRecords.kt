@@ -64,8 +64,19 @@ class UploadRecords(
             }
 
             is UploadOutcome.Interrupted -> {
+                // The handle goes down either way, or resuming would ask the
+                // server about an upload it was never told the name of.
                 pending.recordProgress(upload.path, outcome.resume)
-                QueueStep.Progressed(upload.path, outcome.resume.offset)
+                // But an offset that did not move is not progress. Recording
+                // progress touches neither the attempt count nor the
+                // next-attempt time, so a stalled transfer called progress is
+                // picked up, stalls, and is picked up again with nothing in
+                // between -- immediately and for ever (stratus-app#134).
+                if (outcome.resume.offset > upload.offset) {
+                    QueueStep.Progressed(upload.path, outcome.resume.offset)
+                } else {
+                    failure(upload, FailureKind.Transient, "sent nothing at ${outcome.resume.offset}")
+                }
             }
 
             is UploadOutcome.HandedOver -> {

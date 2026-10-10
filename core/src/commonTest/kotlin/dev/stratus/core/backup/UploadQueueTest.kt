@@ -1,6 +1,7 @@
 package dev.stratus.core.backup
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import dev.stratus.core.dav.DavError
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
 import kotlinx.io.RawSource
@@ -35,7 +36,11 @@ private class FakeTransport(
 
 private class FakeDirectories : DirectoryMaker {
     val made = mutableListOf<String>()
-    override suspend fun ensure(path: String) { made += path }
+    var failWith: Exception? = null
+    override suspend fun ensure(path: String) {
+        failWith?.let { throw it }
+        made += path
+    }
 }
 
 class UploadQueueTest {
@@ -254,6 +259,57 @@ class UploadQueueTest {
         assertTrue(waits.all { it <= 60 * 60_000L }, "$waits")
     }
 
+    // ---- A folder is not a photograph (stratus-app#134) -------------------
+
+    @Test
+    fun aServerThatNeverAnsweredCostsThePhotographNothing() = runTest {
+        val queue = queue()
+        queue.enqueue(listOf(asset(5)))
+        directories.failWith = IllegalStateException("Request timeout has expired")
+
+        val step = queue.runNext()
+        assertTrue(step is QueueStep.Unreachable, "was $step")
+
+        // The row is untouched -- no attempt spent, no backoff served -- which
+        // is the whole bug: six files reached a thirty-two minute wait without
+        // the server ever having refused one of them.
+        val row = queue.outstanding().single()
+        assertEquals(0, row.attempts)
+        assertNull(row.lastError)
+
+        directories.failWith = null
+        assertTrue(queue.runNext() is QueueStep.Uploaded, "it was made to wait")
+    }
+
+    @Test
+    fun aFolderTheServerRefusesIsThePhotographsProblem() = runTest {
+        // The other half: the server did answer, and about this very path.
+        // Weighed by the same rule an upload is, so a forbidden folder stops
+        // being asked for rather than retrying for ever.
+        val queue = queue()
+        queue.enqueue(listOf(asset(5)))
+        directories.failWith = DavError.Forbidden("/files/phone_backup/2026/09")
+
+        assertTrue(queue.runNext() is QueueStep.GaveUp, "a refusal is not a pause")
+    }
+
+    @Test
+    fun aTransferThatMovedNothingIsNotProgress() = runTest {
+        // Twice at the same offset is what a stalled link looks like, and
+        // recording it as progress spends neither an attempt nor a wait -- so
+        // the same file is offered again at once, and for ever.
+        val transport = FakeTransport(
+            resumable = true,
+            answers = mutableListOf(UploadOutcome.Interrupted(Resume("handle", 40))),
+        )
+        val queue = queue(transport)
+        queue.enqueue(listOf(asset(5)))
+
+        assertEquals(QueueStep.Progressed(layout.pathFor(asset(5)), 40), queue.runNext())
+        val step = queue.runNext()
+        assertTrue(step is QueueStep.Retrying, "was $step")
+    }
+
     @Test
     fun doesNotKeepAskingAServerThatSaidNo() = runTest {
         // Rejected credentials do not improve by being asked again, and asking
@@ -308,6 +364,10 @@ class UploadQueueTest {
         queue.enqueue(listOf(asset(5)))
 
         queue.runNext()
+        // Nothing arrived, so it is a failure and waits its turn like one
+        // (stratus-app#134) -- and the handle is written down all the same,
+        // which is the property this test is really about.
+        clock += 30_000
         queue.runNext()
 
         assertEquals(Resume("upload-1", 0), transport.sent[1].second)
