@@ -234,8 +234,9 @@ abstract class E2E {
      */
     fun turnBackupOn(allow: Boolean = true) {
         openBackup()
-        chooseEveryFolder(allow)
+        // Before the folders and not after: see spendMobileData.
         if (allow) spendMobileData()
+        chooseEveryFolder(allow)
         goBack()
         see("Settings")
         goBack()
@@ -252,6 +253,12 @@ abstract class E2E {
      * is about. The default is on (stratus-app#133) and proving it stays on
      * is `BackupRunTest`'s job, on the JVM, where the answer is a fake and not
      * the weather. Here the condition gets stated rather than inherited.
+     *
+     * **It has to happen before any folder is chosen.** Turning this off
+     * starts a pass there and then, which is the whole point of it
+     * (`SignedInController.setOnlyOnWifi`) -- and with folders already ticked
+     * that pass uploads the photograph a test was about to switch the server
+     * off for. With none ticked there is nothing for it to send.
      */
     private fun spendMobileData() {
         tap("Only back up on wifi")
