@@ -380,6 +380,15 @@ Three surfaces, and no more than three:
    `StratusMark`, an `ImageVector` on the mark's own 64-unit grid: Android
    carries it twice as a drawable already, for the launcher and for the Files
    sidebar, and neither exists in a multiplatform module.
+
+   **And the window had a bar of its own**, which is what shipped: declaring
+   no `android:theme` is not "no decoration" but the platform default, which
+   has an action bar and titles it from `android:label` -- so the app ran with
+   two bars both saying Stratus, and nothing in Compose could remove the top
+   one because it belongs to the window. `Theme.Stratus` is a `NoActionBar`
+   parent in `values` and `values-night`, there being no `DayNight` variant of
+   it, and what the parent is still good for is the window background between
+   the launcher and the first frame.
 3. **A menu**, which is two screens and a switch: **Server** -- its address,
    its user, editing it and signing out -- and **Backup**, which is the fourth
    surface below. Editing a server is the sign-in form again, filled in and
