@@ -150,6 +150,11 @@ private fun SignedIn(
     var browser by remember { mutableStateOf<BrowserController?>(null) }
     var search by remember { mutableStateOf<SearchController?>(null) }
     var cast by remember { mutableStateOf<CastController?>(null) }
+    // Collected rather than read off the flow where the bar is drawn. Reading
+    // `.value` in composition subscribes to nothing, so the glyph appeared
+    // only if something else happened to recompose after the probe answered
+    // -- which the emulator caught and no JVM test could have.
+    var canSearch by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { signedIn.start() }
 
@@ -166,6 +171,11 @@ private fun SignedIn(
         // than either answer.
         search = container.search(scope)?.also { it.start() }
         cast = container.cast(scope)
+    }
+
+    LaunchedEffect(search) {
+        canSearch = false
+        search?.state?.collect { canSearch = it.offered == true }
     }
 
     // Polled rather than pushed: the backup runs in another process, and reading
@@ -293,7 +303,7 @@ private fun SignedIn(
                     // ordinary negotiation this app makes everywhere: a button
                     // that explained itself on every tap would be a button
                     // most servers could not honour.
-                    onSearch = if (search?.state?.value?.offered == true) {
+                    onSearch = if (canSearch) {
                         { go(Screen.Search) }
                     } else {
                         null

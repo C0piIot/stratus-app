@@ -804,6 +804,14 @@ photo access after somebody granted it and `:ui` had no test to notice
 is navigation and when to call `resumed()`. The test for a new piece of state
 on a screen is where it lives: if it is in a `remember`, it is untested.
 
+**And a `StateFlow.value` read in composition subscribes to nothing**, which
+is the same leak wearing a different hat and cost an emulator run to find. The
+bar offers the magnifying glass when the search probe has answered, and that
+answer arrives after the first composition -- read as `.value` the glyph
+appeared only when something else happened to recompose, so it was there in
+two of three tests. `collectAsState`, or a `LaunchedEffect` that collects into
+a `remember`ed value; never `.value` for something that changes.
+
 **And never return early out of a composable**, which has now cost two
 debugging sessions and is the one rule here that reads like superstition. It
 is legal, and the compiler balances the groups for it -- but a branch holding
