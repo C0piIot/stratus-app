@@ -773,6 +773,18 @@ photo access after somebody granted it and `:ui` had no test to notice
 is navigation and when to call `resumed()`. The test for a new piece of state
 on a screen is where it lives: if it is in a `remember`, it is untested.
 
+**And never return early out of a composable**, which has now cost two
+debugging sessions and is the one rule here that reads like superstition. It
+is legal, and the compiler balances the groups for it -- but a branch holding
+a `SubcomposeLayout`, which a `Scaffold` and a lazy list each are, is left and
+re-entered when the condition flips, and the slot table is corrupted at
+dispose with an `ArrayIndexOutOfBoundsException` from somewhere in
+`SlotWriter` naming nothing of ours (stratus-app#85). It was `?: return` in
+the browser the first time and `return@Page` on the folders screen the second,
+where granting the photo permission is what flips it. Write the `if`. Only the
+emulator suite ever sees this, and only at the moment the activity is
+destroyed.
+
 There is one qualification to all of that, with a sting in it: **the iOS source
 sets compile on Linux -- but only on x86_64.** Kotlin/Native does not support
 `linux-aarch64` as a host at all, so on the ARM development box every Apple
