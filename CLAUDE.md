@@ -368,6 +368,18 @@ Three surfaces, and no more than three:
    to; every install is somebody's own.
 2. **The file browser**, which is the main screen: walk the tree, open or
    download a file, rename it, delete it.
+
+   **Its bar is the app's bar** (stratus-app#140): the mark and the word
+   `Stratus` on the left, the menu on the right, and the same thing whatever
+   folder is open -- which is the web UI's navbar, and deliberately. What was
+   there before was the path, so the one piece of furniture that never changes
+   was the one that changed on every tap, and the backup strip sat above it,
+   which made the bar look like the first row of the listing. The path and the
+   arrow out of it are a row underneath now, with the strip, because both of
+   those belong to the folder rather than to the app. The mark is drawn from
+   `StratusMark`, an `ImageVector` on the mark's own 64-unit grid: Android
+   carries it twice as a drawable already, for the launcher and for the Files
+   sidebar, and neither exists in a multiplatform module.
 3. **A menu**, which is two screens and a switch: **Server** -- its address,
    its user, editing it and signing out -- and **Backup**, which is the fourth
    surface below. Editing a server is the sign-in form again, filled in and
@@ -760,6 +772,18 @@ photo access after somebody granted it and `:ui` had no test to notice
 (stratus-app#75). It is `SignedInController` now, and what the interface keeps
 is navigation and when to call `resumed()`. The test for a new piece of state
 on a screen is where it lives: if it is in a `remember`, it is untested.
+
+**And never return early out of a composable**, which has now cost two
+debugging sessions and is the one rule here that reads like superstition. It
+is legal, and the compiler balances the groups for it -- but a branch holding
+a `SubcomposeLayout`, which a `Scaffold` and a lazy list each are, is left and
+re-entered when the condition flips, and the slot table is corrupted at
+dispose with an `ArrayIndexOutOfBoundsException` from somewhere in
+`SlotWriter` naming nothing of ours (stratus-app#85). It was `?: return` in
+the browser the first time and `return@Page` on the folders screen the second,
+where granting the photo permission is what flips it. Write the `if`. Only the
+emulator suite ever sees this, and only at the moment the activity is
+destroyed.
 
 There is one qualification to all of that, with a sting in it: **the iOS source
 sets compile on Linux -- but only on x86_64.** Kotlin/Native does not support

@@ -1,7 +1,6 @@
 package dev.stratus.ui
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -254,15 +253,17 @@ private fun SignedIn(
             // and it says the same thing.
             val open = browser
             if (open != null) {
-                Column {
-                    BackupStrip(state.backupState) { go(Screen.Backup) }
-                    BrowserScreen(
-                        open,
-                        cast,
-                        onOpenSettings = { go(Screen.Settings) },
-                        onEditServer = onEdit,
-                    )
-                }
+                // The strip goes through the screen rather than above it: the
+                // app's bar has to be the top of the app, and a banner sitting
+                // over it made the bar look like part of the listing
+                // (stratus-app#140).
+                BrowserScreen(
+                    open,
+                    cast,
+                    onOpenSettings = { go(Screen.Settings) },
+                    onEditServer = onEdit,
+                    banner = { BackupStrip(state.backupState) { go(Screen.Backup) } },
+                )
             }
         }
     }

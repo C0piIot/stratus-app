@@ -4,13 +4,18 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.cast.CastController
@@ -42,6 +48,7 @@ import dev.stratus.core.files.BrowserFailure
 import dev.stratus.core.files.Confirmation
 import dev.stratus.core.share.ShareLife
 import dev.stratus.ui.Glyph
+import dev.stratus.ui.StratusMark
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +58,8 @@ fun BrowserScreen(
     onOpenSettings: () -> Unit,
     /** For a server that stopped accepting the sign-in this app holds. */
     onEditServer: () -> Unit = {},
+    /** Drawn under the bar and above everything else: the backup strip, from App. */
+    banner: @Composable () -> Unit = {},
 ) {
     val state by controller.state.collectAsState()
     // Which of two indicators a listing shows: the pulled one for a pull, the
@@ -59,14 +68,19 @@ fun BrowserScreen(
     LaunchedEffect(state.busy) { if (!state.busy) pulled = false }
 
     Scaffold(
+        // The app's own bar, and the only one that is: the mark and the name on
+        // the left and the menu on the right, which is the web UI's navbar
+        // (stratus-app#140). What used to be here -- the path, and an arrow to
+        // climb out of it -- is a row of its own below, because a bar that
+        // changes with the folder is not somewhere to put the thing that never
+        // changes.
         topBar = {
             TopAppBar(
-                title = { Text(state.path) },
-                navigationIcon = {
-                    if (state.path != "/") {
-                        IconButton(onClick = { controller.goUp() }) {
-                            Text(Glyph.BACK, style = MaterialTheme.typography.titleLarge)
-                        }
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(StratusMark, contentDescription = null, Modifier.size(22.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Stratus")
                     }
                 },
                 actions = {
@@ -76,6 +90,8 @@ fun BrowserScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            banner()
+            Where(state.path, up = { controller.goUp() })
             if (state.busy && !pulled) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.failure?.let {
                 Text(explain(it), Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
@@ -104,7 +120,7 @@ fun BrowserScreen(
             ) {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(state.entries, key = { it.path }) { entry ->
-                        Row(entry, controller, cast)
+                        Entry(entry, controller, cast)
                         HorizontalDivider()
                     }
                 }
@@ -120,9 +136,35 @@ fun BrowserScreen(
     }
 }
 
+/**
+ * Which folder this is, and the way out of it.
+ *
+ * Under the bar rather than in it, and the arrow with it: they belong to the
+ * listing, and the listing is what changes. At the origin there is nowhere to
+ * climb to, so there is no arrow -- the collections there are the top.
+ */
+@Composable
+private fun Where(path: String, up: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = if (path == "/") 16.dp else 4.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (path != "/") {
+            IconButton(onClick = up) {
+                Text(Glyph.BACK, style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        Text(
+            path,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Row(entry: DavResource, controller: BrowserController, cast: CastController?) {
+private fun Entry(entry: DavResource, controller: BrowserController, cast: CastController?) {
     var menuOpen by remember { mutableStateOf(false) }
 
     Box {

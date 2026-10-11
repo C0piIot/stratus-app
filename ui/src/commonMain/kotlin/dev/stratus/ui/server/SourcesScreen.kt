@@ -58,6 +58,14 @@ fun SourcesScreen(
         actions = { TextButton(onClick = { onSave(picked) }) { Text("Save") } },
         scroll = false,
     ) {
+        // An if and not an early return, which is what this was until it
+        // crashed the emulator suite at dispose. A `return@Page` out of a
+        // composable is legal and the compiler balances the groups for it --
+        // but it leaves and re-enters a branch holding two `SubcomposeLayout`s,
+        // this page's Scaffold and the list below, every time the access
+        // changes. That is the exact shape the slot table was found corrupted
+        // in before (stratus-app#85), and granting the permission is what
+        // flips it.
         if (access == MediaAccess.None) {
             // Not an empty list: a phone with no photographs and a phone that
             // will not show them look identical, and only one of them is
@@ -74,33 +82,35 @@ fun SourcesScreen(
                     Text("Allow access to photos")
                 }
             }
-            return@Page
-        }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = { picked = available.mapTo(mutableSetOf()) { it.id } }) { Text("Every folder") }
+                TextButton(onClick = { picked = emptySet() }) { Text("None") }
+            }
+            Footnote(
+                if (picked.isEmpty()) {
+                    "Nothing is backed up. Tick a folder to start."
+                } else {
+                    "${picked.size} of ${available.size} folders are backed up."
+                },
+            )
 
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { picked = available.mapTo(mutableSetOf()) { it.id } }) { Text("Every folder") }
-            TextButton(onClick = { picked = emptySet() }) { Text("None") }
-        }
-        Footnote(
-            if (picked.isEmpty()) {
-                "Nothing is backed up. Tick a folder to start."
-            } else {
-                "${picked.size} of ${available.size} folders are backed up."
-            },
-        )
-
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(available, key = { it.id }) { source ->
-                val ticked = source.id in picked
-                ListItem(
-                    leadingContent = { Text(Glyph.FOLDERS) },
-                    headlineContent = { Text(source.label) },
-                    supportingContent = { Text("${source.count} photographs") },
-                    trailingContent = { Checkbox(checked = ticked, onCheckedChange = null) },
-                    modifier = Modifier.toggleable(value = ticked) { on ->
-                        picked = if (on) picked + source.id else picked - source.id
-                    },
-                )
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(available, key = { it.id }) { source ->
+                    val ticked = source.id in picked
+                    ListItem(
+                        leadingContent = { Text(Glyph.FOLDERS) },
+                        headlineContent = { Text(source.label) },
+                        supportingContent = { Text("${source.count} photographs") },
+                        trailingContent = { Checkbox(checked = ticked, onCheckedChange = null) },
+                        modifier = Modifier.toggleable(value = ticked) { on ->
+                            picked = if (on) picked + source.id else picked - source.id
+                        },
+                    )
+                }
             }
         }
     }
