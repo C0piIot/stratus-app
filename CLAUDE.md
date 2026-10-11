@@ -368,6 +368,18 @@ Three surfaces, and no more than three:
    to; every install is somebody's own.
 2. **The file browser**, which is the main screen: walk the tree, open or
    download a file, rename it, delete it.
+
+   **Its bar is the app's bar** (stratus-app#140): the mark and the word
+   `Stratus` on the left, the menu on the right, and the same thing whatever
+   folder is open -- which is the web UI's navbar, and deliberately. What was
+   there before was the path, so the one piece of furniture that never changes
+   was the one that changed on every tap, and the backup strip sat above it,
+   which made the bar look like the first row of the listing. The path and the
+   arrow out of it are a row underneath now, with the strip, because both of
+   those belong to the folder rather than to the app. The mark is drawn from
+   `StratusMark`, an `ImageVector` on the mark's own 64-unit grid: Android
+   carries it twice as a drawable already, for the launcher and for the Files
+   sidebar, and neither exists in a multiplatform module.
 3. **A menu**, which is two screens and a switch: **Server** -- its address,
    its user, editing it and signing out -- and **Backup**, which is the fourth
    surface below. Editing a server is the sign-in form again, filled in and
