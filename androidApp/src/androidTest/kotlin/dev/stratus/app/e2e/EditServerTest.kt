@@ -47,7 +47,7 @@ class EditServerTest : E2E() {
 
         replace("Password", Stratus.otherPassword)
         tap("Save")
-        see("Server")
+        onTheBrowser()
         gone("no longer accepts this sign-in")
 
         openServer()
@@ -59,11 +59,11 @@ class EditServerTest : E2E() {
     fun aNewAddressKeepsTheSameServer() {
         signedIn()
         openServer()
-        tap("Edit")
+        tap("Edit server")
         replace("Server address", moved.address)
         // The same host, so the plain-http answer already given still stands.
         tap("Save")
-        see("Server")
+        onTheBrowser()
 
         openServer()
         assertEquals(1, shownAs(moved.address))
@@ -74,10 +74,10 @@ class EditServerTest : E2E() {
     fun cancellingAnEditChangesNothing() {
         signedIn()
         openServer()
-        tap("Edit")
+        tap("Edit server")
         replace("Username", "somebody-else")
         tap("Cancel")
-        see("Server")
+        onTheBrowser()
 
         openServer()
         see(link.address)

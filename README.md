@@ -55,13 +55,17 @@ Worth knowing before judging the app for it:
   still interfere.
 - **Originals are uploaded as they are**, including HEIC and Live Photos. A
   backup that transcodes is not a backup.
+- **It takes the phone's colours.** Light or dark follows the system setting,
+  and on Android 12 and up the palette is the one Android derives from your
+  wallpaper. Older Androids and iOS get Stratus's own.
 - **Wifi only, until you say otherwise.** A camera roll is the one thing on a
   phone big enough to matter on a data plan, so "only back up on wifi" is on
-  when you sign in; the switch is under **Server**. It parks the sending and
-  not the looking: a pass on mobile data still finds new photographs and
-  queues them, and the backup screen says how much is waiting for wifi rather
-  than going quiet. Turning it off starts a pass there and then instead of
-  waiting for the next window.
+  when you sign in; the switch is under **Settings → Backup**, beside the same
+  screen that says whether the backup is working. It parks the sending and not
+  the looking: a pass on mobile data still finds new photographs and queues
+  them, and the backup screen says how much is waiting for wifi rather than
+  going quiet. Turning it off starts a pass there and then instead of waiting
+  for the next window.
 - **A backup only ever adds.** Deleting a photograph on the phone does not
   delete it on the server, and deleting a file on the server does not delete it
   on the phone — nothing in the app has a way to remove either. A file you
@@ -238,7 +242,7 @@ the same app, without the cast button.
 
 ## Crash reports
 
-Off until you turn them on, under Servers. Then a crash sends the error and
+Off until you turn them on, under **Settings**. Then a crash sends the error and
 which phone it happened on to [Sentry](https://sentry.io), a service that is not
 your server. Never a photograph, a screenshot or a password, but an error can
 name a server address or a file — and on one address it also carries the backup

@@ -10,8 +10,8 @@ class PermissionsTest : E2E() {
     private fun seedAFolder() = Phone.photograph("$unique.jpg", unique, ByteArray(1_000) { 1 })
 
     private fun openFolders() {
-        openServer()
-        tap("Choose folders")
+        openBackup()
+        tap("Folders")
         see("Folders")
     }
 
@@ -36,10 +36,10 @@ class PermissionsTest : E2E() {
         Phone.grantPhotos()
         signedIn()
         // Choosing folders is what turns backup on (stratus-app#131), so
-        // "again" is opening the screen and saving the same choice. Already on
-        // the server screen by then, so there is nothing to open first.
+        // "again" is opening the screen and saving the same choice. Saving
+        // comes back to the backup screen, so there is nothing to open first.
         val chooseAgain = {
-            tap("Choose folders")
+            tap("Folders")
             tap("Every folder")
             tap("Save")
         }

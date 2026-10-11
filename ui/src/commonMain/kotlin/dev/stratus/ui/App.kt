@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,16 +28,19 @@ import dev.stratus.core.files.BrowserController
 import dev.stratus.core.signin.SignInState
 import dev.stratus.ui.backup.BackupScreen
 import dev.stratus.ui.backup.BackupStrip
+import dev.stratus.ui.backup.oneLine
 import dev.stratus.ui.files.BrowserScreen
 import dev.stratus.ui.server.ServerScreen
 import dev.stratus.ui.server.SourcesScreen
+import dev.stratus.ui.settings.SettingsScreen
 import dev.stratus.ui.signin.SignInScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Where in the app somebody is. Four places, so a sealed type rather than flags. */
+/** Where in the app somebody is. A handful of places, so a sealed type rather than flags. */
 private sealed interface Screen {
     data object Browser : Screen
+    data object Settings : Screen
     data object Backup : Screen
     data object Server : Screen
     data object Sources : Screen
@@ -67,7 +69,7 @@ fun App(
 
     LaunchedEffect(Unit) { signIn.restore() }
 
-    MaterialTheme {
+    StratusTheme {
         // Android has drawn edge to edge without asking since targetSdk 35, and
         // iOS has a notch: without this the first thing on a screen sits under
         // the status bar, which is where the sign-in form's server address was.
@@ -132,7 +134,17 @@ private fun SignedIn(
         }
     }
     val state by signedIn.state.collectAsState()
-    var screen by remember { mutableStateOf<Screen>(Screen.Browser) }
+    // A stack and not a current screen, because the same screen is now reached
+    // from two places: the strip opens Backup over the browser, the menu opens
+    // it over Settings, and back has to answer the way it was come to.
+    var stack by remember { mutableStateOf(listOf<Screen>(Screen.Browser)) }
+    val screen = stack.last()
+    fun go(next: Screen) { stack = stack + next }
+    fun leave(): Boolean {
+        if (stack.size == 1) return false
+        stack = stack.dropLast(1)
+        return true
+    }
     var browser by remember { mutableStateOf<BrowserController?>(null) }
     var cast by remember { mutableStateOf<CastController?>(null) }
 
@@ -171,37 +183,45 @@ private fun SignedIn(
     DisposableEffect(screen, browser) {
         back.onBack = when (screen) {
             is Screen.Browser -> browser?.let { { it.goUp() } } ?: { false }
-            is Screen.Sources -> { { screen = Screen.Server; true } }
-            else -> { { screen = Screen.Browser; true } }
+            else -> { { leave() } }
         }
         onDispose { back.onBack = null }
     }
 
     when (screen) {
+        is Screen.Settings -> SettingsScreen(
+            serverAddress = state.server?.baseUrl.orEmpty(),
+            backupSummary = oneLine(state.backupState),
+            onServer = { go(Screen.Server) },
+            onBackup = { go(Screen.Backup) },
+            reporting = state.reporting.takeIf { CrashReports.available },
+            onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
+            onClose = { leave() },
+        )
+
         is Screen.Backup -> BackupScreen(
             state = state.backupState,
             failures = state.failures,
+            chosenFolders = state.server?.sources?.size ?: 0,
+            onChooseFolders = { go(Screen.Sources) },
+            onlyOnWifi = state.server?.onlyOnWifi ?: true,
+            onOnlyOnWifi = { only -> scope.launch { signedIn.setOnlyOnWifi(only) } },
             onBackUpNow = onBackUpNow,
-            onClose = { screen = Screen.Browser },
+            onClose = { leave() },
         )
 
         is Screen.Server -> state.server?.let { server ->
             ServerScreen(
                 server = server,
-                onChooseSources = { screen = Screen.Sources },
                 onSignOut = {
                     scope.launch {
                         signedIn.signOut()
                         onInstancesChanged()
-                        screen = Screen.Browser
+                        stack = listOf(Screen.Browser)
                     }
                 },
-                onlyOnWifi = server.onlyOnWifi,
-                onOnlyOnWifi = { only -> scope.launch { signedIn.setOnlyOnWifi(only) } },
-                reporting = state.reporting.takeIf { CrashReports.available },
-                onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
                 onEdit = onEdit,
-                onClose = { screen = Screen.Browser },
+                onClose = { leave() },
             )
         }
 
@@ -215,10 +235,10 @@ private fun SignedIn(
                 onSave = { chosen ->
                     scope.launch {
                         signedIn.chooseSources(chosen)
-                        screen = Screen.Server
+                        leave()
                     }
                 },
-                onClose = { screen = Screen.Server },
+                onClose = { leave() },
             )
         }
 
@@ -235,11 +255,11 @@ private fun SignedIn(
             val open = browser
             if (open != null) {
                 Column {
-                    BackupStrip(state.backupState) { screen = Screen.Backup }
+                    BackupStrip(state.backupState) { go(Screen.Backup) }
                     BrowserScreen(
                         open,
                         cast,
-                        onOpenServer = { screen = Screen.Server },
+                        onOpenSettings = { go(Screen.Settings) },
                         onEditServer = onEdit,
                     )
                 }
