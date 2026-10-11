@@ -6,6 +6,7 @@ import dev.stratus.core.net.darwinTrust
 import dev.stratus.core.net.basicAuthHeader
 import dev.stratus.core.backup.negotiateTus
 import dev.stratus.core.backup.BackgroundUploads
+import dev.stratus.core.backup.IosNetwork
 import dev.stratus.core.backup.BackgroundTusTransport
 import dev.stratus.core.backup.BackgroundPutTransport
 import dev.stratus.core.server.ServerStore
@@ -89,6 +90,7 @@ private fun build(registersDomains: Boolean): AppContainer {
     caster = NoCaster(),
     databasePath = databasePath(),
     assets = IosAssetSource(),
+    network = IosNetwork(),
     // A store of its own rather than the container's, which does not exist
     // yet here. It is a view of the keychain and holds nothing, so a second
     // one costs nothing either.
@@ -101,6 +103,9 @@ private fun build(registersDomains: Boolean): AppContainer {
     transports = { connection, instance ->
         // On the request and not in a plugin: the session runs outside this
         // process and cannot ask anything of ours for a header.
+        // Here because this is the one place per pass that has the server in
+        // hand before anything is handed over (stratus-app#133).
+        uploads.allowsCellular = !instance.onlyOnWifi
         val credentials = ServerStore(secure).credentials()?.let(::basicAuthHeader)
         negotiateTus(connection.http, instance.baseUrl)
             ?.let { BackgroundTusTransport(connection.http, it, uploads, credentials) }

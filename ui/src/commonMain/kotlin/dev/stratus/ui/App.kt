@@ -127,7 +127,9 @@ private fun SignedIn(
     // The main thread, for the reason the other one says.
     val scope = rememberCoroutineScope { Dispatchers.Main.immediate }
     val signedIn = remember {
-        container.signedIn(onAsk) { on -> if (on) CrashReports.start() else CrashReports.stop() }
+        container.signedIn(onAsk, backUpNow = { onBackUpNow?.invoke() }) { on ->
+            if (on) CrashReports.start() else CrashReports.stop()
+        }
     }
     val state by signedIn.state.collectAsState()
     var screen by remember { mutableStateOf<Screen>(Screen.Browser) }
@@ -194,6 +196,8 @@ private fun SignedIn(
                         screen = Screen.Browser
                     }
                 },
+                onlyOnWifi = server.onlyOnWifi,
+                onOnlyOnWifi = { only -> scope.launch { signedIn.setOnlyOnWifi(only) } },
                 reporting = state.reporting.takeIf { CrashReports.available },
                 onReporting = { on -> scope.launch { signedIn.setReporting(on) } },
                 onEdit = onEdit,

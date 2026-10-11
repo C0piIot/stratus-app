@@ -55,6 +55,13 @@ Worth knowing before judging the app for it:
   still interfere.
 - **Originals are uploaded as they are**, including HEIC and Live Photos. A
   backup that transcodes is not a backup.
+- **Wifi only, until you say otherwise.** A camera roll is the one thing on a
+  phone big enough to matter on a data plan, so "only back up on wifi" is on
+  when you sign in; the switch is under **Server**. It parks the sending and
+  not the looking: a pass on mobile data still finds new photographs and
+  queues them, and the backup screen says how much is waiting for wifi rather
+  than going quiet. Turning it off starts a pass there and then instead of
+  waiting for the next window.
 - **A backup only ever adds.** Deleting a photograph on the phone does not
   delete it on the server, and deleting a file on the server does not delete it
   on the phone — nothing in the app has a way to remove either. A file you

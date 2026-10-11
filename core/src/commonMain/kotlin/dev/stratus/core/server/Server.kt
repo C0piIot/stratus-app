@@ -20,6 +20,17 @@ data class Server(
     val backupRoot: String = DEFAULT_BACKUP_ROOT,
     /** Which sources feed the backup. Empty means none, which means no backup. */
     val sources: Set<String> = emptySet(),
+    /**
+     * Whether a pass may send over a connection somebody pays for by the byte.
+     *
+     * On by default, which is the first setting every photo backup has and the
+     * conservative half of a choice that cannot be unmade later: a camera roll
+     * is the one thing on a phone big enough to matter on a data plan
+     * (stratus-app#133). It parks the sending and not the looking -- a pass on
+     * mobile data still enumerates and queues, so the screen can say how much
+     * is waiting rather than nothing at all.
+     */
+    val onlyOnWifi: Boolean = true,
 ) {
     /** Whether a pass has anything to do, which is a question about [sources]. */
     val backupEnabled: Boolean get() = sources.isNotEmpty()

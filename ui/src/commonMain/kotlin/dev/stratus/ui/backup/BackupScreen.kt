@@ -83,6 +83,10 @@ internal fun explain(state: BackupState): String = when (state) {
     is BackupState.Waiting -> when (state.reason) {
         WaitingReason.ForTheNextPass ->
             "Waiting for the next pass. Nothing is wrong; the phone decides when."
+        WaitingReason.ForWifi ->
+            "Waiting for wifi. New photographs are queued as they are taken; " +
+                "they go the moment you are on wifi, or turn off \"only back " +
+                "up on wifi\" under Server."
         WaitingReason.ForARetry ->
             "Something did not go through and will be tried again by itself. " +
                 "Nothing needs doing."

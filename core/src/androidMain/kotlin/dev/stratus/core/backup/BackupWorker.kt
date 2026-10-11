@@ -53,7 +53,17 @@ class BackupWorker(
         // Coming back later is WorkManager's job; whether there is a reason to
         // is the queue's, and which item is ready is the queue's too. The two
         // backoffs are about different things and do not fight.
-        return if (outcome == PassOutcome.ComeBackLater) Result.retry() else Result.success()
+        return when (outcome) {
+            PassOutcome.ComeBackLater -> Result.retry()
+            // Not a retry, which would come back to the same metered
+            // connection and park again, spending the backoff on nothing. A
+            // constraint is the thing that waits for wifi (stratus-app#133).
+            PassOutcome.WhenThereIsWifi -> {
+                whenThereIsWifi(applicationContext)
+                Result.success()
+            }
+            PassOutcome.Finished -> Result.success()
+        }
     }
 
     /**
@@ -89,6 +99,7 @@ class BackupWorker(
         private const val NOTIFICATION = 1
         private const val PERIODIC = "stratus-backup"
         private const val ONCE = "stratus-backup-now"
+        private const val ON_WIFI = "stratus-backup-on-wifi"
 
         /**
          * Asks Android to come back regularly.
@@ -104,6 +115,25 @@ class BackupWorker(
                 PeriodicWorkRequestBuilder<BackupWorker>(6, TimeUnit.HOURS)
                     .setConstraints(
                         Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
+                    )
+                    .build(),
+            )
+        }
+
+        /**
+         * Comes back the moment the phone is on a connection nobody pays for.
+         *
+         * `REPLACE` rather than `KEEP`: the request is spent once it runs, and
+         * one left over from a previous park would otherwise be kept in place
+         * of this one for ever.
+         */
+        fun whenThereIsWifi(context: Context) {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                ON_WIFI,
+                androidx.work.ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<BackupWorker>()
+                    .setConstraints(
+                        Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build(),
                     )
                     .build(),
             )

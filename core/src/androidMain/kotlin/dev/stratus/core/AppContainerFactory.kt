@@ -3,6 +3,7 @@ package dev.stratus.core
 import android.content.Context
 import android.provider.DocumentsContract
 import dev.stratus.core.backup.AndroidAssetSource
+import dev.stratus.core.backup.AndroidNetwork
 import dev.stratus.core.cast.AndroidCaster
 import dev.stratus.core.cast.Caster
 import dev.stratus.core.cast.NoCaster
@@ -63,6 +64,7 @@ private fun build(application: Context): AppContainer {
         caster = casterFor(application),
         databasePath = application.filesDir.resolve("backup.db").absolutePath,
         assets = AndroidAssetSource(application),
+        network = AndroidNetwork(application),
         // Files keeps the storage locations a provider offers until something
         // tells it they moved, so a server added or removed would otherwise
         // not show up there until the next reboot (stratus-app#104).

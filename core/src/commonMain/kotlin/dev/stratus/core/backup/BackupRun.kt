@@ -27,6 +27,16 @@ enum class StoppedBecause {
     NoAccessToTheLibrary,
 
     /**
+     * Parked on purpose: this connection is metered and the server says not to.
+     *
+     * Not a failure and not [WaitingToRetry], which would bring the system
+     * back to meet the same metered connection and the same answer. What ends
+     * this is wifi, which is a thing the platform can be asked to watch for
+     * (stratus-app#133).
+     */
+    WaitingForWifi,
+
+    /**
      * Handed to the system, which will finish it when it chooses.
      *
      * Not `WaitingToRetry`, which would be a lie about something that is not
@@ -58,6 +68,8 @@ class BackupRun(
      * address gets none.
      */
     private val logFor: (Server) -> BackupLog = { BackupLog(it.baseUrl) },
+    /** What this connection costs, for the one setting that cares. */
+    private val network: Network = Network { false },
 ) {
     /**
      * Runs one pass for [instance].
@@ -111,6 +123,18 @@ class BackupRun(
         // forty photographs and queues none of them is working, and one that
         // queues the same forty every time is sending them again.
         if (log.on) log.say("pass began: ${assets.size} seen, ${report.queued} queued, ${queue.left()} to send")
+
+        // After enqueuing and not before it, deliberately. Looking at the
+        // camera roll costs no data, and a pass that parks without queueing
+        // leaves the screen saying nothing is waiting while a hundred
+        // photographs are (stratus-app#133).
+        if (instance.onlyOnWifi && network.metered()) {
+            val parked = report.copy(stopped = StoppedBecause.WaitingForWifi)
+            advance(prepared.mark, queue, assets)
+            journal.ended(now(), parked.stopped, 0, 0)
+            narrateEnd(log, parked, queue)
+            return parked
+        }
 
         while (keepGoing()) {
             val step = queue.runNext()

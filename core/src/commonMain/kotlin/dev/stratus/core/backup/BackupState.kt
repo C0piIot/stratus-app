@@ -40,6 +40,15 @@ enum class WaitingReason {
     ForARetry,
 
     /**
+     * Parked on purpose: this connection is metered and the server says no.
+     *
+     * Its own reason because "waiting for the next pass" over a backup that
+     * is deliberately stopped is the exact silence this surface exists to
+     * remove -- the next pass will do nothing either (stratus-app#133).
+     */
+    ForWifi,
+
+    /**
      * The system is carrying it and will say when it is done.
      *
      * Not waiting on this app at all, which is why it is not

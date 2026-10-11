@@ -14,6 +14,8 @@ class BackupStatus(
     private val database: BackupDatabase,
     private val source: AssetSource,
     private val now: () -> Long = { getTimeMillis() },
+    /** Whether sending is stopped for wifi right now (stratus-app#133). */
+    private val parked: suspend () -> Boolean = { false },
 ) {
     suspend fun of(): BackupState {
 
@@ -50,6 +52,10 @@ class BackupStatus(
                 // actively sending it is the wrong thing to say.
                 reason = when {
                     summary.inFlight > 0 -> WaitingReason.InTheSystemsHands
+                    // Above the backoff, because a row serving one out on a
+                    // metered connection is not waiting on the backoff: the
+                    // pass it is waiting for will park too.
+                    parked() -> WaitingReason.ForWifi
                     summary.nextAttemptAt != null -> WaitingReason.ForARetry
                     else -> WaitingReason.ForTheNextPass
                 },

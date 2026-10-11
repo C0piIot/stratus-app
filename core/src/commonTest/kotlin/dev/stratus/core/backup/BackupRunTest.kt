@@ -62,6 +62,7 @@ class BackupRunTest {
         outcome: UploadOutcome = UploadOutcome.Done("etag"),
         engine: MockEngine = emptyServer(),
         sink: LogSink = Collected(),
+        metered: Boolean = false,
         directories: DirectoryMaker = DirectoryMaker { },
     ): BackupRun {
         database.migrate()
@@ -85,6 +86,7 @@ class BackupRunTest {
             },
             journalFor = { database.journal() },
             logFor = { BackupLog(it.baseUrl, sink) },
+            network = Network { metered },
         )
     }
 
@@ -227,6 +229,41 @@ class BackupRunTest {
 
         assertEquals(1, log.passes.size, log.passes.toString())
         assertEquals(log.lines, log.passes.single(), "the trail is what was said, in order")
+    }
+
+    // ---- Not on somebody's data plan (stratus-app#133) --------------------
+
+    @Test
+    fun onMobileDataItQueuesWhatIsNewAndSendsNoneOfIt() = runTest {
+        // Both halves matter. Parking without queueing would leave the screen
+        // saying nothing is waiting while the camera roll fills up, and
+        // looking at the camera roll costs no data at all.
+        val roll = RollOf(listOf(asset(1), asset(2)))
+        val report = run(roll, metered = true).once(instance)
+
+        assertEquals(StoppedBecause.WaitingForWifi, report.stopped)
+        assertEquals(2, report.queued)
+        assertEquals(0, report.uploaded)
+    }
+
+    @Test
+    fun theSamePassOnWifiSendsWhatIsWaiting() = runTest {
+        val roll = RollOf(listOf(asset(1), asset(2)))
+        val report = run(roll, metered = false).once(instance)
+
+        assertEquals(StoppedBecause.NothingLeft, report.stopped)
+        assertEquals(2, report.uploaded)
+    }
+
+    @Test
+    fun aServerThatWasToldToUseMobileDataUsesIt() = runTest {
+        // The setting is the server's, so the same metered connection is a
+        // park for one and an ordinary pass for another.
+        val roll = RollOf(listOf(asset(1)))
+        val report = run(roll, metered = true).once(instance.copy(onlyOnWifi = false))
+
+        assertEquals(StoppedBecause.NothingLeft, report.stopped)
+        assertEquals(1, report.uploaded)
     }
 
     @Test

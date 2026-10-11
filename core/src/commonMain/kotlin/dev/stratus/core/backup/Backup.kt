@@ -24,7 +24,20 @@ fun interface Connections {
 class ServerBackup(val queue: UploadQueue, val index: BackupIndex, val mark: BackupMark)
 
 /** Whether the system should bring us back, decided here rather than per platform. */
-enum class PassOutcome { Finished, ComeBackLater }
+enum class PassOutcome {
+    Finished,
+    ComeBackLater,
+
+    /**
+     * Parked until the connection stops costing money (stratus-app#133).
+     *
+     * Its own answer and not [ComeBackLater], because coming back later means
+     * coming back to the same metered connection: what this asks for is to be
+     * woken by wifi, which both platforms can watch for and neither does by
+     * retrying.
+     */
+    WhenThereIsWifi,
+}
 
 /**
  * Everything about backing a camera roll up, assembled.
@@ -58,9 +71,11 @@ class Backup(
      * a reinstall and wrong on a platform that has no such notion at all.
      */
     private val liveTransfers: (suspend () -> Set<String>)? = null,
+    /** What the connection costs, for the server that asked not to pay it. */
+    private val network: Network = Network { false },
 ) {
     /** What to say about the backup, assembled from what the queue actually holds. */
-    val status: BackupStatus by lazy { BackupStatus(database, assets) }
+    val status: BackupStatus by lazy { BackupStatus(database, assets, parked = ::parked) }
 
     /** The server a pass is owed to, if there is one and it has sources. */
     suspend fun enabled(): Server? = instances.instance()?.takeIf { it.backupEnabled }
@@ -86,9 +101,11 @@ class Backup(
         // it is carrying -- it does not. A pass that ended with something in
         // flight may also have left rows serving out a backoff, and that
         // reason is the one that got reported.
-        val again = report.stopped == StoppedBecause.WaitingToRetry ||
-            report.stopped == StoppedBecause.InFlight
-        return if (again) PassOutcome.ComeBackLater else PassOutcome.Finished
+        return when (report.stopped) {
+            StoppedBecause.WaitingForWifi -> PassOutcome.WhenThereIsWifi
+            StoppedBecause.WaitingToRetry, StoppedBecause.InFlight -> PassOutcome.ComeBackLater
+            else -> PassOutcome.Finished
+        }
     }
 
     /**
@@ -101,7 +118,21 @@ class Backup(
         source = assets,
         prepareFor = { prepare() },
         journalFor = { database.journal() },
+        network = network,
     )
+
+    /**
+     * Whether the backup is parked for wifi right now.
+     *
+     * The same two facts the pass weighs, asked again for the screen rather
+     * than remembered from the last pass: the connection changes between
+     * passes, and a screen saying "waiting for wifi" over a phone that is on
+     * wifi is the kind of lie this surface exists to avoid.
+     */
+    suspend fun parked(): Boolean {
+        val instance = enabled() ?: return false
+        return instance.onlyOnWifi && network.metered()
+    }
 
     /**
      * Everything a pass needs, assembled from the server's own settings.
@@ -159,6 +190,12 @@ class Backup(
     suspend fun setSources(sources: Set<String>) {
         val instance = instances.instance() ?: return
         instances.update(instance.copy(sources = sources))
+    }
+
+    /** Whether a pass may spend somebody's data plan (stratus-app#133). */
+    suspend fun setOnlyOnWifi(only: Boolean) {
+        val instance = instances.instance() ?: return
+        instances.update(instance.copy(onlyOnWifi = only))
     }
 
     /** What there is to choose from on this platform, with how much is in each. */
