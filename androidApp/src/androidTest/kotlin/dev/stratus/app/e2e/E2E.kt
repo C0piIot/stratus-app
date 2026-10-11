@@ -5,6 +5,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.isRoot
@@ -234,10 +235,27 @@ abstract class E2E {
     fun turnBackupOn(allow: Boolean = true) {
         openBackup()
         chooseEveryFolder(allow)
+        if (allow) spendMobileData()
         goBack()
         see("Settings")
         goBack()
         onTheBrowser()
+    }
+
+    /**
+     * Says out loud that this backup may go over mobile data.
+     *
+     * The emulator's active network is **not reliably unmetered**: a suite
+     * that has toggled the radio -- ConnectivityTest does -- can come back on
+     * the cellular one, and from then on every pass parks with "waiting for
+     * wifi" and every backup test fails together, for a reason none of them
+     * is about. The default is on (stratus-app#133) and proving it stays on
+     * is `BackupRunTest`'s job, on the JVM, where the answer is a fake and not
+     * the weather. Here the condition gets stated rather than inherited.
+     */
+    private fun spendMobileData() {
+        tap("Only back up on wifi")
+        ui.onNode(hasText("Only back up on wifi") and hasClickAction()).assertIsOff()
     }
 
     /** On the backup screen already, which is where every caller of this is. */

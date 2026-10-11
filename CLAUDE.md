@@ -647,6 +647,14 @@ What it buys, in descending order of how much of the app it covers:
   instrumented test runs in the app's own process, so a crash there is reported
   as the test's exception; and Android's `InetAddress.getLoopbackAddress()` is
   `::1`, so a listener bound to it refuses the `127.0.0.1` everybody types.
+
+  And one thing it must never inherit: **the emulator's network is not
+  reliably unmetered**, so a suite that has toggled the radio can come back on
+  the cellular one, and from then on every pass parks for wifi and the whole
+  backup suite fails for a reason none of its tests is about. It cost a red
+  `main` once. The condition gets stated -- `turnBackupOn` turns the setting
+  off out loud -- rather than depended on, and whether the setting itself
+  works is a JVM test where the answer is a fake instead of the weather.
 - **iOS: compile the framework and run the shared tests on a simulator**, on the
   macOS runner. Everything in `commonTest` runs there as well as on the JVM, for
   nothing, which is worth remembering when deciding where a piece of logic lives.
