@@ -5,7 +5,7 @@
       No action bar, because the app draws its own.
 
       Declaring no theme at all is not "no decoration": the platform default
-      has an action bar, and it titles itself from android:label -- so the app
+      has an action bar, and it titles itself from android:label, so the app
       had two bars both saying Stratus, the system's above the one in
       stratus-app#140. Nothing in Compose can remove it; it belongs to the
       window.
