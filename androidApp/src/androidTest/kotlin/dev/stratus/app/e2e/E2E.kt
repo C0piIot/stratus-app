@@ -5,6 +5,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.isRoot
@@ -61,18 +62,26 @@ abstract class E2E {
 
     // And through the link, which is the path the app takes: a link that
     // cannot forward would otherwise look like the app failing to sign in.
+    //
+    // Retried like the check above it, and for the same reason it is: this
+    // ran once with a five-second timeout and failed twice on a loaded
+    // emulator, as the next test's problem rather than as the previous one's.
+    // A readiness check that gives up on the first answer is not one.
     @Before
     fun theLinkForwards() {
-        val answer = runCatching {
-            (java.net.URL("${link.address}/healthz").openConnection() as java.net.HttpURLConnection).run {
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                inputStream.use { it.readBytes().decodeToString() }
+        var answer: Result<String>? = null
+        repeat(10) {
+            answer = runCatching {
+                (java.net.URL("${link.address}/healthz").openConnection() as java.net.HttpURLConnection).run {
+                    connectTimeout = 5_000
+                    readTimeout = 5_000
+                    inputStream.use { it.readBytes().decodeToString() }
+                }
             }
+            if (answer?.getOrNull()?.trim() == "ok") return
+            Thread.sleep(1_000)
         }
-        if (answer.getOrNull()?.trim() != "ok") {
-            throw AssertionError("the link at ${link.address} does not forward: $answer")
-        }
+        throw AssertionError("the link at ${link.address} does not forward: $answer")
     }
 
     /** Everything on screen, for a failure to say what it saw instead. */
@@ -233,11 +242,35 @@ abstract class E2E {
      */
     fun turnBackupOn(allow: Boolean = true) {
         openBackup()
+        // Before the folders and not after: see spendMobileData.
+        if (allow) spendMobileData()
         chooseEveryFolder(allow)
         goBack()
         see("Settings")
         goBack()
         onTheBrowser()
+    }
+
+    /**
+     * Says out loud that this backup may go over mobile data.
+     *
+     * The emulator's active network is **not reliably unmetered**: a suite
+     * that has toggled the radio -- ConnectivityTest does -- can come back on
+     * the cellular one, and from then on every pass parks with "waiting for
+     * wifi" and every backup test fails together, for a reason none of them
+     * is about. The default is on (stratus-app#133) and proving it stays on
+     * is `BackupRunTest`'s job, on the JVM, where the answer is a fake and not
+     * the weather. Here the condition gets stated rather than inherited.
+     *
+     * **It has to happen before any folder is chosen.** Turning this off
+     * starts a pass there and then, which is the whole point of it
+     * (`SignedInController.setOnlyOnWifi`) -- and with folders already ticked
+     * that pass uploads the photograph a test was about to switch the server
+     * off for. With none ticked there is nothing for it to send.
+     */
+    private fun spendMobileData() {
+        tap("Only back up on wifi")
+        ui.onNode(hasText("Only back up on wifi") and hasClickAction()).assertIsOff()
     }
 
     /** On the backup screen already, which is where every caller of this is. */
