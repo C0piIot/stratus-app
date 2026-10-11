@@ -389,6 +389,28 @@ Three surfaces, and no more than three:
    parent in `values` and `values-night`, there being no `DayNight` variant of
    it, and what the parent is still good for is the window background between
    the launcher and the first frame.
+   **And a magnifying glass beside the menu, where the server has the method**
+   (stratus-app#143). Searching is `SEARCH` with `DAV:basicsearch`, RFC 5323,
+   so it needs no endpoint of ours -- and it is negotiated the way tus is: one
+   `OPTIONS`, the `DASL` header, and a server without it never grows the
+   button. Almost no WebDAV server has the method, which is why the glyph is
+   conditional rather than the screen apologetic: a button most servers could
+   not honour, explaining itself on every tap, is worse than no button.
+
+   **The results are the browser's own rows**, menu and all, which is why
+   `Entry` is internal rather than private: a file found is the same file, and
+   a second kind of row would be a second set of things it can do. A folder
+   found leaves the search and opens in the browser, because what somebody
+   wants from a folder is to be in it.
+
+   What it promises is what `db.Finder` promises on the other side -- whole
+   words of a **name**, never a substring and never the contents of a file --
+   and the screen says so where a search finds nothing, since "holi" not
+   finding "holiday" is the first thing anybody will try. There is no cursor
+   in that protocol, so a cut answer is said above the list rather than at the
+   end of one: somebody who had to scroll to the bottom to learn the answer
+   was cut has already decided it is not there.
+
 3. **A menu**, which is two screens and a switch: **Server** -- its address,
    its user, editing it and signing out -- and **Backup**, which is the fourth
    surface below. Editing a server is the sign-in form again, filled in and

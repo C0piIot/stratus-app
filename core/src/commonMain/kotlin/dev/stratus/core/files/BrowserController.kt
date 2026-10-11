@@ -193,10 +193,17 @@ class BrowserController(
         sink.flush()
     }
 
-    private fun List<DavResource>.sortedForPeople(): List<DavResource> =
-        sortedWith(compareByDescending<DavResource> { it.isDirectory }.thenBy { it.name.lowercase() })
-
     private companion object {
         const val CHUNK_BYTES = 64L * 1024
     }
 }
+
+/**
+ * Folders first and then by name, which is how a listing is read.
+ *
+ * Shared with the search results rather than written twice: two lists of the
+ * same rows ordered two ways is a difference somebody has to notice and
+ * explain, and there is no reason for one.
+ */
+internal fun List<DavResource>.sortedForPeople(): List<DavResource> =
+    sortedWith(compareByDescending<DavResource> { it.isDirectory }.thenBy { it.name.lowercase() })

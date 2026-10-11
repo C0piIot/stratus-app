@@ -74,6 +74,55 @@ class DavClient(
     }
 
     /**
+     * Whether this server can be asked to find things, which is one `OPTIONS`
+     * and one header (RFC 5323 3.2).
+     *
+     * Asked rather than assumed, and asked of the collection the app is rooted
+     * at: `SEARCH` is a standard almost nobody implements, so a client that
+     * sent a query to find out would be sending one to every server it ever
+     * signs in to. The answer is a fact about the server and does not change
+     * while the app is running, so a caller is expected to ask once and
+     * remember -- the same bargain the tus probe makes, one level coarser
+     * because this one has no pass to belong to.
+     */
+    suspend fun canSearch(): Boolean {
+        val response = http.request(url("/", collection = true)) { method = HttpMethod.Options }
+        if (!response.status.isSuccess()) return false
+        // A server may list several grammars in the header, or send the header
+        // several times; ours is the only one this client can write.
+        return response.headers.getAll(DASL).orEmpty().any { it.contains(GRAMMAR) }
+    }
+
+    /**
+     * Files and folders whose **name** holds [text], anywhere under the
+     * collection this client is rooted at.
+     *
+     * The name and not the contents: RFC 5323 leaves what `DAV:contains` means
+     * to the server, so this promises only what it asked for. [limit] is a
+     * request and not a guarantee -- 5.17 lets a server disregard it -- and an
+     * answer the server cut comes back with [SearchAnswer.cut] set rather than
+     * looking complete.
+     */
+    suspend fun search(text: String, limit: Int = SEARCH_LIMIT): SearchAnswer {
+        val scope = basePath.ifEmpty { "" } + "/"
+        val response = http.request(url("/", collection = true)) {
+            method = SEARCH
+            contentType(ContentType.Application.Xml)
+            setBody(MultiStatus.searchBody(scope, text, limit))
+        }
+        if (response.status.value == 207 || response.status.value == 200) {
+            return MultiStatus.parseSearch(response.bodyAsText(), basePath)
+        }
+        // 405 is a server that does not have the method at all, which is most
+        // of them. It is not an error to report as one: the caller asked a
+        // question this server cannot answer.
+        if (response.status.value == 405 || response.status.value == 501) {
+            throw DavError.MethodNotAllowed("/")
+        }
+        throw response.toError("/")
+    }
+
+    /**
      * Reads a file, optionally a byte range of it, and hands the bytes to
      * [block] as they arrive. The channel is only valid inside [block]: this
      * exists so a large video is never held in memory to be looked at.
@@ -191,6 +240,19 @@ class DavClient(
         val PROPFIND = HttpMethod("PROPFIND")
         val MOVE = HttpMethod("MOVE")
         val MKCOL = HttpMethod("MKCOL")
+        val SEARCH = HttpMethod("SEARCH")
+
+        const val DASL = "DASL"
+
+        /** The one grammar RFC 5323 requires of a server that has the method. */
+        const val GRAMMAR = "DAV:basicsearch"
+
+        /**
+         * How many results to ask for. A search is read rather than scrolled,
+         * and there is no cursor in this protocol to read on with -- the
+         * answer to a hundred of the wrong thing is a better word.
+         */
+        const val SEARCH_LIMIT = 100
 
         /** Named rather than `allprop`, and the reason is in [MultiStatus.propfindBody]. */
         val PROPS = MultiStatus.propfindBody()

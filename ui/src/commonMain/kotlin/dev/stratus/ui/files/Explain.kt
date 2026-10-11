@@ -34,7 +34,7 @@ internal fun explain(failure: BrowserFailure): String = when (failure) {
         }
 }
 
-private fun describe(error: DavError): String = when (error) {
+internal fun describe(error: DavError): String = when (error) {
     is DavError.Unauthorized -> "The server no longer accepts this sign-in."
     is DavError.Forbidden -> "Not allowed."
     is DavError.NotFound -> "That is no longer there."

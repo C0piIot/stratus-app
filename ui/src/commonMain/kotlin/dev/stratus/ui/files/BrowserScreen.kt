@@ -56,6 +56,8 @@ fun BrowserScreen(
     controller: BrowserController,
     cast: CastController?,
     onOpenSettings: () -> Unit,
+    /** Null where the server cannot search, which is most WebDAV servers. */
+    onSearch: (() -> Unit)? = null,
     /** For a server that stopped accepting the sign-in this app holds. */
     onEditServer: () -> Unit = {},
     /** Drawn under the bar and above everything else: the backup strip, from App. */
@@ -84,6 +86,9 @@ fun BrowserScreen(
                     }
                 },
                 actions = {
+                    if (onSearch != null) {
+                        IconButton(onClick = onSearch) { Text(Glyph.SEARCH) }
+                    }
                     IconButton(onClick = onOpenSettings) { Text(Glyph.SETTINGS) }
                 },
             )
@@ -162,9 +167,23 @@ private fun Where(path: String, up: () -> Unit) {
     }
 }
 
+/**
+ * One file or folder, with everything that can be done to it.
+ *
+ * Internal rather than private because the search results are these rows
+ * (stratus-app#143): a file found is the same file, and a second kind of row
+ * would be a second set of things it can do. [onEnter] is what tapping a
+ * folder does, which differs by where the row is -- in a listing it walks in,
+ * and in a result it leaves the search behind first.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Entry(entry: DavResource, controller: BrowserController, cast: CastController?) {
+internal fun Entry(
+    entry: DavResource,
+    controller: BrowserController,
+    cast: CastController?,
+    onEnter: (DavResource) -> Unit = controller::enter,
+) {
     var menuOpen by remember { mutableStateOf(false) }
 
     Box {
@@ -175,7 +194,7 @@ private fun Entry(entry: DavResource, controller: BrowserController, cast: CastC
             // walks into it -- so renaming or deleting a folder was unreachable.
             // Holding is the gesture for "not the obvious thing", everywhere.
             modifier = Modifier.combinedClickable(
-                onClick = { if (entry.isDirectory) controller.enter(entry) else menuOpen = true },
+                onClick = { if (entry.isDirectory) onEnter(entry) else menuOpen = true },
                 onLongClick = { menuOpen = true },
             ),
         )

@@ -19,6 +19,7 @@ package dev.stratus.ui
  * on screen.
  */
 object Glyph {
+    const val SEARCH = "🔍"
     const val SETTINGS = "⚙️"
     const val SERVER = "☁️"
     const val BACKUP = "📷"
