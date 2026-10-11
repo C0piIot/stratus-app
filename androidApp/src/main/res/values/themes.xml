@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      No action bar, because the app draws its own.
+
+      Declaring no theme at all is not "no decoration": the platform default
+      has an action bar, and it titles itself from android:label, so the app
+      had two bars both saying Stratus, the system's above the one in
+      stratus-app#140. Nothing in Compose can remove it; it belongs to the
+      window.
+
+      Two files rather than Theme.DeviceDefault.DayNight, whose NoActionBar
+      variant does not exist: the light and dark parents here have been public
+      since API 14. What the parent is still for is the window background,
+      which is what shows between the launcher and the first frame.
+    -->
+    <style name="Theme.Stratus" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+
+</resources>
