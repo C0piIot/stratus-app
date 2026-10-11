@@ -62,18 +62,26 @@ abstract class E2E {
 
     // And through the link, which is the path the app takes: a link that
     // cannot forward would otherwise look like the app failing to sign in.
+    //
+    // Retried like the check above it, and for the same reason it is: this
+    // ran once with a five-second timeout and failed twice on a loaded
+    // emulator, as the next test's problem rather than as the previous one's.
+    // A readiness check that gives up on the first answer is not one.
     @Before
     fun theLinkForwards() {
-        val answer = runCatching {
-            (java.net.URL("${link.address}/healthz").openConnection() as java.net.HttpURLConnection).run {
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                inputStream.use { it.readBytes().decodeToString() }
+        var answer: Result<String>? = null
+        repeat(10) {
+            answer = runCatching {
+                (java.net.URL("${link.address}/healthz").openConnection() as java.net.HttpURLConnection).run {
+                    connectTimeout = 5_000
+                    readTimeout = 5_000
+                    inputStream.use { it.readBytes().decodeToString() }
+                }
             }
+            if (answer?.getOrNull()?.trim() == "ok") return
+            Thread.sleep(1_000)
         }
-        if (answer.getOrNull()?.trim() != "ok") {
-            throw AssertionError("the link at ${link.address} does not forward: $answer")
-        }
+        throw AssertionError("the link at ${link.address} does not forward: $answer")
     }
 
     /** Everything on screen, for a failure to say what it saw instead. */
