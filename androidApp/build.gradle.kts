@@ -82,6 +82,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(libs.compose.ui.test.junit4)
+    // Named rather than inherited: the suite presses buttons by the constants
+    // the bar draws them from (stratus-app#137), so it imports from :ui.
+    androidTestImplementation(project(":ui"))
     // For arranging and checking the server behind the app's back, with the
     // app's own WebDAV client rather than a second one to keep in step.
     androidTestImplementation(libs.ktor.client.core)

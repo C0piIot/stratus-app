@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import dev.stratus.app.MainActivity
+import dev.stratus.ui.Glyph
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -187,11 +188,37 @@ abstract class E2E {
     fun signedIn() {
         launch()
         signIn()
-        see("Server")
+        onTheBrowser()
         tap("files")
     }
 
-    fun openServer() = tap("Server")
+    /**
+     * That the browser is up, whatever folder it happens to be showing.
+     *
+     * The menu button, because it is the one thing on that screen that does
+     * not depend on where somebody has walked to. It is named by the constant
+     * the bar itself draws (stratus-app#137), so a glyph changed in one place
+     * cannot leave the suite looking for the old one.
+     */
+    fun onTheBrowser() = see(Glyph.SETTINGS)
+
+    fun openSettings() = tap(Glyph.SETTINGS)
+
+    fun openServer() {
+        openSettings()
+        tap("Server")
+    }
+
+    fun openBackup() {
+        openSettings()
+        tap("Backup")
+    }
+
+    /** The system's own back, which is what every screen behind the menu is wired to. */
+    fun goBack() {
+        Phone.device.pressBack()
+        ui.waitForIdle()
+    }
 
     /**
      * Turns backup on and answers what the system asks on the way -- the
@@ -205,20 +232,23 @@ abstract class E2E {
      * is the way through that.
      */
     fun turnBackupOn(allow: Boolean = true) {
-        openServer()
+        openBackup()
         chooseEveryFolder(allow)
-        tap("Back")
+        goBack()
+        see("Settings")
+        goBack()
+        onTheBrowser()
     }
 
-    /** On the server screen already, which is where every caller of this is. */
+    /** On the backup screen already, which is where every caller of this is. */
     fun chooseEveryFolder(allow: Boolean = true) {
-        tap("Choose folders")
+        tap("Folders")
         if (showing("Allow access to photos")) {
             tap("Allow access to photos")
             Phone.answerAll(allow)
         }
         if (!allow) {
-            tap("Back")
+            goBack()
             return
         }
         tap("Every folder")

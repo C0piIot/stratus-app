@@ -1,140 +1,61 @@
 package dev.stratus.ui.server
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import dev.stratus.core.server.Server
+import dev.stratus.ui.ActionRow
+import dev.stratus.ui.FactRow
+import dev.stratus.ui.Glyph
+import dev.stratus.ui.Page
+import dev.stratus.ui.Rule
+import dev.stratus.ui.Section
 
 /**
- * The server, and what the app is allowed to do with it.
+ * The server, and nothing that merely happens to involve it.
  *
- * One server (stratus-app#131), so there is no list, no radio button and no
- * "add another": what was a screen about choosing between servers is a screen
- * about the one there is. Backup has no switch of its own either -- choosing
- * folders is what turns it on, which is the one thing somebody is actually
- * deciding when they open it.
+ * One server (stratus-app#131), so there is no list and no "add another". What
+ * this screen lost in stratus-app#137 is everything about the backup: which
+ * folders feed it and whether it may spend mobile data are questions about the
+ * backup, and they are under Backup.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerScreen(
     server: Server,
-    onChooseSources: () -> Unit,
     onSignOut: () -> Unit,
     /** Opens the sign-in form on this server, filled in, to change any of it. */
     onEdit: () -> Unit,
-    /** Whether a pass may send over a connection somebody pays for by the byte. */
-    onlyOnWifi: Boolean,
-    onOnlyOnWifi: (Boolean) -> Unit,
-    /** Whether crash reports are on, or null in a build that cannot send any. */
-    reporting: Boolean?,
-    onReporting: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
     var signingOut by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Server") },
-                navigationIcon = { TextButton(onClick = onClose) { Text("Back") } },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(server.baseUrl, style = MaterialTheme.typography.bodyLarge)
-                Text(server.username, style = MaterialTheme.typography.bodySmall)
-
-                // What is backed up, said as a sentence rather than as the
-                // button's label: a label that changes with the state is one
-                // nobody can look for, here or in a test.
-                Text(
-                    if (server.sources.isEmpty()) {
-                        "Nothing is backed up."
-                    } else {
-                        "${server.sources.size} folders are backed up."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
-
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = onChooseSources) { Text("Choose folders") }
-                    TextButton(onClick = onEdit) { Text("Edit") }
-                    // "Sign out" and not "Remove": with one server there is
-                    // nothing to remove it from, and what it costs is said in
-                    // the dialog rather than guessed at from the word.
-                    TextButton(onClick = { signingOut = true }) { Text("Sign out") }
-                }
-            }
-            Divider()
-
-            // Beside the folders rather than on the backup screen: that one
-            // answers "is it working", and this is part of what it should be
-            // doing. One question per surface (stratus-app#133).
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Only back up on wifi")
-                    Switch(checked = onlyOnWifi, onCheckedChange = onOnlyOnWifi)
-                }
-                Text(
-                    "A camera roll is the one thing on a phone big enough to " +
-                        "matter on a data plan. With this on, a pass on mobile " +
-                        "data still looks for new photographs and queues them — " +
-                        "it just waits for wifi to send them.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Divider()
-
-            // Here rather than on a screen of its own: it is one switch, and
-            // the menu is the third of the three surfaces this app has.
-            if (reporting != null) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Send crash reports")
-                        Switch(checked = reporting, onCheckedChange = onReporting)
-                    }
-                    // What leaves the phone, said before the switch is on.
-                    Text(
-                        "When the app crashes, the error and which phone it was on go " +
-                            "to Sentry, a service that is not your server. Never a " +
-                            "photograph or a password, but an error can name a server " +
-                            "address or a file.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
+    Page("Server", onBack = onClose) {
+        Section("Signed in") {
+            FactRow(Glyph.ADDRESS, "Address", server.baseUrl)
+            FactRow(Glyph.USERNAME, "Username", server.username)
         }
+        Rule()
+
+        ActionRow(
+            Glyph.EDIT,
+            "Edit server",
+            "The sign-in form again, filled in. The backup record is kept.",
+            onClick = onEdit,
+        )
+        // "Sign out" and not "Remove": with one server there is nothing to
+        // remove it from, and what it costs is said in the dialog rather than
+        // guessed at from the word.
+        ActionRow(
+            Glyph.SIGN_OUT,
+            "Sign out",
+            "Forgets the password and what has been backed up here.",
+            onClick = { signingOut = true },
+        )
     }
 
     if (signingOut) {

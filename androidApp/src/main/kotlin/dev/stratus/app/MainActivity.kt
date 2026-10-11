@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,6 +56,10 @@ class MainActivity : ComponentActivity() {
     }.toTypedArray()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Android has drawn edge to edge without asking since targetSdk 35; what
+        // this adds is the system bars being transparent and their icons flipping
+        // with the theme, which otherwise stay dark over a dark app.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = appContainer(applicationContext)
         val back = BackRequests()

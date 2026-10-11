@@ -1,30 +1,29 @@
 package dev.stratus.ui.server
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.backup.MediaAccess
 import dev.stratus.core.backup.MediaSource
+import dev.stratus.ui.Footnote
+import dev.stratus.ui.Glyph
+import dev.stratus.ui.Page
 
 /**
  * Which folders are backed up, which is also whether anything is
@@ -42,7 +41,6 @@ import dev.stratus.core.backup.MediaSource
  * is not backed up until somebody says so. The alternative was keeping a value
  * that means "whatever appears", which is the ambiguity this just removed.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SourcesScreen(
     available: List<MediaSource>,
@@ -54,63 +52,55 @@ fun SourcesScreen(
 ) {
     var picked by remember { mutableStateOf(chosen) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Folders") },
-                navigationIcon = { TextButton(onClick = onClose) { Text("Back") } },
-                actions = { TextButton(onClick = { onSave(picked) }) { Text("Save") } },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().padding(16.dp)) {
-            if (access == MediaAccess.None) {
-                // Not an empty list: a phone with no photographs and a phone
-                // that will not show them look identical, and only one of them
-                // is something somebody can fix.
-                Text(
-                    "Stratus cannot read your photographs on this device yet, so " +
-                        "there are no folders to choose from. On iOS the photo library " +
-                        "is not wired up at all; on Android this means the permission " +
-                        "has not been given.",
-                )
-                if (onRequestAccess != null) {
-                    TextButton(onClick = onRequestAccess) { Text("Allow access to photos") }
-                }
-                return@Column
-            }
-
+    Page(
+        "Folders",
+        onBack = onClose,
+        actions = { TextButton(onClick = { onSave(picked) }) { Text("Save") } },
+        scroll = false,
+    ) {
+        if (access == MediaAccess.None) {
+            // Not an empty list: a phone with no photographs and a phone that
+            // will not show them look identical, and only one of them is
+            // something somebody can fix.
             Text(
-                if (picked.isEmpty()) {
-                    "Nothing is backed up. Tick a folder to start."
-                } else {
-                    "${picked.size} of ${available.size} folders are backed up."
-                },
+                "Stratus cannot read your photographs on this device yet, so " +
+                    "there are no folders to choose from. On iOS the photo library " +
+                    "is not wired up at all; on Android this means the permission " +
+                    "has not been given.",
+                Modifier.padding(16.dp),
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { picked = available.mapTo(mutableSetOf()) { it.id } }) {
-                    Text("Every folder")
+            if (onRequestAccess != null) {
+                TextButton(onClick = onRequestAccess, Modifier.padding(horizontal = 8.dp)) {
+                    Text("Allow access to photos")
                 }
-                TextButton(onClick = { picked = emptySet() }) { Text("None") }
             }
+            return@Page
+        }
 
-            LazyColumn(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(available, key = { it.id }) { source ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable {
-                            picked = if (source.id in picked) picked - source.id else picked + source.id
-                        },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(
-                            checked = source.id in picked,
-                            onCheckedChange = { checked ->
-                                picked = if (checked) picked + source.id else picked - source.id
-                            },
-                        )
-                        Text("${source.label} (${source.count})")
-                    }
-                }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { picked = available.mapTo(mutableSetOf()) { it.id } }) { Text("Every folder") }
+            TextButton(onClick = { picked = emptySet() }) { Text("None") }
+        }
+        Footnote(
+            if (picked.isEmpty()) {
+                "Nothing is backed up. Tick a folder to start."
+            } else {
+                "${picked.size} of ${available.size} folders are backed up."
+            },
+        )
+
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(available, key = { it.id }) { source ->
+                val ticked = source.id in picked
+                ListItem(
+                    leadingContent = { Text(Glyph.FOLDERS) },
+                    headlineContent = { Text(source.label) },
+                    supportingContent = { Text("${source.count} photographs") },
+                    trailingContent = { Checkbox(checked = ticked, onCheckedChange = null) },
+                    modifier = Modifier.toggleable(value = ticked) { on ->
+                        picked = if (on) picked + source.id else picked - source.id
+                    },
+                )
             }
         }
     }

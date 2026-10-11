@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -39,13 +41,14 @@ import dev.stratus.core.files.BrowserController
 import dev.stratus.core.files.BrowserFailure
 import dev.stratus.core.files.Confirmation
 import dev.stratus.core.share.ShareLife
+import dev.stratus.ui.Glyph
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserScreen(
     controller: BrowserController,
     cast: CastController?,
-    onOpenServer: () -> Unit,
+    onOpenSettings: () -> Unit,
     /** For a server that stopped accepting the sign-in this app holds. */
     onEditServer: () -> Unit = {},
 ) {
@@ -60,9 +63,15 @@ fun BrowserScreen(
             TopAppBar(
                 title = { Text(state.path) },
                 navigationIcon = {
-                    if (state.path != "/") TextButton(onClick = { controller.goUp() }) { Text("Up") }
+                    if (state.path != "/") {
+                        IconButton(onClick = { controller.goUp() }) {
+                            Text(Glyph.BACK, style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
                 },
-                actions = { TextButton(onClick = onOpenServer) { Text("Server") } },
+                actions = {
+                    IconButton(onClick = onOpenSettings) { Text(Glyph.SETTINGS) }
+                },
             )
         },
     ) { padding ->
@@ -96,7 +105,7 @@ fun BrowserScreen(
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(state.entries, key = { it.path }) { entry ->
                         Row(entry, controller, cast)
-                        Divider()
+                        HorizontalDivider()
                     }
                 }
             }

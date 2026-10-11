@@ -368,12 +368,22 @@ Three surfaces, and no more than three:
    to; every install is somebody's own.
 2. **The file browser**, which is the main screen: walk the tree, open or
    download a file, rename it, delete it.
-3. **A menu**, holding each server's details, its removal, and the choice of
-   which folders are watched for backup. Editing a server is the sign-in form
-   again, filled in and with every field open, so a new address or password is
-   proved the way a first sign-in is -- a new certificate, a first time over
-   plain http -- and the server keeps its backup record, which signing out
-   and in again would throw away (stratus-app#87, stratus-app#131).
+3. **A menu**, which is two screens and a switch: **Server** -- its address,
+   its user, editing it and signing out -- and **Backup**, which is the fourth
+   surface below. Editing a server is the sign-in form again, filled in and
+   with every field open, so a new address or password is proved the way a
+   first sign-in is -- a new certificate, a first time over plain http -- and
+   the server keeps its backup record, which signing out and in again would
+   throw away (stratus-app#87, stratus-app#131).
+
+   **It is two screens because a setting's address is what says what it
+   affects** (stratus-app#137). One screen called Server held the address, the
+   folders being backed up, whether a pass may spend mobile data and whether
+   crash reports are sent -- four questions with nothing in common but having
+   nowhere else to go, and a wifi switch under Server reads as the wifi being
+   the server's. What is left there is the server; everything about the backup
+   is under Backup, and crash reports, which belong to neither, are a row in
+   the menu itself.
 
 What that implies, in the order it will be discovered:
 
@@ -580,6 +590,15 @@ distrust the app. The strip carries the one-line state; the screen behind it
 carries the queue, the failures and the reasons. Its absence is the most common
 complaint aimed at every self-hosted photo backup that already exists, and it is
 the surface that decides whether this one gets trusted.
+
+**And what the backup has been told to do is on it too** (stratus-app#137),
+which is the one place this app does put two things on one screen -- on
+purpose, because they are halves of one question. "Nothing is queued" and "no
+folder is ticked" are the same answer given twice, and they were two screens in
+different parts of the app. So the folders and the wifi switch are a section
+under the status, and the screen is reached both ways: from the strip, over the
+browser, and from the menu, over Settings. That is why navigation is a stack
+rather than a current screen -- back has to answer the way somebody came.
 
 ## How this is tested, and what that budget buys
 
@@ -871,6 +890,10 @@ call wifi. **Unknown counts as metered**, which sounds like the wrong way
 round and is not: in practice the platforms decline to answer when there is no
 connection at all, so parking costs nothing, and guessing the other way spends
 somebody's money on a question we could not answer.
+
+**The switch is under Backup** (stratus-app#137), not under Server where it
+first landed: what it governs is a backup, and a setting's address is most of
+what says what it affects.
 
 **Parked is not waiting to retry.** `StoppedBecause.WaitingForWifi` becomes
 `PassOutcome.WhenThereIsWifi`, and Android answers it with a one-time request
