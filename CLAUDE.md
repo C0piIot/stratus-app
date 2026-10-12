@@ -403,6 +403,23 @@ Three surfaces, and no more than three:
    found leaves the search and opens in the browser, because what somebody
    wants from a folder is to be in it.
 
+   **And the folder somebody is standing in is a scope of its own**
+   (stratus-app#146). Two chips under the box, the folder first and the whole
+   server selected, because a search is of everything until somebody says
+   otherwise. The folder is taken when the screen opens rather than read at
+   submit time: opening a found folder moves the browser, and results that
+   were about one folder must not start claiming another. At the root there
+   are no chips at all, both answers being the same tree -- and one level
+   down, in `files/`, they are the same tree again and the chips are still
+   drawn, which is deliberate: knowing that `files/` is the whole searchable
+   library is exactly the Stratus-shaped knowledge principle 1 keeps out of
+   this app. It is a scope the
+   **server** honours -- `stratus-backend#329` -- and never a filter applied
+   here, because a filter would mean asking for the library and throwing most
+   of it away. Opening the screen somewhere else drops what was found, since
+   this screen keeps its answer between visits and an answer about one folder
+   under a chip naming another is the worst of the two.
+
    What it promises is what `db.Finder` promises on the other side -- whole
    words of a **name**, never a substring and never the contents of a file --
    and **the screen does not teach any of it**. An empty answer carried a

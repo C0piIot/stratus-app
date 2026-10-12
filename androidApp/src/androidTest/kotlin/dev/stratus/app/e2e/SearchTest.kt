@@ -20,8 +20,11 @@ import org.junit.Test
  */
 class SearchTest : E2E() {
 
-    private fun search(term: String) {
+    private fun search(term: String, inside: String? = null) {
         tap(Glyph.SEARCH)
+        // The whole server is the default, so searching one folder is a chip
+        // tapped first -- named by the folder, which is how it is found here.
+        if (inside != null) tap(inside)
         ui.onNode(hasSetTextAction()).performTextInput(term)
         // The keyboard's own search key, which is how this runs: there is no
         // search per keystroke to fall back on.
@@ -57,6 +60,27 @@ class SearchTest : E2E() {
 
         see("inside.txt")
         onTheBrowser()
+    }
+
+    // The folder somebody is standing in is a scope of its own
+    // (stratus-app#146, stratus-backend#329), and the e2e is where the whole
+    // of it meets: a chip tapped here, a scope built there, and an answer
+    // that is about one folder and not the library.
+    @Test
+    fun searchingInsideAFolderAnswersAboutThatFolder() {
+        Stratus.folder("/$unique/")
+        Stratus.folder("/$unique/here/")
+        Stratus.folder("/$unique/there/")
+        Stratus.file("/$unique/here/a lisbon tram.jpg")
+        Stratus.file("/$unique/there/a lisbon ferry.jpg")
+        signedIn()
+
+        tap(unique)
+        tap("here")
+
+        search("lisbon", inside = "here")
+        see("a lisbon tram.jpg")
+        gone("a lisbon ferry.jpg")
     }
 
     @Test

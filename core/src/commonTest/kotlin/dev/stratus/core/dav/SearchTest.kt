@@ -37,15 +37,7 @@ class SearchTest {
         return DavClient(HttpClient(engine), base)
     }
 
-    private suspend fun sentBody(): String =
-        lastRequest?.body?.let { body ->
-            when (body) {
-                is io.ktor.http.content.OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
-                is io.ktor.http.content.OutgoingContent.ReadChannelContent ->
-                    body.readFrom().readRemaining().readByteArray().decodeToString()
-                else -> ""
-            }
-        } ?: ""
+    private suspend fun sentBody(): String = lastRequest?.sentBody() ?: ""
 
     @Test
     fun theServerIsAskedWhetherItCanSearchAtAll() = runTest {
@@ -84,6 +76,25 @@ class SearchTest {
         )) {
             assertTrue(part in body, "the query does not carry $part:\n$body")
         }
+    }
+
+    @Test
+    fun aFolderIsAScopeOfItsOwn() = runTest {
+        // stratus-app#146: searching where somebody is standing. The href is
+        // a URL, so the folder goes in encoded -- a scope read as a different
+        // path is a search of somewhere else.
+        val client = clientAnswering(HttpStatusCode.MultiStatus, answer())
+        client.search("lisbon", under = "holiday/last summer")
+        assertTrue("<href>/holiday/last%20summer/</href>" in sentBody(), sentBody())
+
+        // And a leading or trailing slash is not a second path: it is the
+        // same folder written the way a browser's state writes it.
+        client.search("lisbon", under = "/holiday/")
+        assertTrue("<href>/holiday/</href>" in sentBody(), sentBody())
+
+        // No folder is the collection, which is every caller that has none.
+        client.search("lisbon")
+        assertTrue("<href>/</href>" in sentBody(), sentBody())
     }
 
     @Test

@@ -94,17 +94,24 @@ class DavClient(
     }
 
     /**
-     * Files and folders whose **name** holds [text], anywhere under the
-     * collection this client is rooted at.
+     * Files and folders whose **name** holds [text], under [under] -- a folder
+     * this client can browse -- or under the whole collection when it is null.
      *
      * The name and not the contents: RFC 5323 leaves what `DAV:contains` means
      * to the server, so this promises only what it asked for. [limit] is a
      * request and not a guarantee -- 5.17 lets a server disregard it -- and an
      * answer the server cut comes back with [SearchAnswer.cut] set rather than
      * looking complete.
+     *
+     * A server that has the method may still refuse a narrower scope, since
+     * RFC 5323 lets it: that comes back as the ordinary refusal it is, with
+     * `DAV:search-scope-valid` in the body.
      */
-    suspend fun search(text: String, limit: Int = SEARCH_LIMIT): SearchAnswer {
-        val scope = basePath.ifEmpty { "" } + "/"
+    suspend fun search(text: String, under: String? = null, limit: Int = SEARCH_LIMIT): SearchAnswer {
+        // The scope is an href, so the folder goes in encoded like any other
+        // path this client writes; the trailing slash is what says collection.
+        val folder = under?.trim('/').orEmpty()
+        val scope = basePath + (if (folder.isEmpty()) "" else "/" + DavPath.encodePath(folder)) + "/"
         val response = http.request(url("/", collection = true)) {
             method = SEARCH
             contentType(ContentType.Application.Xml)

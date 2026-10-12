@@ -88,6 +88,27 @@ class SearchConformanceTest {
     }
 
     @Test
+    fun aFolderIsAScopeTheServerHonours() = runTest {
+        // stratus-app#146 against the half that answers it
+        // (stratus-backend#329): the same word in two folders, and the scope
+        // is what decides which one comes back.
+        dav.makeCollection(root)
+        dav.makeCollection("$root/here")
+        dav.makeCollection("$root/there")
+        dav.put("$root/here/$word.jpg", "bytes".encodeToByteArray(), "image/jpeg")
+        dav.put("$root/there/$word.jpg", "bytes".encodeToByteArray(), "image/jpeg")
+
+        val here = dav.search(word, under = "$root/here").found.map { it.path }
+        assertEquals(listOf("$root/here/$word.jpg"), here)
+
+        // And without one, both -- so the scope is doing the work rather than
+        // the fixtures being lucky.
+        val both = dav.search(word).found.map { it.path }
+        assertContains(both, "$root/here/$word.jpg")
+        assertContains(both, "$root/there/$word.jpg")
+    }
+
+    @Test
     fun aSearchThatMatchesNothingIsAnEmptyAnswerAndNotAFailure() = runTest {
         assertEquals(emptyList(), dav.search("nothingonthisserveriscalledthis").found)
     }
