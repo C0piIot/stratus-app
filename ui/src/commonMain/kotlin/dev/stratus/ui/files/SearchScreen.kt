@@ -2,6 +2,7 @@ package dev.stratus.ui.files
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -9,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +65,12 @@ fun SearchScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
 
+        // Only where there is a choice: at the root both answers are the same
+        // tree, and a control whose two sides agree is furniture.
+        state.here?.let { folder ->
+            Where(folder, state.everywhere, search::look)
+        }
+
         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         when {
@@ -105,6 +113,33 @@ private fun Results(
             Entry(entry, browser, cast, onEnter = onOpenFolder)
             HorizontalDivider()
         }
+    }
+}
+
+/**
+ * The folder somebody came from, or the whole server (stratus-app#146).
+ *
+ * The folder first, because it is the narrower answer and the reason this
+ * control exists: a search run from inside a folder is usually a search of
+ * that folder. Named by the folder rather than by the word "here", so the
+ * answer on screen says what it is an answer about.
+ */
+@Composable
+private fun Where(folder: String, everywhere: Boolean, onPick: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = !everywhere,
+            onClick = { onPick(false) },
+            label = { Text(folder.trimEnd('/').substringAfterLast('/')) },
+        )
+        FilterChip(
+            selected = everywhere,
+            onClick = { onPick(true) },
+            label = { Text("Everywhere") },
+        )
     }
 }
 

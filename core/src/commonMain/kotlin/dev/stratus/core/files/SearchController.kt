@@ -34,6 +34,40 @@ class SearchController(
 
     private var running: Job? = null
 
+    /**
+     * Where the next search looks, which is the folder the screen was opened
+     * from or the whole server.
+     *
+     * Taken when the screen opens rather than read off the browser at submit
+     * time: the browser moves when a found folder is opened, and results that
+     * belonged to one folder must not start claiming another.
+     *
+     * **Opening it somewhere else drops what was found**, for that same
+     * reason: this screen keeps its answer between visits, and an answer
+     * about one folder under a chip naming another is the worst of the two.
+     * The term stays, since it is the thing somebody would ask again.
+     */
+    fun opened(folder: String) {
+        val here = folder.trim('/').ifEmpty { null }
+        if (here == mutable.value.here) return
+
+        running?.cancel()
+        mutable.value = mutable.value.copy(
+            here = here, ran = null, found = emptyList(), cut = false,
+            failure = null, unreachable = null, busy = false,
+        )
+    }
+
+    /**
+     * Flips between the folder and the whole server, and asks again when
+     * there is something to ask: the choice is only meaningful as an answer.
+     */
+    fun look(everywhere: Boolean) {
+        if (mutable.value.everywhere == everywhere) return
+        mutable.value = mutable.value.copy(everywhere = everywhere)
+        if (mutable.value.ran != null) submit()
+    }
+
     /** Asks the server what it can do, once. */
     fun start() {
         if (mutable.value.offered != null) return
@@ -73,9 +107,10 @@ class SearchController(
         mutable.value = mutable.value.copy(
             busy = true, failure = null, unreachable = null, found = emptyList(), cut = false,
         )
+        val under = mutable.value.lookingIn
         running = scope.launch {
             try {
-                val answer = dav.search(term)
+                val answer = dav.search(term, under)
                 mutable.value = mutable.value.copy(
                     busy = false,
                     ran = term,
@@ -107,6 +142,10 @@ class SearchController(
             failure = null, unreachable = null, busy = false,
         )
     }
+
+    /** The folder a search runs in, which is null for the whole server. */
+    private val SearchState.lookingIn: String?
+        get() = if (everywhere) null else here
 }
 
 /**
@@ -119,6 +158,12 @@ class SearchController(
 data class SearchState(
     val term: String = "",
     val ran: String? = null,
+    /**
+     * The folder the screen was opened from, or null at the root -- where
+     * there is no choice to make, both answers being the same tree.
+     */
+    val here: String? = null,
+    val everywhere: Boolean = true,
     val offered: Boolean? = null,
     val busy: Boolean = false,
     val found: List<DavResource> = emptyList(),

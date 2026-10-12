@@ -216,6 +216,13 @@ whether it has the method before offering the button at all. Almost no WebDAV
 server does; Stratus does, so against anything else the glass is simply not
 there.
 
+Inside a folder it offers that folder as well as the whole server, and the
+whole server is what it starts on. The folder is a scope the server honours
+rather than a filter applied here, so what comes back is already about the
+folder. A server that has `SEARCH` and refuses a narrower scope -- which
+RFC 5323 allows -- is reported as the refusal it is, rather than quietly
+answered with the whole library.
+
 Three things it will not do, and each is the protocol or the index rather than
 the app being shy. **Whole words only**: "holi" does not find "holiday". **The
 name, not the contents**: a word inside a document finds nothing, because no

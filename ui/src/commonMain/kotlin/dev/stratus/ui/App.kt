@@ -304,7 +304,13 @@ private fun SignedIn(
                     // that explained itself on every tap would be a button
                     // most servers could not honour.
                     onSearch = if (canSearch) {
-                        { go(Screen.Search) }
+                        {
+                            // Read here and not in composition: a tap is a
+                            // moment, and the folder somebody is standing in
+                            // when they tap is the one the search is offered.
+                            search?.opened(open.state.value.path)
+                            go(Screen.Search)
+                        }
                     } else {
                         null
                     },
