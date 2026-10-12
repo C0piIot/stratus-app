@@ -70,16 +70,11 @@ fun SearchScreen(
             // drawing something for.
             state.offered == null && state.ran == null -> {}
 
-            state.offered == false -> Explain(
-                "This server cannot search.",
-                "Searching over WebDAV is a standard — RFC 5323 — that very few servers " +
-                    "implement. Stratus does. Nothing else is wrong: everything on this " +
-                    "server still browses, opens and backs up as it did.",
-            )
+            state.offered == false -> Explain("This server cannot search.")
 
             state.unreachable != null -> Explain(
                 "The server did not answer.",
-                state.unreachable.orEmpty(),
+                state.unreachable,
             )
 
             state.failure != null -> Explain(
@@ -87,11 +82,7 @@ fun SearchScreen(
                 describe(state.failure!!),
             )
 
-            state.empty -> Explain(
-                "Nothing matches \"${state.ran}\".",
-                "Whole words of a name, not parts of one: searching \"holi\" does not " +
-                    "find \"holiday\". What is inside a file is not searched.",
-            )
+            state.empty -> Explain("Nothing matches \"${state.ran}\".")
 
             else -> Results(state, browser, cast, onOpenFolder)
         }
@@ -108,12 +99,7 @@ private fun Results(
     // Said above the list rather than at the end of it: somebody who has to
     // scroll to the bottom to learn the answer was cut has already decided
     // that what they wanted is not here.
-    if (state.cut) {
-        Footnote(
-            "These are the first ${state.found.size} and there are more. There is no " +
-                "second page — a narrower word is how you get to the rest.",
-        )
-    }
+    if (state.cut) Footnote("The first ${state.found.size}, and there are more.")
     LazyColumn(Modifier.fillMaxSize()) {
         items(state.found, key = { it.path }) { entry ->
             Entry(entry, browser, cast, onEnter = onOpenFolder)
@@ -122,18 +108,24 @@ private fun Results(
     }
 }
 
-/** A headline and the sentence under it, which is every answer that is not a list. */
+/**
+ * A headline, and under it only what the server said: a line of our own
+ * explaining how searching works is a line somebody reads on every empty
+ * answer and needs once.
+ */
 @Composable
-private fun Explain(headline: String, detail: String) {
+private fun Explain(headline: String, detail: String? = null) {
     Column(
         Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(headline, style = MaterialTheme.typography.titleMedium)
-        Text(
-            detail,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (detail != null) {
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

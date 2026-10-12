@@ -405,11 +405,15 @@ Three surfaces, and no more than three:
 
    What it promises is what `db.Finder` promises on the other side -- whole
    words of a **name**, never a substring and never the contents of a file --
-   and the screen says so where a search finds nothing, since "holi" not
-   finding "holiday" is the first thing anybody will try. There is no cursor
-   in that protocol, so a cut answer is said above the list rather than at the
-   end of one: somebody who had to scroll to the bottom to learn the answer
-   was cut has already decided it is not there.
+   and **the screen does not teach any of it**. An empty answer carried a
+   paragraph about whole words and a server with no method carried one about
+   RFC 5323: a rule read on every empty answer and understood on the first.
+   What is left is the headline and, where there is one, whatever the server
+   itself said; the explaining is the README's. There is no cursor in that
+   protocol, so a cut answer is still said above the list rather than at the
+   end of one -- somebody who had to scroll to the bottom to learn the answer
+   was cut has already decided it is not there -- but as the count and nothing
+   after it.
 
 3. **A menu**, which is two screens and a switch: **Server** -- its address,
    its user, editing it and signing out -- and **Backup**, which is the fourth
