@@ -24,11 +24,13 @@ import dev.stratus.core.AppContainer
 import dev.stratus.core.session.Ask
 import dev.stratus.core.cast.CastController
 import dev.stratus.core.files.BrowserController
+import dev.stratus.core.files.SearchController
 import dev.stratus.core.signin.SignInState
 import dev.stratus.ui.backup.BackupScreen
 import dev.stratus.ui.backup.BackupStrip
 import dev.stratus.ui.backup.oneLine
 import dev.stratus.ui.files.BrowserScreen
+import dev.stratus.ui.files.SearchScreen
 import dev.stratus.ui.server.ServerScreen
 import dev.stratus.ui.server.SourcesScreen
 import dev.stratus.ui.settings.SettingsScreen
@@ -39,6 +41,7 @@ import kotlinx.coroutines.launch
 /** Where in the app somebody is. A handful of places, so a sealed type rather than flags. */
 private sealed interface Screen {
     data object Browser : Screen
+    data object Search : Screen
     data object Settings : Screen
     data object Backup : Screen
     data object Server : Screen
@@ -145,7 +148,13 @@ private fun SignedIn(
         return true
     }
     var browser by remember { mutableStateOf<BrowserController?>(null) }
+    var search by remember { mutableStateOf<SearchController?>(null) }
     var cast by remember { mutableStateOf<CastController?>(null) }
+    // Collected rather than read off the flow where the bar is drawn. Reading
+    // `.value` in composition subscribes to nothing, so the glyph appeared
+    // only if something else happened to recompose after the probe answered
+    // -- which the emulator caught and no JVM test could have.
+    var canSearch by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { signedIn.start() }
 
@@ -156,7 +165,17 @@ private fun SignedIn(
     LaunchedEffect(baseUrl, state.server) {
         if (state.server == null) return@LaunchedEffect
         browser = container.browser(scope)?.also { it.start() }
+        // Asked once, here, rather than when the screen opens: whether the
+        // server has SEARCH at all decides whether the bar offers it, and a
+        // glyph that appeared a second after the listing did would be worse
+        // than either answer.
+        search = container.search(scope)?.also { it.start() }
         cast = container.cast(scope)
+    }
+
+    LaunchedEffect(search) {
+        canSearch = false
+        search?.state?.collect { canSearch = it.offered == true }
     }
 
     // Polled rather than pushed: the backup runs in another process, and reading
@@ -241,6 +260,25 @@ private fun SignedIn(
             )
         }
 
+        is Screen.Search -> {
+            val finding = search
+            val open = browser
+            if (finding != null && open != null) {
+                SearchScreen(
+                    finding,
+                    open,
+                    cast,
+                    onOpenFolder = { folder ->
+                        // Out of the search and into the folder: what somebody
+                        // wants from a folder they found is to be in it.
+                        open.enter(folder)
+                        stack = listOf(Screen.Browser)
+                    },
+                    onClose = { leave() },
+                )
+            }
+        }
+
         is Screen.Browser -> {
             // A condition and not `?: return`, which is what this was.
             //
@@ -261,6 +299,15 @@ private fun SignedIn(
                     open,
                     cast,
                     onOpenSettings = { go(Screen.Settings) },
+                    // Offered only where the server answers it, which is the
+                    // ordinary negotiation this app makes everywhere: a button
+                    // that explained itself on every tap would be a button
+                    // most servers could not honour.
+                    onSearch = if (canSearch) {
+                        { go(Screen.Search) }
+                    } else {
+                        null
+                    },
                     onEditServer = onEdit,
                     banner = { BackupStrip(state.backupState) { go(Screen.Backup) } },
                 )

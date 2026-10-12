@@ -207,6 +207,22 @@ ignore_chown_errors = "true"
 
 Every target works either way, and the `.env` above is the same in both.
 
+## Searching
+
+A magnifying glass in the bar finds a file or a folder by a **word of its
+name**, anywhere on the server. It is standard WebDAV -- `SEARCH`, RFC 5323 --
+so it needs nothing of the server that is ours, and the app asks the server
+whether it has the method before offering the button at all. Almost no WebDAV
+server does; Stratus does, so against anything else the glass is simply not
+there.
+
+Three things it will not do, and each is the protocol or the index rather than
+the app being shy. **Whole words only**: "holi" does not find "holiday". **The
+name, not the contents**: a word inside a document finds nothing, because no
+Stratus keeps an index of what is inside a file. And **there is no second
+page** -- a search that found more than it will give says so, and the way to
+the rest is a narrower word.
+
 ## Sharing
 
 Hold a row in the browser and the app makes a link anybody can open without an

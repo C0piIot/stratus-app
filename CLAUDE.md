@@ -389,6 +389,28 @@ Three surfaces, and no more than three:
    parent in `values` and `values-night`, there being no `DayNight` variant of
    it, and what the parent is still good for is the window background between
    the launcher and the first frame.
+   **And a magnifying glass beside the menu, where the server has the method**
+   (stratus-app#143). Searching is `SEARCH` with `DAV:basicsearch`, RFC 5323,
+   so it needs no endpoint of ours -- and it is negotiated the way tus is: one
+   `OPTIONS`, the `DASL` header, and a server without it never grows the
+   button. Almost no WebDAV server has the method, which is why the glyph is
+   conditional rather than the screen apologetic: a button most servers could
+   not honour, explaining itself on every tap, is worse than no button.
+
+   **The results are the browser's own rows**, menu and all, which is why
+   `Entry` is internal rather than private: a file found is the same file, and
+   a second kind of row would be a second set of things it can do. A folder
+   found leaves the search and opens in the browser, because what somebody
+   wants from a folder is to be in it.
+
+   What it promises is what `db.Finder` promises on the other side -- whole
+   words of a **name**, never a substring and never the contents of a file --
+   and the screen says so where a search finds nothing, since "holi" not
+   finding "holiday" is the first thing anybody will try. There is no cursor
+   in that protocol, so a cut answer is said above the list rather than at the
+   end of one: somebody who had to scroll to the bottom to learn the answer
+   was cut has already decided it is not there.
+
 3. **A menu**, which is two screens and a switch: **Server** -- its address,
    its user, editing it and signing out -- and **Backup**, which is the fourth
    surface below. Editing a server is the sign-in form again, filled in and
@@ -781,6 +803,14 @@ photo access after somebody granted it and `:ui` had no test to notice
 (stratus-app#75). It is `SignedInController` now, and what the interface keeps
 is navigation and when to call `resumed()`. The test for a new piece of state
 on a screen is where it lives: if it is in a `remember`, it is untested.
+
+**And a `StateFlow.value` read in composition subscribes to nothing**, which
+is the same leak wearing a different hat and cost an emulator run to find. The
+bar offers the magnifying glass when the search probe has answered, and that
+answer arrives after the first composition -- read as `.value` the glyph
+appeared only when something else happened to recompose, so it was there in
+two of three tests. `collectAsState`, or a `LaunchedEffect` that collects into
+a `remember`ed value; never `.value` for something that changes.
 
 **And never return early out of a composable**, which has now cost two
 debugging sessions and is the one rule here that reads like superstition. It

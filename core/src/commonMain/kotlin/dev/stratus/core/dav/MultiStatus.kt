@@ -21,8 +21,26 @@ import nl.adaptivity.xmlutil.xmlStreaming
 internal object MultiStatus {
     private const val DAV = "DAV:"
 
-    fun parse(xml: String, basePath: String): List<DavResource> {
-        val out = mutableListOf<DavResource>()
+    fun parse(xml: String, basePath: String): List<DavResource> =
+        entries(xml, basePath).filter { it.status == null }.map { it.resource }
+
+    /**
+     * A search answer, which is the same multistatus with one thing extra in
+     * it: a response carrying a status of its own rather than propstats is
+     * about the collection and not about a file. RFC 5323 2.3.1 is where a
+     * server says it stopped early, with 507 on the arbiter's own href, and
+     * leaving that out would be telling somebody they had seen everything.
+     */
+    fun parseSearch(xml: String, basePath: String): SearchAnswer {
+        val entries = entries(xml, basePath)
+        return SearchAnswer(
+            found = entries.filter { it.status == null }.map { it.resource },
+            cut = entries.any { it.status?.contains("507") == true },
+        )
+    }
+
+    private fun entries(xml: String, basePath: String): List<Entry> {
+        val out = mutableListOf<Entry>()
         try {
             val reader = xmlStreaming.newReader(xml)
             while (reader.hasNext()) {
@@ -38,12 +56,17 @@ internal object MultiStatus {
         return out
     }
 
-    private fun XmlReader.parseResponse(basePath: String): DavResource? {
+    /** One `response`: a resource, and the status if it carried one of its own. */
+    private class Entry(val resource: DavResource, val status: String?)
+
+    private fun XmlReader.parseResponse(basePath: String): Entry? {
         var href: String? = null
+        var status: String? = null
         var kept = Props()
         eachChild { ns, name ->
             when {
                 ns == DAV && name == "href" -> href = textOfElement()
+                ns == DAV && name == "status" -> status = textOfElement()
                 ns == DAV && name == "propstat" -> {
                     val (props, usable) = parsePropstat()
                     if (usable) kept = kept.merge(props)
@@ -52,13 +75,16 @@ internal object MultiStatus {
             }
         }
         val location = href ?: return null
-        return DavResource(
-            path = pathOf(location, basePath),
-            isDirectory = kept.isDirectory ?: false,
-            size = kept.size,
-            contentType = kept.contentType,
-            etag = kept.etag,
-            lastModifiedEpochMs = kept.lastModified,
+        return Entry(
+            DavResource(
+                path = pathOf(location, basePath),
+                isDirectory = kept.isDirectory ?: false,
+                size = kept.size,
+                contentType = kept.contentType,
+                etag = kept.etag,
+                lastModifiedEpochMs = kept.lastModified,
+            ),
+            status,
         )
     }
 
@@ -107,6 +133,39 @@ internal object MultiStatus {
         for (name in READS) append("<").append(name).append("/>")
         append("</prop></propfind>")
     }
+
+    /**
+     * A `DAV:basicsearch` over [scope], asking for the same properties a
+     * listing does -- a result row is drawn the way a listing's row is, so
+     * asking for less would mean two kinds of row.
+     *
+     * `DAV:contains` is the only operator in it. Its meaning is the server's
+     * by RFC 5323 5.16, which is what makes it the honest one to send: a
+     * client cannot promise what matching it will get, and `DAV:like` would
+     * be claiming substrings that the server may not have.
+     */
+    fun searchBody(scope: String, text: String, limit: Int): String = buildString {
+        append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
+        append("<searchrequest xmlns=\"DAV:\"><basicsearch>")
+        append("<select><prop>")
+        for (name in READS) append("<").append(name).append("/>")
+        append("</prop></select>")
+        append("<from><scope><href>").append(escape(scope)).append("</href>")
+        append("<depth>infinity</depth></scope></from>")
+        append("<where><contains>").append(escape(text)).append("</contains></where>")
+        append("<limit><nresults>").append(limit).append("</nresults></limit>")
+        append("</basicsearch></searchrequest>")
+    }
+
+    /**
+     * What a person typed, made safe to put in an element.
+     *
+     * Only the three characters that end one. A search term is somebody's
+     * words -- an ampersand in a filename is ordinary -- and a body that was
+     * not valid XML would come back as a 400 nobody could explain.
+     */
+    private fun escape(text: String): String =
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     private fun XmlReader.parseProp(): Props {
         var props = Props()

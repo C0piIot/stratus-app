@@ -15,6 +15,7 @@ import dev.stratus.core.documents.DocumentRef
 import dev.stratus.core.documents.DocumentTree
 import dev.stratus.core.files.BrowserController
 import dev.stratus.core.files.FileHandoff
+import dev.stratus.core.files.SearchController
 import dev.stratus.core.server.Server
 import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.DavProber
@@ -187,5 +188,12 @@ class AppContainer(
             scope,
             Sharing(ShareLinks(instance.baseUrl, credentials), sharing, linkSupportFor(instance)),
         )
+    }
+
+    /** Finding a file by a word of its name, where the server has the method. */
+    suspend fun search(scope: CoroutineScope): SearchController? {
+        val instance = instances.instance() ?: return null
+        val connection = connections.to(instance) ?: return null
+        return SearchController(connection.dav, scope)
     }
 }
