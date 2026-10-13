@@ -5,7 +5,7 @@ import dev.stratus.core.backup.AssetSource
 import dev.stratus.core.backup.Backup
 import dev.stratus.core.backup.BackupDatabase
 import dev.stratus.core.backup.Connection
-import dev.stratus.core.backup.Connections
+import dev.stratus.core.backup.KeptConnections
 import dev.stratus.core.backup.Network
 import dev.stratus.core.backup.Transport
 import dev.stratus.core.cast.CastController
@@ -83,12 +83,17 @@ class AppContainer(
     // to the server rather than to either of them.
     private var links: LinkSupport? = null
 
-    private val connections = Connections { instance ->
-        val credentials = instances.credentials() ?: return@Connections null
-        val pinned = TrustPolicy(trust.pins()[hostPortOf(instance.baseUrl)])
-        val client = stratusHttpClient(engine(pinned), credentials)
-        Connection(client, DavClient(client, instance.baseUrl))
-    }
+    // Kept rather than built per call, because a client is a connection pool
+    // and a pool nobody keeps is a handshake per request (stratus-app#151).
+    // What it may be kept across is the piece's own decision.
+    private val connections = KeptConnections(
+        credentials = { instances.credentials() },
+        pinOf = { trust.pins()[hostPortOf(it.baseUrl)] },
+        build = { instance, credentials, pin ->
+            val client = stratusHttpClient(engine(TrustPolicy(pin)), credentials)
+            Connection(client, DavClient(client, instance.baseUrl))
+        },
+    )
 
     val backup: Backup by lazy {
         if (transports == null) {
@@ -132,6 +137,7 @@ class AppContainer(
     suspend fun signOut() {
         instances.clear()
         database.clear()
+        connections.clear()
         links = null
     }
 

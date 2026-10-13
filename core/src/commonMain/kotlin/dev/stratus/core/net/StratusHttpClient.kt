@@ -11,6 +11,18 @@ import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 
 /**
+ * How many requests one host may be answering at once.
+ *
+ * It is a number this app did not have to have while every request built a
+ * client of its own; one client for everything (stratus-app#151) makes the
+ * engine's own default the app's ceiling, and both platforms set theirs
+ * around five. A `RangeReader` holds a response open for as long as another
+ * app keeps the descriptor, so five would be two paused films, the four
+ * thumbnails of a grid, and a listing waiting behind them.
+ */
+const val MOST_AT_ONCE_PER_HOST = 16
+
+/**
  * The client every request goes through.
  *
  * **Redirects are off, and that is a security decision rather than a preference.**

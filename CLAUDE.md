@@ -852,6 +852,26 @@ now, behind a `Connections` seam whose only job is to be the part that needs an
 engine and a keychain. The container is wiring, the platform holds a
 notification and a return value, and everything in between is in `commonTest`.
 
+**And the seam itself had one in it** (stratus-app#151): it built an
+`HttpClient` on every call, and a client is a connection pool -- so no two
+requests could share a socket, and a folder of forty rows with a picture beside
+each was forty pools and forty handshakes against one host. The decision hiding
+in there was *what a client may be kept across*, which is why `KeptConnections`
+is a piece with tests rather than a field in the container: the client holds the
+credentials in a header and the pin in its engine, so it survives exactly as
+long as the address, the credentials and that host's fingerprint are unchanged
+-- and editing a server keeps its backup record (stratus-app#131) while changing
+any of the three, which is the case a cache keyed by the server alone would get
+wrong by going on authenticating as whoever signed in before. The one it
+replaces is closed, and so is the one left at sign-out.
+
+What that costs is a ceiling the app never had: with a client per request
+nothing limited how many went out at once, and one client means the engine's
+own limit is the app's -- five per host on both platforms, where a `RangeReader`
+holds a response open for as long as another app keeps the descriptor. So both
+engines are given `MOST_AT_ONCE_PER_HOST`, and the number lives in `commonMain`
+beside the client rather than twice in platform code.
+
 **A composable is the same leak one layer up**, and it happened a third time:
 the signed-in screens kept their state in `App.kt`, where nothing re-read the
 photo access after somebody granted it and `:ui` had no test to notice
