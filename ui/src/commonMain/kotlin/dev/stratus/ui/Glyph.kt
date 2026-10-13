@@ -30,6 +30,7 @@ object Glyph {
     const val SIGN_OUT = "🚪"
     const val ADDRESS = "🔗"
     const val USERNAME = "👤"
+    const val BUILD = "🏷️"
 
     const val BACK = "←"
     const val MORE = "›"

@@ -10,6 +10,14 @@
 
 IMAGE  ?= stratus-app-toolchain
 
+# What the Settings screen says about the build it is. Read off git on the host
+# and never inside a container, so there is no `safe.directory` to set and
+# nothing to install in the image -- and through the script rather than inline,
+# because CI's iOS job needs the same two values and calls Gradle directly.
+STRATUS_VERSION    ?= $(shell ./scripts/buildstamp.sh version)
+STRATUS_BUILD_DATE ?= $(shell ./scripts/buildstamp.sh date)
+export STRATUS_VERSION STRATUS_BUILD_DATE
+
 # The fast loop runs without the Android SDK, and therefore without emulation.
 # Nothing in :core's JVM tests ever executes an Android binary, and AGP is happy
 # to configure the module without an SDK as long as no Android task runs -- so
@@ -63,7 +71,8 @@ DOCKER_RUN = docker run --rm \
 	-e HOME=/tmp \
 	-e GRADLE_USER_HOME=/gradle \
 	-e KONAN_DATA_DIR=/konan \
-	-e STRATUS_KEYSTORE_BASE64 -e STRATUS_KEYSTORE_PASSWORD -e SENTRY_DSN
+	-e STRATUS_KEYSTORE_BASE64 -e STRATUS_KEYSTORE_PASSWORD -e SENTRY_DSN \
+	-e STRATUS_VERSION -e STRATUS_BUILD_DATE
 
 # The wrapper is the source of truth for the Gradle version as soon as it
 # exists; the one baked into the image is only there to create it.

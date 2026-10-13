@@ -310,6 +310,14 @@ jobs:
           kill "$(cat "$dir/pid")" 2>/dev/null || true
           exit $status
 
+      # What Settings says about this build (stratus-app#148). The android job
+      # gets it from the Makefile; this one calls Gradle directly, because a
+      # macOS runner has no toolchain container to put it in -- so without
+      # this the iOS app would say `dev` while the APK beside it named a
+      # commit.
+      - name: Say which build this is
+        run: ./scripts/buildstamp.sh env >> "$GITHUB_ENV"
+
       # Two: the app links StratusUI and the File Provider extension links
       # StratusCore, which carries no Compose (stratus-app#105).
       - name: Link the frameworks Xcode links against

@@ -440,6 +440,18 @@ Three surfaces, and no more than three:
    the server keeps its backup record, which signing out and in again would
    throw away (stratus-app#87, stratus-app#131).
 
+   **And it ends with the build it is** (stratus-app#148). The APK at `latest`
+   is replaced on every push, so "which one am I running" is a question
+   somebody has before reporting that anything else is wrong -- and the reason
+   to show a commit is to quote it, which is why the row copies it rather than
+   being a line of text. The commit's date and not the build's, which is the
+   backend's own reasoning in its Makefile: a rebuild of one commit has to
+   produce the same artifact. The two values are generated into `:ui` by
+   Gradle, exactly as `REPORTING_DSN` is and from the environment for the same
+   reason -- git runs on the host and the toolchain image needs none. They are
+   in `:ui` rather than `:core` because the screen is all that reads them; the
+   day something puts a version on the wire they move down.
+
    **It is two screens because a setting's address is what says what it
    affects** (stratus-app#137). One screen called Server held the address, the
    folders being backed up, whether a pass may spend mobile data and whether
