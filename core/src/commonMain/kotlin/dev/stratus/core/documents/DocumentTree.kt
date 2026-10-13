@@ -5,15 +5,11 @@ import dev.stratus.core.backup.Connections
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.dav.DavResource
+import dev.stratus.core.media.Thumbnail
+import dev.stratus.core.media.Thumbnails
 import dev.stratus.core.server.Server
 import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.originOf
-import dev.stratus.core.share.ShareLife
-import dev.stratus.core.share.ShareLinks
-import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsBytes
-import io.ktor.http.HttpHeaders
-import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -97,6 +93,7 @@ sealed interface Listing {
 class DocumentTree(
     private val instances: ServerStore,
     private val connections: Connections,
+    private val thumbnails: Thumbnails,
     private val scope: CoroutineScope,
     /** Told when a folder's answer arrives or changes, so the platform can say so. */
     private val changed: (DocumentRef) -> Unit,
@@ -233,28 +230,14 @@ class DocumentTree(
     }
 
     /**
-     * The server's own rendering of a picture, or null where there is none.
+     * The server's own rendering of a picture, where there is one to be had.
      *
-     * The one thing here that knows it may be talking to a Stratus: `/thumb/`
-     * is not in WebDAV and no other server has it. It costs nothing to be
-     * wrong about -- a server without it answers something that is not an
-     * image and the picker draws an icon, which is what it would have done
-     * anyway. The request is authenticated like every other, and the
-     * signature rides along because [ShareLinks] is also the one piece that
-     * knows how that address is spelled.
+     * [Thumbnails] is shared with whatever else asks for one, so a picker
+     * binding forty rows asks a few at a time and a refusal is told apart from
+     * an absence (stratus-app#130).
      */
-    suspend fun thumbnail(ref: DocumentRef, width: Int): ByteArray? {
-        val instance = instances.instance() ?: return null
-        val credentials = instances.credentials() ?: return null
-        val connection = connections.to(instance) ?: return null
-        val url = ShareLinks(instance.baseUrl, credentials)
-            .thumbnail(ref.davPath, width, ShareLife.ADay, 0) ?: return null
-        return runCatching {
-            val response = connection.http.get(url)
-            val type = response.headers[HttpHeaders.ContentType].orEmpty()
-            if (response.status.isSuccess() && type.startsWith("image/")) response.bodyAsBytes() else null
-        }.getOrNull()
-    }
+    suspend fun thumbnail(ref: DocumentRef, width: Int): Thumbnail =
+        thumbnails.of(ref.davPath, width)
 
     private suspend fun invalidate(ref: DocumentRef) {
         lock.withLock {

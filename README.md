@@ -100,7 +100,10 @@ conflict resolution — they read when they are asked.
 Nothing is asked of the server that WebDAV does not already answer, so it works
 against any WebDAV server. The one Stratus-specific touch is the picture beside
 an image or a video, which comes from the server's own thumbnail; anywhere else
-the picker draws its usual icon.
+the picker draws its usual icon. Those are asked for four at a time, and a
+server that says it is busy is left alone for as long as it asked rather than
+being sent a request per row — so a folder on a small server fills in over a
+few seconds, and scrolling back to a row is what asks again.
 
 ## Building
 

@@ -106,6 +106,28 @@ are made:
   per row asking. Against a Stratus that is also what makes the generated
   collections behave: a create under `photos/` fails where the server says so
   rather than where this app guessed.
+- **A thumbnail refused is not a thumbnail missing** (stratus-app#130). Null
+  used to mean both, so a `503` from a server making as many pictures as it can
+  became an icon that never became a picture. `Thumbnails` answers one of three
+  things -- a picture, nothing, or not-now with the `Retry-After` it was given
+  -- and it is a piece of its own rather than a method on `DocumentTree`
+  because the budget it keeps belongs to the server: one per process, so the
+  picker and the app's own listing, when it draws pictures, queue behind the
+  same four permits and sit out the same refusal. Four at a time is about being
+  a reasonable client of any WebDAV server rather than a guess at this one's
+  capacity, and a refusal shuts the door for as long as it asked -- a picker
+  binds forty rows, and thirty-five of those requests existed to learn what one
+  of them had already said. What it cannot do is make a system ask again, so
+  the rule underneath is that **nothing writes an absence down**: Android
+  re-asks when it binds the row, and scrolling back is the retry.
+
+  It also found the reason none of this had ever been visible. The address is
+  signed, and it was signed **with a clock of zero** -- a link that expired on
+  the second of January 1970 -- which `readable` answers with a `403` before it
+  looks at the credentials behind it (stratus-backend#169). Every picture in
+  the picker was an icon, and the old code read that 403 as "there is none".
+  A token minted for a moment needs the moment, which is the same `now()` the
+  door already needed.
 
 `RangeReader` is the part worth reading twice. A picker hands another app a
 file descriptor and that app reads it like a local file, so **one request has

@@ -16,6 +16,7 @@ import dev.stratus.core.documents.DocumentTree
 import dev.stratus.core.files.BrowserController
 import dev.stratus.core.files.FileHandoff
 import dev.stratus.core.files.SearchController
+import dev.stratus.core.media.Thumbnails
 import dev.stratus.core.server.Server
 import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.DavProber
@@ -168,6 +169,15 @@ class AppContainer(
     }
 
     /**
+     * What the server will draw of a file, for everything that shows a grid.
+     *
+     * Here rather than inside one screen because the budget it keeps is the
+     * server's: a picker and a listing asking at once are the same forty
+     * requests (stratus-app#130).
+     */
+    val thumbnails = Thumbnails(instances, connections)
+
+    /**
      * The library as a tree of documents, for the platform's own file picker.
      *
      * One per process and not per request: it holds the listings the picker
@@ -175,7 +185,7 @@ class AppContainer(
      * fetch everything again.
      */
     fun documents(scope: CoroutineScope, changed: (DocumentRef) -> Unit): DocumentTree =
-        DocumentTree(instances, connections, scope, changed)
+        DocumentTree(instances, connections, thumbnails, scope, changed)
 
     /** Null when nobody is signed in, which is the only state it can be built from. */
     suspend fun browser(scope: CoroutineScope): BrowserController? {

@@ -131,7 +131,7 @@ class CastConformanceTest {
 }
 
 /** 423 bytes, the same fixture the server's own thumbnail tests use. */
-private const val TINY_HEIC =
+internal const val TINY_HEIC =
     "AAAAHGZ0eXBoZWl4AAAAAG1pZjFoZWl4bWlhZgAAAVFtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABw" +
     "aWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAABdQABAAAAAAAAADIAAAAjaWlu" +
     "ZgAAAAAAAQAAABVpbmZlAgAAAAABAABodmMxAAAAAA5waXRtAAAAAAABAAAA0WlwcnAAAACyaXBj" +
