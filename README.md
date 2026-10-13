@@ -278,6 +278,19 @@ name, and with a `SENTRY_AUTH_TOKEN` secret it also uploads the iOS debug
 symbols that turn a crash into Kotlin function names. Android needs none while
 its builds are not minified, which they are not.
 
+## Which build is this
+
+The APK at `latest` is replaced on every push, so **Settings** ends with the
+commit it was built from and that commit's date — tap the row and the commit is
+on the clipboard, which is the only reason to put it on a screen at all.
+
+The **commit's** date and not the build's: a rebuild of one commit produces the
+same APK, and what the row answers is how old the code is. Both come from git
+on the machine that builds — `scripts/buildstamp.sh`, which the Makefile reads
+for every container it starts and CI's iOS job reads for itself — so a build
+made outside a git tree says `dev` and `unknown` rather than inventing
+something.
+
 ## The backup log
 
 A pass writes a line per file — what it sent and how much is behind it — which

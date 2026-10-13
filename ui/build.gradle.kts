@@ -17,6 +17,35 @@ val generateReportingDsn by tasks.registering {
     }
 }
 
+// Which build this is, for the row at the bottom of Settings. From the
+// environment like the DSN above, because git runs on the host: the Makefile
+// reads it and passes it in, so there is no git inside the toolchain image and
+// no `safe.directory` to configure.
+//
+// The date is the commit's and not today's -- a rebuild of one commit has to
+// produce the same APK -- and a build made outside a git tree says `dev` and
+// `unknown` rather than inventing something.
+val buildVersion = providers.environmentVariable("STRATUS_VERSION").orElse("dev")
+val buildDate = providers.environmentVariable("STRATUS_BUILD_DATE").orElse("unknown")
+
+val generateBuildStamp by tasks.registering {
+    val version = buildVersion
+    val date = buildDate
+    val out = layout.buildDirectory.dir("generated/buildstamp/kotlin")
+    inputs.property("version", version)
+    inputs.property("date", date)
+    outputs.dir(out)
+    doLast {
+        val file = out.get().file("dev/stratus/ui/BuildStamp.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            "package dev.stratus.ui\n\n" +
+                "internal const val BUILD_VERSION = \"${version.get()}\"\n" +
+                "internal const val BUILD_DATE = \"${date.get()}\"\n",
+        )
+    }
+}
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidKotlinMultiplatformLibrary)
@@ -48,6 +77,7 @@ kotlin {
     sourceSets {
         commonMain {
             kotlin.srcDir(generateReportingDsn)
+            kotlin.srcDir(generateBuildStamp)
         }
         commonMain.dependencies {
             // api, not implementation: App() takes a SignInController, so the
