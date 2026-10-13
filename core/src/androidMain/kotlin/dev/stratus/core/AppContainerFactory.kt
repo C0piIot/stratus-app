@@ -8,6 +8,7 @@ import dev.stratus.core.cast.AndroidCaster
 import dev.stratus.core.cast.Caster
 import dev.stratus.core.cast.NoCaster
 import dev.stratus.core.files.AndroidFileHandoff
+import dev.stratus.core.net.MOST_AT_ONCE_PER_HOST
 import dev.stratus.core.net.PinnedHostnameVerifier
 import dev.stratus.core.net.PinningTrustManager
 import dev.stratus.core.net.pinnedSocketFactory
@@ -16,6 +17,7 @@ import dev.stratus.core.store.AndroidSecureStore
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import io.ktor.client.engine.okhttp.OkHttp
+import okhttp3.Dispatcher
 import javax.net.ssl.HttpsURLConnection
 
 @Volatile private var shared: AppContainer? = null
@@ -55,6 +57,10 @@ private fun build(application: Context): AppContainer {
                     hostnameVerifier(
                         PinnedHostnameVerifier(policy, HttpsURLConnection.getDefaultHostnameVerifier()),
                     )
+                    // One client serves the whole app now (stratus-app#151),
+                    // so the engine's own ceiling is the app's. See the
+                    // constant for why five is not enough.
+                    dispatcher(Dispatcher().apply { maxRequestsPerHost = MOST_AT_ONCE_PER_HOST })
                 }
             }
         },

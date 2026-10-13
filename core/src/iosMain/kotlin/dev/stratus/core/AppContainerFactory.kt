@@ -2,6 +2,7 @@ package dev.stratus.core
 
 import dev.stratus.core.backup.IosAssetSource
 import dev.stratus.core.files.IosFileHandoff
+import dev.stratus.core.net.MOST_AT_ONCE_PER_HOST
 import dev.stratus.core.net.darwinTrust
 import dev.stratus.core.net.basicAuthHeader
 import dev.stratus.core.backup.negotiateTus
@@ -79,7 +80,15 @@ private fun build(registersDomains: Boolean): AppContainer {
     val uploads = BackgroundUploads { ticket, answer -> holder.backup.settle(ticket, answer) }
     uploadSession = uploads
     return AppContainer(
-    engine = { policy -> Darwin.create { handleChallenge(darwinTrust(policy)) } },
+    engine = { policy ->
+        Darwin.create {
+            handleChallenge(darwinTrust(policy))
+            // The same ceiling as the Android half and for the same reason
+            // (stratus-app#151): one client serves everything now, and a file
+            // the File Provider is handing out holds a response open.
+            configureSession { HTTPMaximumConnectionsPerHost = MOST_AT_ONCE_PER_HOST.toLong() }
+        }
+    },
     secure = secure,
     handoff = IosFileHandoff(),
     sharing = IosLinkSharing(),
