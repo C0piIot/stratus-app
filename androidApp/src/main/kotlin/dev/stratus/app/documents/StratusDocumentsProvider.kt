@@ -27,6 +27,7 @@ import dev.stratus.core.documents.DocumentRow
 import dev.stratus.core.documents.DocumentTree
 import dev.stratus.core.documents.Listing
 import dev.stratus.core.documents.RangeReader
+import dev.stratus.core.media.Thumbnail
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -239,7 +240,11 @@ class StratusDocumentsProvider : DocumentsProvider() {
         signal: CancellationSignal?,
     ): AssetFileDescriptor? {
         val ref = DocumentRef.parse(documentId)
-        val bytes = runBlocking { tree.thumbnail(ref, sizeHint.x.coerceAtLeast(MIN_THUMBNAIL)) } ?: return null
+        // A refusal and an absence are both "no picture" to the system, which
+        // has no way to be told the difference -- and neither is written down,
+        // so binding the row again is the retry (stratus-app#130).
+        val answer = runBlocking { tree.thumbnail(ref, sizeHint.x.coerceAtLeast(MIN_THUMBNAIL)) }
+        val bytes = (answer as? Thumbnail.Picture)?.bytes ?: return null
         val file = File.createTempFile("stratus-thumb", null, app.cacheDir)
         file.writeBytes(bytes)
         val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)

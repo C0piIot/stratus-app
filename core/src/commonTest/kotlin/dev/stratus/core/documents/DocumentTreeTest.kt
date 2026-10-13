@@ -3,6 +3,7 @@ package dev.stratus.core.documents
 import dev.stratus.core.backup.Connection
 import dev.stratus.core.backup.Connections
 import dev.stratus.core.dav.DavClient
+import dev.stratus.core.media.Thumbnails
 import dev.stratus.core.server.Server
 import dev.stratus.core.server.ServerStore
 import dev.stratus.core.net.Credentials
@@ -89,7 +90,7 @@ class DocumentTreeTest {
         val connections = Connections { instance ->
             Connection(http, DavClient(http, instance.baseUrl))
         }
-        return DocumentTree(instances, connections, treeScope) { told += it }
+        return DocumentTree(instances, connections, Thumbnails(instances, connections), treeScope) { told += it }
     }
 
     @Test
