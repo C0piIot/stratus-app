@@ -7,6 +7,23 @@ import kotlinx.coroutines.flow.asStateFlow
 /** A screen on the network. */
 data class CastDevice(val id: String, val name: String)
 
+/** What came of handing a screen something to play. */
+sealed interface CastOutcome {
+    /**
+     * Handed over. Not "playing": a Chromecast that accepts a load and then
+     * fetches nothing says nothing either, and the trail is where that shows.
+     */
+    data object Started : CastOutcome
+
+    /**
+     * The screen said beforehand that it plays none of [offered], so nothing
+     * was sent. A DLNA renderer can say so and a Chromecast cannot, and a
+     * renderer handed what it cannot play shows a black screen and reports
+     * nothing -- which nobody can tell from the app being broken.
+     */
+    data class CannotPlay(val offered: List<String>) : CastOutcome
+}
+
 /**
  * The platform's Cast sender, and a dumb executor like every other platform half
  * here: it finds screens, connects to one and loads a URL. What to load, whether
@@ -24,7 +41,11 @@ interface Caster {
     fun startDiscovery()
     fun stopDiscovery()
 
-    suspend fun play(device: CastDevice, item: CastItem)
+    /**
+     * Plays [item] -- or, where the screen says what it plays, the first of
+     * [CastItem.choices] it does.
+     */
+    suspend fun play(device: CastDevice, item: CastItem): CastOutcome
     suspend fun stop()
 
     /**
@@ -42,6 +63,6 @@ class NoCaster : Caster {
     override val devices = MutableStateFlow(emptyList<CastDevice>()).asStateFlow()
     override fun startDiscovery() = Unit
     override fun stopDiscovery() = Unit
-    override suspend fun play(device: CastDevice, item: CastItem) = Unit
+    override suspend fun play(device: CastDevice, item: CastItem): CastOutcome = CastOutcome.Started
     override suspend fun stop() = Unit
 }

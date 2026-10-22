@@ -146,12 +146,14 @@ class AndroidCaster(private val context: Context) : Caster {
 
     override fun stopDiscovery() = router.removeCallback(watching)
 
-    override suspend fun play(device: CastDevice, item: CastItem) = withContext(Dispatchers.Main) {
+    // A Chromecast says nothing about what it plays before it is asked to, so
+    // every failure here is reported in the trail rather than as an outcome.
+    override suspend fun play(device: CastDevice, item: CastItem): CastOutcome = withContext(Dispatchers.Main) {
         val route = router.routes.firstOrNull { it.id == device.id }
         if (route == null) {
             note("route ${device.name} is gone")
             report("route gone")
-            return@withContext
+            return@withContext CastOutcome.Started
         }
         note("selecting ${device.name}")
         router.selectRoute(route)
@@ -159,7 +161,7 @@ class AndroidCaster(private val context: Context) : Caster {
         val session = awaitSession()
         if (session == null) {
             report("no session")
-            return@withContext
+            return@withContext CastOutcome.Started
         }
         val screen = session.castDevice
         note(
@@ -189,7 +191,7 @@ class AndroidCaster(private val context: Context) : Caster {
         if (remote == null) {
             note("session has no media client")
             report("no media client")
-            return@withContext
+            return@withContext CastOutcome.Started
         }
         client?.unregisterCallback(receiver)
         client = remote.also { it.registerCallback(receiver) }
@@ -208,6 +210,7 @@ class AndroidCaster(private val context: Context) : Caster {
         // either; whatever it has said by now is the answer.
         delay(ANSWER_WAIT_MS)
         if (synchronized(trail) { attempt == mine }) report("no answer from the receiver")
+        CastOutcome.Started
     }
 
     override suspend fun stop() = withContext(Dispatchers.Main) {
