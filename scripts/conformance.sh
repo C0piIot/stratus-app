@@ -30,11 +30,12 @@ SUFFIX="$$"
 NET="stratus-conformance-$SUFFIX"
 NAME="stratus-conformance-$SUFFIX"
 SECOND="stratus-conformance-two-$SUFFIX"
+RENDERER="stratus-conformance-renderer-$SUFFIX"
 DATA="$(mktemp -d)"
 DATA2="$(mktemp -d)"
 
 cleanup() {
-    docker rm -f "$NAME" "$SECOND" >/dev/null 2>&1 || true
+    docker rm -f "$NAME" "$SECOND" "$RENDERER" >/dev/null 2>&1 || true
     docker network rm "$NET" >/dev/null 2>&1 || true
     rm -rf "$DATA" "$DATA2"
 }
@@ -64,6 +65,12 @@ docker run -d --name "$SECOND" --network "$NET" \
     -e STRATUS_PASSWORD="$DAV_PASS" \
     -v "$DATA2:/data" \
     "$IMAGE" >/dev/null
+
+# A DLNA renderer on the same network, for the cast suite to find by SSDP
+# rather than be told about: multicast crosses a Docker bridge, and a test
+# that skipped discovery would prove less than the app does (stratus-app#153).
+docker build -q -t stratus-conformance-renderer scripts/renderer >/dev/null
+docker run -d --name "$RENDERER" --network "$NET" stratus-conformance-renderer >/dev/null
 
 # Waiting for the port to answer rather than sleeping a fixed amount: a constant
 # is either too short on a loaded runner or wasted on an idle one.

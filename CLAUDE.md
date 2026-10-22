@@ -663,6 +663,23 @@ whole app minus the button: one availability check in the entry point, behind
 the `Caster` interface, and the emulator CI already runs -- an `aosp-atd` image
 with no Play Services -- is that phone on every run.
 
+**DLNA is the same list and the same link** (stratus-app#153). A renderer
+fetches the media itself like a Chromecast, so it is handed the same signed
+URL; what is different is that it says what it plays, so **the choice is made
+after the screen is picked rather than before** -- `Caster.play` answers a
+`CastOutcome`, and a renderer that lists none of `CastItem.choices` is
+`ScreenCannotPlay` rather than a black screen. All of it is common code --
+SSDP, the device description, the SOAP and `pickFor` -- over an `SsdpSocket`
+the platform supplies: plain `java.net` in `jvmCommon`, which is what lets the
+conformance suite run a phone's own discovery, and a `MulticastLock` around it
+on Android. `Casters` joins the two senders into one list and leaves out the
+one a phone does not have, so a phone without Play Services still lists the
+renderers. The conformance suite finds gmrender-resurrect on the Docker
+network by a real search and watches it reach `PLAYING` on a signed link;
+**libupnp answers only a `Host` that is an address**, so a renderer is
+reached by the `LOCATION` it announced and never by a name somebody gave it.
+iOS waits on the multicast entitlement and stratus-app#5.
+
 **Open and download are not the same button.** Open hands the file to whatever
 the system uses to view it; download keeps a copy. On Android that copy has an
 obvious home, on iOS it means the share sheet or the Files app, because there is

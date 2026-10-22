@@ -70,6 +70,13 @@ class DlnaControl(private val http: HttpClient) {
         call(renderer.avTransport, AV_TRANSPORT, "Seek", listOf(INSTANCE, "Unit" to "REL_TIME", "Target" to hms(seconds)))
     }
 
+    /**
+     * What the transport is doing as the renderer tells it: `PLAYING`,
+     * `STOPPED`, `TRANSITIONING` and the rest of UPnP's words for it.
+     */
+    suspend fun transportState(renderer: Renderer): String =
+        call(renderer.avTransport, AV_TRANSPORT, "GetTransportInfo", listOf(INSTANCE))["CurrentTransportState"].orEmpty()
+
     /** Sets the volume, 0 to 100; false for a renderer that offers no control of it. */
     suspend fun volume(renderer: Renderer, percent: Int): Boolean {
         val url = renderer.renderingControl ?: return false
