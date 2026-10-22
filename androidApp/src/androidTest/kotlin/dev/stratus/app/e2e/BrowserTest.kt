@@ -125,16 +125,22 @@ class BrowserTest : E2E() {
         see("note.txt")
     }
 
-    // No Play Services on this image, so this is the phone that has none.
+    // No Play Services on this image, so this is the phone that has none: the
+    // Chromecasts are missing and the DLNA renderers are not (stratus-app#153),
+    // so the button stays and looking for a screen must not break anything.
+    // There is no renderer on the emulator's network, which is the point: an
+    // empty search is the commonest thing it will ever find.
     @Test
-    fun withoutPlayServicesThereIsNoCastButtonAndNothingElseIsMissing() {
+    fun withoutPlayServicesTheRenderersAreStillLookedFor() {
         Stratus.folder("/$unique/")
         Stratus.file("/$unique/film.mp4")
         signedIn()
         tap(unique)
 
         tap("film.mp4")
-        see("Open")
-        gone("Cast to a screen", timeoutMs = 1_000)
+        tap("Cast to a screen")
+        see("Looking for screens on this network…")
+        tap("Cancel")
+        see("film.mp4")
     }
 }
