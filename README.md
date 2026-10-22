@@ -264,7 +264,16 @@ accepted on the phone is one the television cannot check, so the app says so
 before trying.
 
 The Cast SDK is part of Google Play Services. On a phone without them the app is
-the same app, without the cast button.
+the same app, without the Chromecasts in the list.
+
+**DLNA televisions and speakers are in the same list, on Android.** They are
+found on the wifi with SSDP and handed the same signed link, and since a
+renderer says what it plays, what it gets is the first of the HLS, the file
+or the server's JPEG that it lists -- and one that lists none of them is said
+to rather than sent something it would show as black. A track goes as it is.
+This works on a phone without Play Services too. iOS has no DLNA yet: finding
+renderers there is multicast, which needs an entitlement Apple grants on
+request.
 
 ## Crash reports
 

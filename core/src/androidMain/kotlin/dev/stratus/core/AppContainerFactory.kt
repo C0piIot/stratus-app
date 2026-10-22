@@ -5,8 +5,12 @@ import android.provider.DocumentsContract
 import dev.stratus.core.backup.AndroidAssetSource
 import dev.stratus.core.backup.AndroidNetwork
 import dev.stratus.core.cast.AndroidCaster
+import dev.stratus.core.cast.AndroidSsdpSocket
 import dev.stratus.core.cast.Caster
+import dev.stratus.core.cast.Casters
 import dev.stratus.core.cast.NoCaster
+import dev.stratus.core.cast.dlna.DlnaCaster
+import dev.stratus.core.cast.dlna.DlnaControl
 import dev.stratus.core.files.AndroidFileHandoff
 import dev.stratus.core.net.MOST_AT_ONCE_PER_HOST
 import dev.stratus.core.net.PinnedHostnameVerifier
@@ -16,7 +20,11 @@ import dev.stratus.core.share.AndroidLinkSharing
 import dev.stratus.core.store.AndroidSecureStore
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.Dispatcher
 import javax.net.ssl.HttpsURLConnection
 
@@ -67,7 +75,16 @@ private fun build(application: Context): AppContainer {
         secure = AndroidSecureStore(application),
         handoff = AndroidFileHandoff(application),
         sharing = AndroidLinkSharing(application),
-        caster = casterFor(application),
+        caster = Casters(
+            listOf(
+                casterFor(application),
+                // A renderer is driven over plain http on the local network,
+                // so its client has none of the server's pinning: nothing it
+                // talks to is the server.
+                DlnaCaster(AndroidSsdpSocket(application), DlnaControl(HttpClient(OkHttp)), castScope),
+            ),
+            castScope,
+        ),
         databasePath = application.filesDir.resolve("backup.db").absolutePath,
         assets = AndroidAssetSource(application),
         network = AndroidNetwork(application),
@@ -94,6 +111,9 @@ private fun build(application: Context): AppContainer {
  * before touching `CastContext` is all it takes: the alternative is a crash on
  * exactly the devices whose owners chose them on purpose.
  */
+/** Casting outlives any screen, so it has the process's own scope. */
+private val castScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
 fun casterFor(context: Context): Caster =
     if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS) {
         AndroidCaster(context)

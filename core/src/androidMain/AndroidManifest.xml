@@ -12,6 +12,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Finding DLNA renderers is multicast, which wifi drops without it. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

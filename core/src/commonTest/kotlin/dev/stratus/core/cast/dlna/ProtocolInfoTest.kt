@@ -30,6 +30,14 @@ class ProtocolInfoTest {
     }
 
     @Test
+    fun gstreamersNameForAPlaylistIsAPlaylist() {
+        // gmrender-resurrect lists GStreamer's caps, and this is what it calls one.
+        assertEquals(hls, pickFor(ProtocolInfo.parseList("http-get:*:application/x-hls:*"), listOf(hls, file))?.item)
+        val wav = CastItem("http://s/a.wav?k=t", "audio/wav", "a.wav")
+        assertEquals(wav, pickFor(ProtocolInfo.parseList("http-get:*:audio/x-wav:*"), listOf(wav))?.item)
+    }
+
+    @Test
     fun theFileGoesWhereItDoesNot() {
         val sink = ProtocolInfo.parseList("http-get:*:video/x-matroska:DLNA.ORG_OP=01,http-get:*:audio/mpeg:*")
         assertEquals(Pick(file, "http-get:*:video/x-matroska:*"), pickFor(sink, listOf(hls, file)))

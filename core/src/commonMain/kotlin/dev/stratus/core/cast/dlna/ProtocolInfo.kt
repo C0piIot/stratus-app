@@ -37,19 +37,23 @@ data class ProtocolInfo(val protocol: String, val network: String, val contentTy
 
         /**
          * A type with its parameters off and its aliases folded. A playlist
-         * has four names in the wild, and a renderer that lists one of them
-         * plays the others.
+         * has five names in the wild, the last of them GStreamer's own -- which
+         * is what a renderer built on it lists -- and a renderer that lists one
+         * plays the others. Two audio types have an `x-` twin as well.
          */
         private fun canonical(type: String): String {
             val bare = type.substringBefore(';').trim().lowercase()
-            return if (bare in HLS_ALIASES) HLS_TYPE else bare
+            return ALIASES[bare] ?: bare
         }
 
-        private val HLS_ALIASES = setOf(
-            HLS_TYPE,
-            "application/x-mpegurl",
-            "audio/mpegurl",
-            "audio/x-mpegurl",
+        private val ALIASES = mapOf(
+            "application/x-mpegurl" to HLS_TYPE,
+            "audio/mpegurl" to HLS_TYPE,
+            "audio/x-mpegurl" to HLS_TYPE,
+            "application/x-hls" to HLS_TYPE,
+            "audio/x-wav" to "audio/wav",
+            "audio/wave" to "audio/wav",
+            "audio/x-flac" to "audio/flac",
         )
     }
 }
