@@ -659,7 +659,7 @@ consulted only when system validation fails, so a server given a real
 certificate since would be blocked for nothing.
 
 The Cast SDK lives inside Google Play Services, so a phone without them gets the
-whole app minus the button: one availability check in the entry point, behind
+whole app minus the Chromecasts: one availability check in the entry point, behind
 the `Caster` interface, and the emulator CI already runs -- an `aosp-atd` image
 with no Play Services -- is that phone on every run.
 
