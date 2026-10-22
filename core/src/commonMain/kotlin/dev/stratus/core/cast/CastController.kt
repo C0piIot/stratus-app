@@ -38,6 +38,13 @@ sealed interface CastState {
     /** Asked whether the link works and got no answer, which is not a no. */
     data object TheServerDidNotAnswer : CastState
     data class Playing(val device: CastDevice, val item: CastItem) : CastState
+
+    /**
+     * The screen said it plays none of [offered], so nothing was sent to it.
+     * Said rather than tried, because what a screen does with what it cannot
+     * play is show nothing at all.
+     */
+    data class ScreenCannotPlay(val device: CastDevice, val item: CastItem, val offered: List<String>) : CastState
 }
 
 /**
@@ -104,7 +111,15 @@ class CastController(
         val item = (mutable.value as? CastState.Choosing)?.item ?: return
         caster.stopDiscovery()
         mutable.value = CastState.Playing(device, item)
-        scope.launch { caster.play(device, item) }
+        scope.launch {
+            val outcome = caster.play(device, item)
+            // Unless somebody stopped it meanwhile, which the state already says.
+            if (outcome is CastOutcome.CannotPlay && mutable.value == CastState.Playing(device, item)) {
+                caster.note("${device.name} plays none of ${outcome.offered}")
+                caster.report("screen cannot play it")
+                mutable.value = CastState.ScreenCannotPlay(device, item, outcome.offered)
+            }
+        }
     }
 
     fun stop() {

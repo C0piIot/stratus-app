@@ -22,9 +22,13 @@ private class FakeCaster(override val available: Boolean = true) : Caster {
     override val devices = MutableStateFlow(listOf(CastDevice("tv-1", "The television")))
     var discovering = false
     var played: CastItem? = null
+    var answer: CastOutcome = CastOutcome.Started
     override fun startDiscovery() { discovering = true }
     override fun stopDiscovery() { discovering = false }
-    override suspend fun play(device: CastDevice, item: CastItem) { played = item }
+    override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
+        played = item
+        return answer
+    }
     override suspend fun stop() { played = null }
 }
 
@@ -141,6 +145,29 @@ class CastControllerTest {
         assertTrue(cast.state.value is CastState.Playing)
         assertEquals(HLS_TYPE, caster.played?.contentType)
         assertTrue(!caster.discovering, "kept the radio on while playing")
+    }
+
+    @Test
+    fun aScreenThatPlaysNoneOfItIsSaidSo() = runTest {
+        caster.answer = CastOutcome.CannotPlay(listOf(HLS_TYPE, "video/x-matroska"))
+        val cast = controller(this)
+        cast.offer(file("film.mkv", "video/x-matroska"))
+        cast.state.first { it is CastState.Choosing }
+        cast.playOn(CastDevice("tv-1", "The television"))
+        testScheduler.advanceUntilIdle()
+
+        val said = cast.state.value
+        assertTrue(said is CastState.ScreenCannotPlay, "was $said")
+        assertEquals(listOf(HLS_TYPE, "video/x-matroska"), said.offered)
+        assertEquals("The television", said.device.name)
+    }
+
+    @Test
+    fun theChoicesAreThePlaylistThenTheFile() = runTest {
+        val cast = controller(this)
+        cast.offer(file("film.mkv", "video/x-matroska"))
+        val choosing = cast.state.first { it is CastState.Choosing } as CastState.Choosing
+        assertEquals(listOf(HLS_TYPE, "video/x-matroska"), choosing.item.choices.map { it.contentType })
     }
 
     @Test

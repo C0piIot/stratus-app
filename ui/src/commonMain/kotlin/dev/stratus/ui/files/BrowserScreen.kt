@@ -358,6 +358,18 @@ private fun CastBar(cast: CastController) {
             confirmButton = { TextButton(onClick = cast::stop) { Text("Close") } },
         )
 
+        is CastState.ScreenCannotPlay -> AlertDialog(
+            onDismissRequest = cast::stop,
+            title = { Text("${here.device.name} cannot play this") },
+            text = {
+                Text(
+                    "It lists what it plays, and none of it is what there is to send: " +
+                        here.offered.joinToString(" or ") + ".",
+                )
+            },
+            confirmButton = { TextButton(onClick = cast::stop) { Text("Close") } },
+        )
+
         CastState.TheServerDidNotAnswer -> AlertDialog(
             onDismissRequest = cast::stop,
             title = { Text("The server did not answer") },

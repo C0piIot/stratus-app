@@ -13,7 +13,13 @@ data class CastItem(
     val contentType: String,
     val title: String,
     val fallback: CastItem? = null,
-)
+) {
+    /**
+     * This and what it falls back on, in order of preference: what a screen
+     * that says what it plays chooses from.
+     */
+    val choices: List<CastItem> get() = generateSequence(this) { it.fallback }.toList()
+}
 
 /**
  * What to send a Chromecast for a file, or null when there is nothing it could
