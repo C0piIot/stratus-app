@@ -9,18 +9,44 @@ import nl.adaptivity.xmlutil.EventType
 import nl.adaptivity.xmlutil.XmlReader
 import nl.adaptivity.xmlutil.xmlStreaming
 
+/**
+ * One of a renderer's services: its type as the renderer declared it, version
+ * and all, and where to post to it. The type is sent back exactly as given,
+ * since a renderer matches an action against the service it declared and a
+ * version it did not is an action it does not have.
+ */
+data class Service(val type: String, val control: String)
+
 /** A renderer, as its description says it can be driven. */
 data class Renderer(
     /** Its UDN, which is the same whichever address it answered from. */
     val id: String,
     val name: String,
     /** Where to send `SetAVTransportURI` and the rest; every renderer has one. */
-    val avTransport: String,
+    val avTransport: Service,
     /** Where to set the volume, and null for one that does not say. */
-    val renderingControl: String?,
+    val renderingControl: Service?,
     /** Where to ask what it plays, and null for one that does not say. */
-    val connectionManager: String?,
+    val connectionManager: Service?,
+    /** Its own picture of itself, and null for one that has none worth drawing. */
+    val icon: String? = null,
 )
+
+/** One entry of a description's `iconList`. */
+internal data class Icon(val type: String, val width: Int, val url: String)
+
+/**
+ * The icon to draw in a list of screens: a PNG or a JPEG -- what both
+ * platforms decode without help -- as near as there is to [WANTED] pixels,
+ * since the list draws it small on a dense screen. Larger beats smaller at
+ * the same distance, because shrinking looks better than stretching.
+ */
+internal fun bestIcon(icons: List<Icon>): Icon? =
+    icons.filter { it.type.lowercase() in DRAWABLE && it.width > 0 }
+        .minWithOrNull(compareBy<Icon> { kotlin.math.abs(it.width - WANTED) }.thenByDescending { it.width })
+
+private const val WANTED = 96
+private val DRAWABLE = setOf("image/png", "image/jpeg", "image/jpg")
 
 /**
  * Reads a device description into a [Renderer].
@@ -57,38 +83,42 @@ internal object Description {
         return Renderer(
             id = device.udn,
             name = device.name.ifEmpty { device.udn },
-            avTransport = resolve(base, device.controls.getValue(AV_TRANSPORT)),
-            renderingControl = device.controls[RENDERING_CONTROL]?.let { resolve(base, it) },
-            connectionManager = device.controls[CONNECTION_MANAGER]?.let { resolve(base, it) },
+            avTransport = device.controls.getValue(AV_TRANSPORT).resolved(base),
+            renderingControl = device.controls[RENDERING_CONTROL]?.resolved(base),
+            connectionManager = device.controls[CONNECTION_MANAGER]?.resolved(base),
+            icon = bestIcon(device.icons)?.let { URLBuilder(base).takeFrom(it.url).buildString() },
         )
     }
 
-    private class Device(val name: String, val udn: String, val controls: Map<String, String>)
+    /** Services by their type without the version, which is how they are looked up. */
+    private class Device(val name: String, val udn: String, val controls: Map<String, Service>, val icons: List<Icon>)
 
     /** One device, appended after the ones embedded in it so the root comes first. */
     private fun XmlReader.parseDevice(into: MutableList<Device>) {
         var name = ""
         var udn = ""
-        val controls = mutableMapOf<String, String>()
+        val controls = mutableMapOf<String, Service>()
         val embedded = mutableListOf<Device>()
+        val icons = mutableListOf<Icon>()
         eachChild { ns, element ->
             when {
                 ns != DEVICE -> skipElement()
                 element == "friendlyName" -> name = textOfElement().trim()
                 element == "UDN" -> udn = textOfElement().trim()
-                element == "serviceList" -> eachChild { _, _ -> parseService()?.let { (type, url) -> controls[type] = url } }
+                element == "serviceList" -> eachChild { _, _ -> parseService()?.let { controls[it.type.substringBeforeLast(':')] = it } }
+                element == "iconList" -> eachChild { _, _ -> parseIcon()?.let(icons::add) }
                 element == "deviceList" -> eachChild { innerNs, inner ->
                     if (innerNs == DEVICE && inner == "device") parseDevice(embedded) else skipElement()
                 }
                 else -> skipElement()
             }
         }
-        into += Device(name, udn, controls)
+        into += Device(name, udn, controls, icons)
         into += embedded
     }
 
-    /** A service's type without its version, and its control URL. */
-    private fun XmlReader.parseService(): Pair<String, String>? {
+    /** A service's type and its control URL, as written. */
+    private fun XmlReader.parseService(): Service? {
         var type: String? = null
         var control: String? = null
         eachChild { ns, element ->
@@ -98,11 +128,25 @@ internal object Description {
                 else -> skipElement()
             }
         }
-        return (type ?: return null).substringBeforeLast(':') to (control ?: return null)
+        return Service(type ?: return null, control ?: return null)
     }
 
-    private fun resolve(base: String, url: String): String =
-        URLBuilder(base).takeFrom(url).buildString()
+    private fun XmlReader.parseIcon(): Icon? {
+        var type = ""
+        var width = 0
+        var url: String? = null
+        eachChild { ns, element ->
+            when {
+                ns == DEVICE && element == "mimetype" -> type = textOfElement().trim()
+                ns == DEVICE && element == "width" -> width = textOfElement().trim().toIntOrNull() ?: 0
+                ns == DEVICE && element == "url" -> url = textOfElement().trim()
+                else -> skipElement()
+            }
+        }
+        return Icon(type, width, url ?: return null)
+    }
+
+    private fun Service.resolved(base: String) = copy(control = URLBuilder(base).takeFrom(control).buildString())
 }
 
 internal const val AV_TRANSPORT = "urn:schemas-upnp-org:service:AVTransport"

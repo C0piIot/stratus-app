@@ -43,6 +43,9 @@ class Casters(parts: List<Caster>, scope: CoroutineScope) : Caster {
         return owner.play(device, item)
     }
 
+    override suspend fun icon(device: CastDevice): ByteArray? =
+        parts.firstOrNull { part -> part.devices.value.any { it.id == device.id } }?.icon(device)
+
     override suspend fun stop() {
         playing.value?.stop()
         playing.value = null

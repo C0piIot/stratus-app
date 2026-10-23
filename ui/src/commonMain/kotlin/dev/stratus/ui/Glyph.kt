@@ -31,6 +31,7 @@ object Glyph {
     const val ADDRESS = "🔗"
     const val USERNAME = "👤"
     const val BUILD = "🏷️"
+    const val SCREEN = "📺"
 
     const val BACK = "←"
     const val MORE = "›"

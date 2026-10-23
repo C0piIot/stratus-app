@@ -96,6 +96,21 @@ class DlnaCaster(
         }
     }
 
+    /**
+     * Fetched once per address and kept for the life of the process: the
+     * list is drawn again every time somebody casts, and a television does
+     * not change its picture of itself in between. A failure is kept too,
+     * as an empty array, so a renderer with a broken icon is not asked again
+     * on every redraw.
+     */
+    private val icons = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
+
+    override suspend fun icon(device: CastDevice): ByteArray? {
+        val url = device.icon ?: return null
+        val bytes = icons.value[url] ?: (control.bytes(url) ?: ByteArray(0)).also { got -> icons.update { it + (url to got) } }
+        return bytes.takeIf { it.isNotEmpty() }
+    }
+
     override suspend fun stop() {
         watching?.cancel()
         watching = null
@@ -166,7 +181,7 @@ class DlnaCaster(
         } ?: return
         val id = DEVICE_PREFIX + renderer.id.ifEmpty { sighting.location }
         found.update { it + (id to renderer) }
-        listed.update { list -> list.filterNot { it.id == id } + CastDevice(id, renderer.name) }
+        listed.update { list -> list.filterNot { it.id == id } + CastDevice(id, renderer.name, renderer.icon) }
     }
 
     private companion object {

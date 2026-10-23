@@ -76,6 +76,9 @@ class CastController(
     val available: Boolean get() = caster.available
     val devices: StateFlow<List<CastDevice>> get() = caster.devices
 
+    /** A screen's picture of itself, for the list somebody chooses from. */
+    suspend fun iconOf(device: CastDevice): ByteArray? = caster.icon(device)
+
     /** Where the screen has got to, for as long as something is playing. */
     val playback: StateFlow<Playback?> get() = caster.playback
 

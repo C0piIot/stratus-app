@@ -6,7 +6,9 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
@@ -29,6 +31,16 @@ class DlnaControl(private val http: HttpClient) {
         return Description.parse(response.bodyAsText(), location)
     }
 
+    /** The bytes at [url], a renderer's icon, or null when it would not hand them over. */
+    suspend fun bytes(url: String): ByteArray? = try {
+        val response = http.get(url) { header(HttpHeaders.Connection, "close") }
+        if (response.status.isSuccess()) response.readRawBytes() else null
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
     /**
      * What [renderer] says it plays. Empty when it has no connection manager
      * or will not answer -- a refusal, or an answer that starts and never
@@ -36,9 +48,9 @@ class DlnaControl(private val http: HttpClient) {
      * that as not saying rather than as playing nothing.
      */
     suspend fun protocolInfo(renderer: Renderer): List<ProtocolInfo> {
-        val url = renderer.connectionManager ?: return emptyList()
+        val service = renderer.connectionManager ?: return emptyList()
         return try {
-            ProtocolInfo.parseList(call(url, CONNECTION_MANAGER, "GetProtocolInfo", emptyList())["Sink"].orEmpty())
+            ProtocolInfo.parseList(call(service, "GetProtocolInfo", emptyList())["Sink"].orEmpty())
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -51,7 +63,6 @@ class DlnaControl(private val http: HttpClient) {
         val metadata = didl(pick.item.title, pick.item.url, pick.protocolInfo, pick.item.contentType)
         call(
             renderer.avTransport,
-            AV_TRANSPORT,
             "SetAVTransportURI",
             listOf(INSTANCE, "CurrentURI" to pick.item.url, "CurrentURIMetaData" to metadata),
         )
@@ -59,19 +70,19 @@ class DlnaControl(private val http: HttpClient) {
     }
 
     suspend fun play(renderer: Renderer) {
-        call(renderer.avTransport, AV_TRANSPORT, "Play", listOf(INSTANCE, "Speed" to "1"))
+        call(renderer.avTransport, "Play", listOf(INSTANCE, "Speed" to "1"))
     }
 
     suspend fun pause(renderer: Renderer) {
-        call(renderer.avTransport, AV_TRANSPORT, "Pause", listOf(INSTANCE))
+        call(renderer.avTransport, "Pause", listOf(INSTANCE))
     }
 
     suspend fun stop(renderer: Renderer) {
-        call(renderer.avTransport, AV_TRANSPORT, "Stop", listOf(INSTANCE))
+        call(renderer.avTransport, "Stop", listOf(INSTANCE))
     }
 
     suspend fun seek(renderer: Renderer, seconds: Long) {
-        call(renderer.avTransport, AV_TRANSPORT, "Seek", listOf(INSTANCE, "Unit" to "REL_TIME", "Target" to hms(seconds)))
+        call(renderer.avTransport, "Seek", listOf(INSTANCE, "Unit" to "REL_TIME", "Target" to hms(seconds)))
     }
 
     /**
@@ -79,7 +90,7 @@ class DlnaControl(private val http: HttpClient) {
      * `STOPPED`, `TRANSITIONING` and the rest of UPnP's words for it.
      */
     suspend fun transportState(renderer: Renderer): String =
-        call(renderer.avTransport, AV_TRANSPORT, "GetTransportInfo", listOf(INSTANCE))["CurrentTransportState"].orEmpty()
+        call(renderer.avTransport, "GetTransportInfo", listOf(INSTANCE))["CurrentTransportState"].orEmpty()
 
     /**
      * Where the track is and how long it is, in seconds, each null when the
@@ -87,28 +98,35 @@ class DlnaControl(private val http: HttpClient) {
      * stream whose length they have not worked out yet.
      */
     suspend fun position(renderer: Renderer): Pair<Long?, Long?> {
-        val answer = call(renderer.avTransport, AV_TRANSPORT, "GetPositionInfo", listOf(INSTANCE))
+        val answer = call(renderer.avTransport, "GetPositionInfo", listOf(INSTANCE))
         return seconds(answer["RelTime"]) to seconds(answer["TrackDuration"])?.takeIf { it > 0 }
     }
 
     /** The volume, 0 to 100, or null for a renderer that offers no control of it. */
     suspend fun currentVolume(renderer: Renderer): Int? {
-        val url = renderer.renderingControl ?: return null
-        return call(url, RENDERING_CONTROL, "GetVolume", listOf(INSTANCE, "Channel" to "Master"))["CurrentVolume"]?.trim()?.toIntOrNull()
+        val service = renderer.renderingControl ?: return null
+        return call(service, "GetVolume", listOf(INSTANCE, "Channel" to "Master"))["CurrentVolume"]?.trim()?.toIntOrNull()
     }
 
     /** Sets the volume, 0 to 100; false for a renderer that offers no control of it. */
     suspend fun volume(renderer: Renderer, percent: Int): Boolean {
-        val url = renderer.renderingControl ?: return false
-        call(url, RENDERING_CONTROL, "SetVolume", listOf(INSTANCE, "Channel" to "Master", "DesiredVolume" to percent.coerceIn(0, 100).toString()))
+        val service = renderer.renderingControl ?: return false
+        call(service, "SetVolume", listOf(INSTANCE, "Channel" to "Master", "DesiredVolume" to percent.coerceIn(0, 100).toString()))
         return true
     }
 
-    private suspend fun call(url: String, service: String, action: String, args: List<Pair<String, String>>): Map<String, String> {
-        val response = http.post(url) {
-            header("SOAPACTION", Soap.action(service, action))
+    private suspend fun call(service: Service, action: String, args: List<Pair<String, String>>): Map<String, String> {
+        val response = http.post(service.control) {
+            header("SOAPACTION", Soap.action(service.type, action))
+            // One connection per action. A renderer's HTTP server is often a
+            // few hundred lines inside a television, and one that mishandles
+            // keep-alive reads the next request as the tail of the last: it
+            // hung half way through an answer and then called the action
+            // after it invalid (UPnP 401), which a fresh connection avoids
+            // for the price of a handshake on the local network.
+            header(HttpHeaders.Connection, "close")
             contentType(ContentType.Text.Xml.withParameter("charset", "utf-8"))
-            setBody(Soap.body(service, action, args))
+            setBody(Soap.body(service.type, action, args))
         }
         // A fault arrives as a 500 with an envelope in it, which is the
         // answer worth reading; anything else that is not a success is the
@@ -117,7 +135,12 @@ class DlnaControl(private val http: HttpClient) {
         if (!response.status.isSuccess() && !text.contains("Fault")) {
             throw SoapFault(null, "$action answered ${response.status.value}")
         }
-        return Soap.answer(text)
+        return try {
+            Soap.answer(text)
+        } catch (e: SoapFault) {
+            // Which action it was is the first thing a report needs.
+            throw SoapFault(e.code, "$action: ${e.message}")
+        }
     }
 
     private companion object {

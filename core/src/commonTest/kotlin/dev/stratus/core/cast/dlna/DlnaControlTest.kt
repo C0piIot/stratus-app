@@ -20,17 +20,17 @@ class DlnaControlTest {
     private val renderer = Renderer(
         id = "uuid:r",
         name = "Living room",
-        avTransport = "http://r/av",
-        renderingControl = "http://r/rc",
-        connectionManager = "http://r/cm",
+        avTransport = Service("urn:schemas-upnp-org:service:AVTransport:1", "http://r/av"),
+        renderingControl = Service("urn:schemas-upnp-org:service:RenderingControl:1", "http://r/rc"),
+        connectionManager = Service("urn:schemas-upnp-org:service:ConnectionManager:1", "http://r/cm"),
     )
 
-    private class Sent(val url: String, val action: String?, val body: String)
+    private class Sent(val url: String, val action: String?, val body: String, val connection: String?)
 
     private fun control(answer: (Sent) -> Pair<HttpStatusCode, String>): Pair<DlnaControl, List<Sent>> {
         val sent = mutableListOf<Sent>()
         val engine = MockEngine { request ->
-            val s = Sent(request.url.toString(), request.headers["SOAPACTION"], request.body.toByteArray().decodeToString())
+            val s = Sent(request.url.toString(), request.headers["SOAPACTION"], request.body.toByteArray().decodeToString(), request.headers[HttpHeaders.Connection])
             sent += s
             val (status, body) = answer(s)
             respond(body, status, headersOf(HttpHeaders.ContentType, "text/xml"))
@@ -49,6 +49,7 @@ class DlnaControlTest {
 
         assertEquals(listOf("\"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"", "\"urn:schemas-upnp-org:service:AVTransport:1#Play\""), sent.map { it.action })
         assertTrue(sent.all { it.url == "http://r/av" })
+        assertTrue(sent.all { it.connection == "close" }, "a renderer that mishandles keep-alive reads the next action as garbage")
         val body = sent[0].body
         assertTrue("<InstanceID>0</InstanceID><CurrentURI>https://s/files/a%20b.mkv?k=k1.x.y&amp;hls=index.m3u8</CurrentURI>" in body)
         // DIDL travels as the text of an argument, so it is escaped twice: the
@@ -69,6 +70,12 @@ class DlnaControlTest {
         assertEquals(listOf("video/mp4", "audio/mpeg"), control.protocolInfo(renderer).map { it.contentType })
         assertEquals("http://r/cm", sent.single().url)
         assertEquals(emptyList(), control.protocolInfo(renderer.copy(connectionManager = null)))
+
+        // A renderer that declared a later version is answered in its own.
+        val newer = renderer.copy(avTransport = Service("urn:schemas-upnp-org:service:AVTransport:2", "http://r/av"))
+        control.play(newer)
+        assertEquals("\"urn:schemas-upnp-org:service:AVTransport:2#Play\"", sent.last().action)
+        assertTrue("xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:2\"" in sent.last().body)
     }
 
     @Test
@@ -81,7 +88,7 @@ class DlnaControlTest {
         val (control, _) = control { HttpStatusCode.InternalServerError to fault }
         val refused = assertFailsWith<SoapFault> { control.play(renderer) }
         assertEquals(714, refused.code)
-        assertEquals("Illegal MIME-type", refused.message)
+        assertEquals("Play: Illegal MIME-type", refused.message, "which action it was is the first thing a report needs")
         // And GetProtocolInfo refusing is a renderer that would not say.
         assertEquals(emptyList(), control.protocolInfo(renderer))
     }
@@ -102,6 +109,7 @@ class DlnaControlTest {
         assertTrue("<Unit>REL_TIME</Unit><Target>1:02:05</Target>" in sent[0].body)
         assertTrue("#Pause" in sent[1].action.orEmpty())
         assertEquals("http://r/rc", sent[2].url)
+        assertEquals("\"urn:schemas-upnp-org:service:RenderingControl:1#SetVolume\"", sent[2].action)
         assertTrue("<DesiredVolume>100</DesiredVolume>" in sent[2].body)
     }
 
@@ -115,7 +123,7 @@ class DlnaControlTest {
                 HttpStatusCode.NotFound to ""
             }
         }
-        assertEquals("http://tv:1/av", control.describe("http://tv:1/desc.xml")?.avTransport)
+        assertEquals("http://tv:1/av", control.describe("http://tv:1/desc.xml")?.avTransport?.control)
         assertEquals(null, control.describe("http://tv:1/gone"))
     }
 

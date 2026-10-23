@@ -19,17 +19,18 @@ internal object Soap {
     private const val CONTROL = "urn:schemas-upnp-org:control-1-0"
 
     /** The `SOAPACTION` header, quotes included: renderers that need them refuse it without. */
-    fun action(service: String, action: String) = "\"$service:1#$action\""
+    fun action(service: String, action: String) = "\"$service#$action\""
 
     /**
-     * The body for [action] on [service], with the arguments in the order
+     * The body for [action] on [service] -- a full type, version included --
+     * with the arguments in the order
      * given. Order is part of the contract -- the specification says so and
      * some renderers read them by position.
      */
     fun body(service: String, action: String, args: List<Pair<String, String>>): String = buildString {
         append("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
         append("<s:Envelope xmlns:s=\"$ENVELOPE\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">")
-        append("<s:Body><u:$action xmlns:u=\"$service:1\">")
+        append("<s:Body><u:$action xmlns:u=\"$service\">")
         for ((name, value) in args) append("<$name>").append(escape(value)).append("</$name>")
         append("</u:$action></s:Body></s:Envelope>")
     }

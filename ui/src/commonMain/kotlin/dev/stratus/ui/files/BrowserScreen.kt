@@ -1,6 +1,7 @@
 package dev.stratus.ui.files
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,12 +35,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
 import dev.stratus.core.cast.CastController
+import dev.stratus.core.cast.CastDevice
 import dev.stratus.core.cast.CastState
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.dav.DavResource
@@ -49,6 +53,7 @@ import dev.stratus.core.files.Confirmation
 import dev.stratus.core.share.ShareLife
 import dev.stratus.ui.Glyph
 import dev.stratus.ui.StratusMark
+import dev.stratus.ui.decodePicture
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -389,7 +394,7 @@ private fun CastBar(cast: CastController) {
                         Text("Looking for screens on this network…")
                     } else {
                         for (device in devices) {
-                            TextButton(onClick = { cast.playOn(device) }) { Text(device.name) }
+                            TextButton(onClick = { cast.playOn(device) }) { ScreenName(cast, device) }
                         }
                     }
                 }
@@ -403,3 +408,30 @@ private fun CastBar(cast: CastController) {
 private fun BrowserFailure.isRejectedSignIn() =
     (this is BrowserFailure.Listing && error is DavError.Unauthorized) ||
         (this is BrowserFailure.Operation && error is DavError.Unauthorized)
+
+/**
+ * A screen's name, with its own picture of itself in front where it has one
+ * -- which is how somebody tells two televisions apart before they have read
+ * either name. Fetched once per address by the caster; until it arrives, and
+ * for a screen with none -- every Chromecast, whose SDK hands over no icon --
+ * a television glyph holds the same square, so the names stay in a column.
+ */
+@Composable
+private fun ScreenName(cast: CastController, device: CastDevice) {
+    val picture by produceState<ImageBitmap?>(null, device) {
+        value = cast.iconOf(device)?.let(::decodePicture)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+            val drawn = picture
+            if (drawn != null) {
+                Image(drawn, contentDescription = null, modifier = Modifier.size(32.dp))
+            } else {
+                Text(Glyph.SCREEN, style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(device.name)
+    }
+}
+
