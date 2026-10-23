@@ -153,7 +153,7 @@ class DlnaCasterTest {
         caster.startDiscovery()
         val tv = caster.devices.first { it.isNotEmpty() }.single()
         caster.stopDiscovery()
-        assertEquals(CastOutcome.Failed("error 714: Illegal MIME-type"), caster.play(tv, film))
+        assertEquals(CastOutcome.Failed("error 714: SetAVTransportURI: Illegal MIME-type"), caster.play(tv, film))
         assertEquals(null, caster.playback.value)
     }
 }

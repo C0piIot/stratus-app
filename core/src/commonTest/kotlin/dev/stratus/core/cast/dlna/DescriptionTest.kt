@@ -42,9 +42,9 @@ class DescriptionTest {
             Renderer(
                 id = "uuid:5a1c0d6e-0000-0000-0000-b827eb000001",
                 name = "Living room",
-                avTransport = "http://192.168.1.40:49152/upnp/control/rendertransport1",
-                renderingControl = "http://192.168.1.40:49152/upnp/control/rendercontrol1",
-                connectionManager = "http://192.168.1.40:49152/upnp/control/renderconnmgr1",
+                avTransport = Service("urn:schemas-upnp-org:service:AVTransport:1", "http://192.168.1.40:49152/upnp/control/rendertransport1"),
+                renderingControl = Service("urn:schemas-upnp-org:service:RenderingControl:1", "http://192.168.1.40:49152/upnp/control/rendercontrol1"),
+                connectionManager = Service("urn:schemas-upnp-org:service:ConnectionManager:1", "http://192.168.1.40:49152/upnp/control/renderconnmgr1"),
             ),
             Description.parse(gmrender, "http://192.168.1.40:49152/description.xml"),
         )
@@ -68,7 +68,7 @@ class DescriptionTest {
             </root>
         """.trimIndent()
         val renderer = Description.parse(xml, "http://192.168.1.41:7676/smp_2_")
-        assertEquals("http://192.168.1.41:9197/upnp/control/AVTransport1", renderer?.avTransport)
+        assertEquals("http://192.168.1.41:9197/upnp/control/AVTransport1", renderer?.avTransport?.control)
         assertNull(renderer?.renderingControl, "a renderer that does not say has no volume to set")
     }
 
@@ -103,7 +103,8 @@ class DescriptionTest {
         """.trimIndent()
         val renderer = Description.parse(xml, "http://nas:8200/desc.xml")
         assertEquals("NAS speaker", renderer?.name)
-        assertEquals("http://nas:8200/av", renderer?.avTransport)
+        // Its own version, which is what it will match an action against.
+        assertEquals(Service("urn:schemas-upnp-org:service:AVTransport:2", "http://nas:8200/av"), renderer?.avTransport)
     }
 
     @Test
