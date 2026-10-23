@@ -23,6 +23,7 @@ private class FakeCaster(override val available: Boolean = true) : Caster {
     var discovering = false
     var played: CastItem? = null
     var answer: CastOutcome = CastOutcome.Started
+    var throws: Exception? = null
     val controls = mutableListOf<String>()
     override suspend fun pause() { controls += "pause" }
     override suspend fun resume() { controls += "resume" }
@@ -32,6 +33,7 @@ private class FakeCaster(override val available: Boolean = true) : Caster {
     override fun stopDiscovery() { discovering = false }
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
         played = item
+        throws?.let { throw it }
         return answer
     }
     override suspend fun stop() { played = null }
@@ -165,6 +167,29 @@ class CastControllerTest {
         assertTrue(said is CastState.ScreenCannotPlay, "was $said")
         assertEquals(listOf(HLS_TYPE, "video/x-matroska"), said.offered)
         assertEquals("The television", said.device.name)
+    }
+
+    @Test
+    fun aScreenThatRefusesIsSaidSoWithItsWords() = runTest {
+        caster.answer = CastOutcome.Failed("error 714: Illegal MIME-type")
+        val cast = controller(this)
+        cast.offer(file("clip.mp4", "video/mp4"))
+        cast.state.first { it is CastState.Choosing }
+        cast.playOn(CastDevice("tv-1", "The television"))
+        testScheduler.advanceUntilIdle()
+        assertEquals("error 714: Illegal MIME-type", (cast.state.value as CastState.ScreenFailed).reason)
+    }
+
+    @Test
+    fun aScreenThatThrowsDoesNotTakeTheAppDown() = runTest {
+        // STRATUS-APP-6: a renderer that started answering and never finished.
+        caster.throws = RuntimeException("Socket timeout has expired")
+        val cast = controller(this)
+        cast.offer(file("clip.mp4", "video/mp4"))
+        cast.state.first { it is CastState.Choosing }
+        cast.playOn(CastDevice("tv-1", "The television"))
+        testScheduler.advanceUntilIdle()
+        assertEquals("Socket timeout has expired", (cast.state.value as CastState.ScreenFailed).reason)
     }
 
     @Test

@@ -5,6 +5,7 @@ import dev.stratus.core.share.LinkAnswer
 import dev.stratus.core.share.LinkSupport
 import dev.stratus.core.share.ShareLinks
 import io.ktor.util.date.getTimeMillis
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,6 +46,9 @@ sealed interface CastState {
      * play is show nothing at all.
      */
     data class ScreenCannotPlay(val device: CastDevice, val item: CastItem, val offered: List<String>) : CastState
+
+    /** The screen refused, or stopped answering, with what it said. */
+    data class ScreenFailed(val device: CastDevice, val item: CastItem, val reason: String) : CastState
 }
 
 /**
@@ -115,12 +119,30 @@ class CastController(
         caster.stopDiscovery()
         mutable.value = CastState.Playing(device, item)
         scope.launch {
-            val outcome = caster.play(device, item)
+            // A screen is somebody else's software on somebody else's network,
+            // and nothing it does may take the app down with it: one that
+            // started answering and never finished was a crash (STRATUS-APP-6).
+            val outcome = try {
+                caster.play(device, item)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CastOutcome.Failed(e.message ?: e::class.simpleName ?: "no answer")
+            }
             // Unless somebody stopped it meanwhile, which the state already says.
-            if (outcome is CastOutcome.CannotPlay && mutable.value == CastState.Playing(device, item)) {
-                caster.note("${device.name} plays none of ${outcome.offered}")
-                caster.report("screen cannot play it")
-                mutable.value = CastState.ScreenCannotPlay(device, item, outcome.offered)
+            if (mutable.value != CastState.Playing(device, item)) return@launch
+            when (outcome) {
+                is CastOutcome.CannotPlay -> {
+                    caster.note("${device.name} plays none of ${outcome.offered}")
+                    caster.report("screen cannot play it")
+                    mutable.value = CastState.ScreenCannotPlay(device, item, outcome.offered)
+                }
+                is CastOutcome.Failed -> {
+                    caster.note("${device.name} failed: ${outcome.reason}")
+                    caster.report("screen failed")
+                    mutable.value = CastState.ScreenFailed(device, item, outcome.reason)
+                }
+                CastOutcome.Started -> Unit
             }
         }
     }

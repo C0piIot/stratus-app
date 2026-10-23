@@ -37,7 +37,8 @@ class Casters(parts: List<Caster>, scope: CoroutineScope) : Caster {
     override fun stopDiscovery() = parts.forEach { it.stopDiscovery() }
 
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
-        val owner = parts.firstOrNull { part -> part.devices.value.any { it.id == device.id } } ?: return CastOutcome.Started
+        val owner = parts.firstOrNull { part -> part.devices.value.any { it.id == device.id } }
+            ?: return CastOutcome.Failed("${device.name} is no longer on the network")
         playing.value = owner
         return owner.play(device, item)
     }
