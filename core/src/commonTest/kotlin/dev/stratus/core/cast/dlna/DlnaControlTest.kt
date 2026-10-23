@@ -153,4 +153,55 @@ class DlnaControlTest {
         val control = DlnaControl(HttpClient(MockEngine { throw RuntimeException("Socket timeout has expired") }))
         assertEquals(emptyList(), control.protocolInfo(renderer))
     }
+
+    private val refusedPlay = envelope(
+        "<s:Fault><faultstring>UPnPError</faultstring><detail><UPnPError xmlns=\"urn:schemas-upnp-org:control-1-0\">" +
+            "<errorCode>401</errorCode><errorDescription>Invalid Action</errorDescription></UPnPError></detail></s:Fault>",
+    )
+
+    private fun state(now: String) = envelope("<u:GetTransportInfoResponse xmlns:u=\"urn:x\"><CurrentTransportState>$now</CurrentTransportState></u:GetTransportInfoResponse>")
+
+    private val pick = Pick(CastItem("http://s/a.mp4?k=t", "video/mp4", "a.mp4"), "http-get:*:video/mp4:*")
+
+    @Test
+    fun aRendererThatStartsByItselfIsNotAskedToPlay() = runTest {
+        // eHomeMediaCenter: a load starts it, and a Play on top is an "Invalid Action".
+        val (control, sent) = control {
+            when {
+                it.action.orEmpty().endsWith("#Play\"") -> HttpStatusCode.InternalServerError to refusedPlay
+                it.action.orEmpty().endsWith("#GetTransportInfo\"") -> HttpStatusCode.OK to state("TRANSITIONING")
+                else -> HttpStatusCode.OK to envelope("<u:Ok xmlns:u=\"urn:x\"/>")
+            }
+        }
+        control.load(renderer, pick)
+        assertEquals(listOf("SetAVTransportURI", "Play", "GetTransportInfo"), sent.map { it.action.orEmpty().substringAfter('#').trimEnd('"') })
+    }
+
+    @Test
+    fun aRendererStillOpeningIsAskedAgainAMomentLater() = runTest {
+        var plays = 0
+        val (control, _) = control {
+            when {
+                it.action.orEmpty().endsWith("#Play\"") -> if (++plays < 2) HttpStatusCode.InternalServerError to refusedPlay else HttpStatusCode.OK to envelope("<u:Ok xmlns:u=\"urn:x\"/>")
+                it.action.orEmpty().endsWith("#GetTransportInfo\"") -> HttpStatusCode.OK to state("STOPPED")
+                else -> HttpStatusCode.OK to envelope("<u:Ok xmlns:u=\"urn:x\"/>")
+            }
+        }
+        control.load(renderer, pick)
+        assertEquals(2, plays)
+    }
+
+    @Test
+    fun aRendererThatNeverPlaysIsBelievedInTheEnd() = runTest {
+        val (control, _) = control {
+            when {
+                it.action.orEmpty().endsWith("#Play\"") -> HttpStatusCode.InternalServerError to refusedPlay
+                it.action.orEmpty().endsWith("#GetTransportInfo\"") -> HttpStatusCode.OK to state("STOPPED")
+                else -> HttpStatusCode.OK to envelope("<u:Ok xmlns:u=\"urn:x\"/>")
+            }
+        }
+        val refused = assertFailsWith<SoapFault> { control.load(renderer, pick) }
+        assertEquals(401, refused.code)
+        assertEquals("Play: Invalid Action", refused.message)
+    }
 }
