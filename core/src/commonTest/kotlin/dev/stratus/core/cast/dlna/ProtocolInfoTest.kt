@@ -60,8 +60,11 @@ class ProtocolInfoTest {
     }
 
     @Test
-    fun aRendererThatWillNotSayGetsTheFirstChoice() {
-        assertEquals(hls, pickFor(emptyList(), listOf(hls, file))?.item)
+    fun aRendererThatWillNotSayGetsTheFileRatherThanAPlaylist() {
+        // eHomeMediaCenter never finished saying, and almost no renderer takes HLS.
+        assertEquals(file, pickFor(emptyList(), listOf(hls, file))?.item)
+        assertEquals(mp4, pickFor(emptyList(), listOf(mp4))?.item)
+        assertEquals(hls, pickFor(emptyList(), listOf(hls))?.item, "a playlist is still better than nothing")
         assertNull(pickFor(emptyList(), emptyList()))
     }
 }

@@ -12,6 +12,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 /**
  * Driving a renderer: its description, what it plays, and the transport.
@@ -66,7 +67,36 @@ class DlnaControl(private val http: HttpClient) {
             "SetAVTransportURI",
             listOf(INSTANCE, "CurrentURI" to pick.item.url, "CurrentURIMetaData" to metadata),
         )
-        play(renderer)
+        startAfterLoading(renderer)
+    }
+
+    /**
+     * Play, after a load, for renderers that do not want one. Plenty start by
+     * themselves once they have a URI and refuse a `Play` that arrives while
+     * they are still opening it -- with UPnP's 401, Invalid Action, which is
+     * the wrong code for it (eHomeMediaCenter, stratus-app#153). So a refusal
+     * is checked against what the renderer is doing: already playing, or on
+     * its way there, is what was asked for, and anything else is asked again
+     * a moment later before the refusal is believed.
+     */
+    private suspend fun startAfterLoading(renderer: Renderer) {
+        var refused: SoapFault? = null
+        repeat(PLAY_TRIES) { attempt ->
+            if (attempt > 0) delay(PLAY_PAUSE_MS)
+            try {
+                play(renderer)
+                return
+            } catch (e: SoapFault) {
+                refused = e
+            }
+            val state = try {
+                transportState(renderer)
+            } catch (e: SoapFault) {
+                ""
+            }
+            if (state == "PLAYING" || state == "TRANSITIONING") return
+        }
+        throw refused ?: SoapFault(null, "Play was refused")
     }
 
     suspend fun play(renderer: Renderer) {
@@ -144,6 +174,9 @@ class DlnaControl(private val http: HttpClient) {
     }
 
     private companion object {
+        const val PLAY_TRIES = 3
+        const val PLAY_PAUSE_MS = 700L
+
         /** Every renderer this app drives has one transport, and it is number 0. */
         val INSTANCE = "InstanceID" to "0"
     }

@@ -24,6 +24,9 @@ data class ProtocolInfo(val protocol: String, val network: String, val contentTy
     }
 
     companion object {
+        /** Whether [type] is an HLS playlist, under any of its names. */
+        fun isPlaylist(type: String): Boolean = canonical(type) == HLS_TYPE
+
         /**
          * The `Sink` of `GetProtocolInfo`, a comma-separated list. A line that
          * does not have four fields is dropped rather than failing the list:
@@ -68,12 +71,17 @@ data class Pick(val item: CastItem, val protocolInfo: String)
  * rather than sent: a renderer handed what it cannot play shows a black
  * screen and reports nothing, and nobody can tell that from the app failing.
  *
- * An empty [sink] is a renderer that would not say, and is given the first
- * choice and the benefit of the doubt.
+ * An empty [sink] is a renderer that would not say, and is given the benefit
+ * of the doubt -- with the file itself rather than a playlist made of it,
+ * because a renderer that cannot list what it plays is not one to trust with
+ * HLS: almost none of them take it, and the one that would not say turned out
+ * not to (stratus-app#153).
  */
 fun pickFor(sink: List<ProtocolInfo>, choices: List<CastItem>): Pick? {
-    val first = choices.firstOrNull() ?: return null
-    if (sink.isEmpty()) return Pick(first, "http-get:*:${first.contentType}:*")
+    if (sink.isEmpty()) {
+        val safest = choices.firstOrNull { !ProtocolInfo.isPlaylist(it.contentType) } ?: choices.firstOrNull() ?: return null
+        return Pick(safest, "http-get:*:${safest.contentType}:*")
+    }
     for (choice in choices) {
         if (sink.any { it.takes(choice.contentType) }) {
             // Our own type and a wildcard fourth field rather than the line
