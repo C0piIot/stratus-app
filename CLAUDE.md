@@ -634,6 +634,13 @@ registration, a Google account, an HTTPS page to host -- and a proxy running on
 the phone for the length of a film. A link that needs no credentials removes
 both: the default receiver loads an ordinary URL.
 
+**From a generated collection it signs the file's address in the tree**
+(#163). A link verifies only under `/files/`, and `/thumb/` and HLS answer only
+there, so a photograph listed under `/photos/` is cast by the path the listing
+gives in Stratus's `source` property (stratus-backend#431). Where that is
+missing -- the trash, the playlists, an older server -- `source` is null,
+`signable` refuses the generated path, and casting is not offered.
+
 What is sent is decided in `commonMain` and is the interesting half. **A
 photograph goes as the server's JPEG, not as itself**, because no Chromecast
 reads HEIC and HEIC is what an iPhone records and what this app uploads

@@ -23,6 +23,7 @@ import nl.adaptivity.xmlutil.xmlStreaming
  */
 internal object MultiStatus {
     private const val DAV = "DAV:"
+    private const val STRATUS = "https://github.com/C0piIot/stratus"
 
     fun parse(xml: String, basePath: String): List<DavResource> =
         entries(xml, basePath).filter { it.status == null }.map { it.resource }
@@ -86,6 +87,7 @@ internal object MultiStatus {
                 contentType = kept.contentType,
                 etag = kept.etag,
                 lastModifiedEpochMs = kept.lastModified,
+                source = kept.source?.let { pathOf(it, basePath) },
             ),
             status,
         )
@@ -133,8 +135,17 @@ internal object MultiStatus {
     fun propfindBody(): String = buildString {
         append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
         append("<propfind xmlns=\"DAV:\"><prop>")
-        for (name in READS) append("<").append(name).append("/>")
+        appendReads()
         append("</prop></propfind>")
+    }
+
+    /**
+     * [READS], and the one property of Stratus's own this reads. Asking any
+     * other server for it costs a 404 in the answer's second propstat.
+     */
+    private fun StringBuilder.appendReads() {
+        for (name in READS) append("<").append(name).append("/>")
+        append("<source xmlns=\"").append(STRATUS).append("\"/>")
     }
 
     /**
@@ -151,7 +162,7 @@ internal object MultiStatus {
         append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
         append("<searchrequest xmlns=\"DAV:\"><basicsearch>")
         append("<select><prop>")
-        for (name in READS) append("<").append(name).append("/>")
+        appendReads()
         append("</prop></select>")
         append("<from><scope><href>").append(escape(scope)).append("</href>")
         append("<depth>infinity</depth></scope></from>")
@@ -173,6 +184,10 @@ internal object MultiStatus {
     private fun XmlReader.parseProp(): Props {
         var props = Props()
         eachChild { ns, name ->
+            if (ns == STRATUS && name == "source") {
+                props = props.copy(source = readHref())
+                return@eachChild
+            }
             if (ns != DAV) {
                 skipElement()
                 return@eachChild
@@ -194,6 +209,15 @@ internal object MultiStatus {
             }
         }
         return props
+    }
+
+    /** The `DAV:href` inside the current element, if there is one. */
+    private fun XmlReader.readHref(): String? {
+        var href: String? = null
+        eachChild { ns, name ->
+            if (ns == DAV && name == "href") href = textOfElement().trim().ifEmpty { null } else skipElement()
+        }
+        return href
     }
 
     /** A resource is a collection when `resourcetype` has a `collection` in it. */
@@ -253,6 +277,7 @@ internal object MultiStatus {
         val contentType: String? = null,
         val etag: String? = null,
         val lastModified: Long? = null,
+        val source: String? = null,
     ) {
         fun merge(other: Props) = Props(
             isDirectory ?: other.isDirectory,
@@ -260,6 +285,7 @@ internal object MultiStatus {
             contentType ?: other.contentType,
             etag ?: other.etag,
             lastModified ?: other.lastModified,
+            source ?: other.source,
         )
     }
 }

@@ -254,6 +254,10 @@ Hold a photograph or a video and send it to a Chromecast. It uses Google's
 default receiver, so there is nothing to register and nothing to pay: what the
 television fetches is a signed link that needs no account.
 
+It works from your folders and from Stratus's own collections -- `photos/`,
+`videos/`, `music/` -- where each file says where it lives in your tree. From
+the trash and the playlists it is not offered.
+
 A photograph is sent as the server's rendering of it, which is how a HEIC from
 an iPhone appears on a screen that cannot read one. A video is sent as the HLS
 Stratus makes of it, which a Chromecast plays whatever the phone recorded --
