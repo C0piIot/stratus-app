@@ -271,7 +271,12 @@ found on the wifi with SSDP and handed the same signed link, and since a
 renderer says what it plays, what it gets is the first of the HLS, the file
 or the server's JPEG that it lists -- and one that lists none of them is said
 to rather than sent something it would show as black. A track goes as it is.
-This works on a phone without Play Services too.
+This works on a phone without Play Services too. A renderer too old to open
+an `https` link -- no TLS 1.2, or no trust in Let's Encrypt, which is anything
+on Android before 7.1 -- is handed one on your wifi instead, and the phone
+fetches it from the server and passes it along while it plays, with a
+notification saying so. That address answers only the renderer it was given
+to, and only while something is playing.
 
 While something plays, the bar at the bottom of the browser pauses and resumes
 it, seeks, and turns the screen's volume up and down -- on a Chromecast and a

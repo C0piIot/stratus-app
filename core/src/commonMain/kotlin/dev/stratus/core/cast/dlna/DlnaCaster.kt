@@ -5,6 +5,8 @@ import dev.stratus.core.cast.CastItem
 import dev.stratus.core.cast.CastOutcome
 import dev.stratus.core.cast.Caster
 import dev.stratus.core.cast.Playback
+import dev.stratus.core.cast.relay.Relay
+import io.ktor.http.Url
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -29,6 +31,12 @@ class DlnaCaster(
     private val socket: SsdpSocket,
     private val control: DlnaControl,
     private val scope: CoroutineScope,
+    /**
+     * What serves an `https` link over plain http on the local network, for
+     * renderers too old to open one; null where there is none, and then every
+     * link goes to the renderer as it is.
+     */
+    private val relay: Relay? = null,
 ) : Caster {
     override val available = true
 
@@ -77,8 +85,9 @@ class DlnaCaster(
 
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
         val renderer = found.value[device.id] ?: return CastOutcome.Failed("${device.name} is no longer on the network")
-        val pick = pickFor(control.protocolInfo(renderer), item.choices)
+        val chosen = pickFor(control.protocolInfo(renderer), item.choices)
             ?: return CastOutcome.CannotPlay(item.choices.map { it.contentType })
+        val pick = throughRelay(chosen, renderer)
         return try {
             control.load(renderer, pick)
             playing = renderer
@@ -111,7 +120,22 @@ class DlnaCaster(
         return bytes.takeIf { it.isNotEmpty() }
     }
 
+    /**
+     * The link as the renderer can open it. Over the relay when it is `https`,
+     * because a renderer cannot be asked whether it speaks TLS -- the one that
+     * did not (eHomeMediaCenter on Android 4) accepted the link, said it was
+     * playing and never fetched a byte. Plain http on the local network is the
+     * one thing every renderer fetches, and an `http` link already is that.
+     */
+    private suspend fun throughRelay(pick: Pick, renderer: Renderer): Pick {
+        val relay = relay ?: return pick
+        if (!pick.item.url.startsWith("https://")) return pick
+        val local = quietly { relay.publish(pick.item.url, Url(renderer.avTransport.control).host) } ?: return pick
+        return pick.copy(item = pick.item.copy(url = local))
+    }
+
     override suspend fun stop() {
+        quietly { relay?.withdraw() }
         watching?.cancel()
         watching = null
         where.value = null
