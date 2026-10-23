@@ -42,6 +42,12 @@ sealed interface CastOutcome {
      * nothing -- which nobody can tell from the app being broken.
      */
     data class CannotPlay(val offered: List<String>) : CastOutcome
+
+    /**
+     * The screen was asked and said no, or did not answer: [reason] is what
+     * it said, in words somebody can repeat in a bug report.
+     */
+    data class Failed(val reason: String) : CastOutcome
 }
 
 /**

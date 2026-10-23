@@ -76,22 +76,24 @@ class DlnaCaster(
     }
 
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
-        // Gone from the network since it was listed: there is nobody to tell.
-        val renderer = found.value[device.id] ?: return CastOutcome.Started
+        val renderer = found.value[device.id] ?: return CastOutcome.Failed("${device.name} is no longer on the network")
         val pick = pickFor(control.protocolInfo(renderer), item.choices)
             ?: return CastOutcome.CannotPlay(item.choices.map { it.contentType })
-        try {
+        return try {
             control.load(renderer, pick)
             playing = renderer
             watch(renderer)
+            CastOutcome.Started
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: SoapFault) {
             // Refused after saying it plays the type: the profile inside, which
-            // nothing here knows, is the renderer's to object to. What it shows
-            // is its own report, the way a Chromecast's is.
+            // nothing here knows, is the renderer's to object to -- and its
+            // words, with UPnP's code, are what somebody needs to see.
+            CastOutcome.Failed(listOfNotNull(e.code?.let { "error $it" }, e.message).joinToString(": "))
+        } catch (e: Exception) {
+            CastOutcome.Failed("no answer from ${renderer.name}: ${e.message ?: e::class.simpleName}")
         }
-        return CastOutcome.Started
     }
 
     override suspend fun stop() {

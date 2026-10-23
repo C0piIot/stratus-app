@@ -9,6 +9,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 
 /**
  * Driving a renderer: its description, what it plays, and the transport.
@@ -30,14 +31,17 @@ class DlnaControl(private val http: HttpClient) {
 
     /**
      * What [renderer] says it plays. Empty when it has no connection manager
-     * or will not answer, which [pickFor] takes as not saying rather than as
-     * playing nothing.
+     * or will not answer -- a refusal, or an answer that starts and never
+     * finishes, which a real one did (STRATUS-APP-6) -- and [pickFor] takes
+     * that as not saying rather than as playing nothing.
      */
     suspend fun protocolInfo(renderer: Renderer): List<ProtocolInfo> {
         val url = renderer.connectionManager ?: return emptyList()
         return try {
             ProtocolInfo.parseList(call(url, CONNECTION_MANAGER, "GetProtocolInfo", emptyList())["Sink"].orEmpty())
-        } catch (_: SoapFault) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
             emptyList()
         }
     }

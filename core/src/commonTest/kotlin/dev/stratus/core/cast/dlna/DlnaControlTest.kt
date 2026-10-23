@@ -138,4 +138,11 @@ class DlnaControlTest {
         assertEquals(65L, seconds("0:01:05.250"))
         assertEquals(null, seconds("01:05"))
     }
+
+    @Test
+    fun anAnswerThatNeverFinishesIsARendererThatWouldNotSay() = runTest {
+        // What a real one did: started answering GetProtocolInfo and timed out.
+        val control = DlnaControl(HttpClient(MockEngine { throw RuntimeException("Socket timeout has expired") }))
+        assertEquals(emptyList(), control.protocolInfo(renderer))
+    }
 }

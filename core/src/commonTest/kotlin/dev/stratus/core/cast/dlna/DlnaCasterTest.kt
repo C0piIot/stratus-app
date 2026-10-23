@@ -130,4 +130,30 @@ class DlnaCasterTest {
         caster.stop()
         assertEquals(null, caster.playback.value)
     }
+
+    @Test
+    fun aRefusedLoadIsSaidWithWhatTheRendererSaid() = runTest {
+        val refusing = DlnaControl(
+            HttpClient(
+                MockEngine { request ->
+                    val body = if (request.url.encodedPath == "/desc.xml") {
+                        "<root xmlns=\"urn:schemas-upnp-org:device-1-0\"><device><friendlyName>Living room</friendlyName><UDN>uuid:tv</UDN><serviceList>" +
+                            "<service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType><controlURL>/av</controlURL></service>" +
+                            "</serviceList></device></root>"
+                    } else {
+                        "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><s:Fault><faultstring>UPnPError</faultstring><detail>" +
+                            "<UPnPError xmlns=\"urn:schemas-upnp-org:control-1-0\"><errorCode>714</errorCode>" +
+                            "<errorDescription>Illegal MIME-type</errorDescription></UPnPError></detail></s:Fault></s:Body></s:Envelope>"
+                    }
+                    respond(body, if (request.url.encodedPath == "/desc.xml") HttpStatusCode.OK else HttpStatusCode.InternalServerError, headersOf(HttpHeaders.ContentType, "text/xml"))
+                },
+            ),
+        )
+        val caster = DlnaCaster({ _, _, heard -> heard(answer) }, refusing, backgroundScope)
+        caster.startDiscovery()
+        val tv = caster.devices.first { it.isNotEmpty() }.single()
+        caster.stopDiscovery()
+        assertEquals(CastOutcome.Failed("error 714: Illegal MIME-type"), caster.play(tv, film))
+        assertEquals(null, caster.playback.value)
+    }
 }
