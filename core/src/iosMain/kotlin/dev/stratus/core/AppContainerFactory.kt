@@ -13,11 +13,20 @@ import dev.stratus.core.backup.BackgroundPutTransport
 import dev.stratus.core.server.ServerStore
 import dev.stratus.core.documents.rootOf
 import dev.stratus.core.documents.refreshDomains
+import dev.stratus.core.cast.Casters
+import dev.stratus.core.cast.IosSsdpSocket
 import dev.stratus.core.cast.NoCaster
+import dev.stratus.core.cast.dlna.DlnaCaster
+import dev.stratus.core.cast.dlna.DlnaControl
 import dev.stratus.core.share.IosLinkSharing
 import dev.stratus.core.store.KeychainSecureStore
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.SupervisorJob
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSBundle
 import platform.Foundation.NSFileManager
@@ -50,6 +59,9 @@ import platform.Foundation.NSUserDomainMask
  * ever reached in a given process.
  */
 private val hosting by lazy { build(registersDomains = true) }
+
+/** Casting outlives any screen, so it has the process's own scope. */
+private val castScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 private val plain by lazy { build(registersDomains = false) }
 
 /**
@@ -94,9 +106,15 @@ private fun build(registersDomains: Boolean): AppContainer {
     sharing = IosLinkSharing(),
     // No Cast sender here: Google's iOS SDK is a proprietary binary framework
     // needing a Mac to link and the local-network permission to find anything.
-    // The same answer a phone without Play Services gets, and the app is whole
-    // without it.
-    caster = NoCaster(),
+    // DLNA is ours and in common code, so it is here (stratus-app#153), and it
+    // finds nothing until Apple grants the multicast entitlement.
+    caster = Casters(
+        listOf(
+            NoCaster(),
+            DlnaCaster(IosSsdpSocket(), DlnaControl(HttpClient(Darwin)), castScope),
+        ),
+        castScope,
+    ),
     databasePath = databasePath(),
     assets = IosAssetSource(),
     network = IosNetwork(),

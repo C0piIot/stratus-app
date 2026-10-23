@@ -678,7 +678,14 @@ renderers. The conformance suite finds gmrender-resurrect on the Docker
 network by a real search and watches it reach `PLAYING` on a signed link;
 **libupnp answers only a `Host` that is an address**, so a renderer is
 reached by the `LOCATION` it announced and never by a name somebody gave it.
-iOS waits on the multicast entitlement and stratus-app#5.
+**iOS is the same `DlnaCaster` over `IosSsdpSocket`**, three POSIX calls
+rather than Network.framework, because one datagram out and a few back does
+not need a callback API bridged into a coroutine. What it cannot do is reach
+the group without `com.apple.developer.networking.multicast`, which Apple
+grants on request against an App ID: it is declared in `project.yml` and does
+nothing until signing exists (#5). The simulator test answers on the loopback,
+where nothing is asked for, so it proves the sending, the hearing and the
+giving up; the group itself is a case in stratus-app#117.
 
 **While it plays, the bar is a remote control**: pause, a position bar and the
 volume, behind `Caster.playback` and four calls. The Chromecast half is the
