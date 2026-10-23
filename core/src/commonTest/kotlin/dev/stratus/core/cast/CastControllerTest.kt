@@ -23,6 +23,11 @@ private class FakeCaster(override val available: Boolean = true) : Caster {
     var discovering = false
     var played: CastItem? = null
     var answer: CastOutcome = CastOutcome.Started
+    val controls = mutableListOf<String>()
+    override suspend fun pause() { controls += "pause" }
+    override suspend fun resume() { controls += "resume" }
+    override suspend fun seek(seconds: Long) { controls += "seek $seconds" }
+    override suspend fun volume(percent: Int) { controls += "volume $percent" }
     override fun startDiscovery() { discovering = true }
     override fun stopDiscovery() { discovering = false }
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
@@ -168,6 +173,32 @@ class CastControllerTest {
         cast.offer(file("film.mkv", "video/x-matroska"))
         val choosing = cast.state.first { it is CastState.Choosing } as CastState.Choosing
         assertEquals(listOf(HLS_TYPE, "video/x-matroska"), choosing.item.choices.map { it.contentType })
+    }
+
+    @Test
+    fun theControlsReachTheScreenOnlyWhileSomethingPlays() = runTest {
+        val cast = controller(this)
+        cast.pause()
+        cast.seekTo(30)
+        testScheduler.advanceUntilIdle()
+        assertEquals(emptyList(), caster.controls, "a stale button reached a screen")
+
+        cast.offer(file("clip.mp4", "video/mp4"))
+        cast.state.first { it is CastState.Choosing }
+        cast.playOn(CastDevice("tv-1", "The television"))
+        cast.pause()
+        cast.resume()
+        cast.seekTo(-5)
+        cast.setVolume(140)
+        testScheduler.advanceUntilIdle()
+        assertEquals(listOf("pause", "resume", "seek 0", "volume 100"), caster.controls)
+    }
+
+    @Test
+    fun aPositionReadsTheWayAPlayerShowsIt() {
+        assertEquals("0:00", clockOf(-1))
+        assertEquals("3:07", clockOf(187))
+        assertEquals("1:02:05", clockOf(3725))
     }
 
     @Test

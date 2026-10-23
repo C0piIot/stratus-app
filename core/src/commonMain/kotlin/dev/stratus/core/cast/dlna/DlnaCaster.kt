@@ -4,6 +4,7 @@ import dev.stratus.core.cast.CastDevice
 import dev.stratus.core.cast.CastItem
 import dev.stratus.core.cast.CastOutcome
 import dev.stratus.core.cast.Caster
+import dev.stratus.core.cast.Playback
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -37,6 +38,10 @@ class DlnaCaster(
 
     private var looking: Job? = null
     private var playing: Renderer? = null
+    private var watching: Job? = null
+
+    private val where = MutableStateFlow<Playback?>(null)
+    override val playback: StateFlow<Playback?> = where.asStateFlow()
 
     /**
      * Searches again every few seconds for as long as somebody is choosing:
@@ -78,6 +83,7 @@ class DlnaCaster(
         try {
             control.load(renderer, pick)
             playing = renderer
+            watch(renderer)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -89,15 +95,63 @@ class DlnaCaster(
     }
 
     override suspend fun stop() {
+        watching?.cancel()
+        watching = null
+        where.value = null
         val renderer = playing ?: return
         playing = null
-        try {
-            control.stop(renderer)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // Already stopped, switched off, or gone: stopped either way.
+        quietly { control.stop(renderer) }
+    }
+
+    override suspend fun pause() { playing?.let { quietly { control.pause(it) } } }
+    override suspend fun resume() { playing?.let { quietly { control.play(it) } } }
+
+    override suspend fun seek(seconds: Long) {
+        val renderer = playing ?: return
+        quietly { control.seek(renderer, seconds) }
+        // Said at once rather than a second later, so the bar does not jump back.
+        where.value = where.value?.copy(positionSeconds = seconds)
+    }
+
+    override suspend fun volume(percent: Int) {
+        val renderer = playing ?: return
+        if (quietly { control.volume(renderer, percent) } == true) where.value = where.value?.copy(volume = percent)
+    }
+
+    /**
+     * Asks the renderer where it is every second while it plays. UPnP has
+     * eventing for this, but it means a listening HTTP server on the phone
+     * that the renderer calls back, which is a firewall's business and a
+     * second socket to keep alive; a poll costs two small requests a second
+     * on the local network and nothing else.
+     */
+    private fun watch(renderer: Renderer) {
+        watching?.cancel()
+        watching = scope.launch {
+            val volume = quietly { control.currentVolume(renderer) }
+            while (isActive) {
+                val (position, duration) = quietly { control.position(renderer) } ?: (null to null)
+                val state = quietly { control.transportState(renderer) }
+                if (position != null) {
+                    where.value = Playback(
+                        positionSeconds = position,
+                        durationSeconds = duration,
+                        paused = state == "PAUSED_PLAYBACK",
+                        volume = where.value?.volume ?: volume,
+                    )
+                }
+                delay(POLL_MS)
+            }
         }
+    }
+
+    /** A renderer refusing or gone is a control that did nothing, not a crash. */
+    private suspend fun <T> quietly(block: suspend () -> T): T? = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 
     private suspend fun describe(sighting: Sighting) {
@@ -118,5 +172,6 @@ class DlnaCaster(
         const val DEVICE_PREFIX = "dlna:"
         const val LISTEN_MS = 3_000L
         const val AGAIN_MS = 5_000L
+        const val POLL_MS = 1_000L
     }
 }

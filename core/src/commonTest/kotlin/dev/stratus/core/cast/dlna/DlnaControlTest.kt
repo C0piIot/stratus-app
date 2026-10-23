@@ -125,4 +125,17 @@ class DlnaControlTest {
         assertEquals("0:01:05", hms(65))
         assertEquals("12:00:09", hms(43209))
     }
+
+    @Test
+    fun aPositionTheRendererDoesNotKnowIsNull() = runTest {
+        val (control, _) = control {
+            HttpStatusCode.OK to envelope(
+                "<u:GetPositionInfoResponse xmlns:u=\"urn:x\"><RelTime>NOT_IMPLEMENTED</RelTime><TrackDuration>0:00:00</TrackDuration></u:GetPositionInfoResponse>",
+            )
+        }
+        assertEquals(null to null, control.position(renderer))
+        assertEquals(null, control.currentVolume(renderer.copy(renderingControl = null)))
+        assertEquals(65L, seconds("0:01:05.250"))
+        assertEquals(null, seconds("01:05"))
+    }
 }

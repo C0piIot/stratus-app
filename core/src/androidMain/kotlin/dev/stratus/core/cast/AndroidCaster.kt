@@ -13,6 +13,7 @@ import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaError
 import com.google.android.gms.cast.MediaMetadata
+import com.google.android.gms.cast.MediaSeekOptions
 import com.google.android.gms.cast.MediaStatus
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
@@ -28,6 +29,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
+import kotlin.math.roundToInt
 
 /**
  * Finding screens and loading a URL on one. It decides nothing else.
@@ -118,6 +120,22 @@ class AndroidCaster(private val context: Context) : Caster {
 
     private var client: RemoteMediaClient? = null
 
+    private val where = MutableStateFlow<Playback?>(null)
+    override val playback = where.asStateFlow()
+
+    /** The receiver's position as the SDK reports it, every [PROGRESS_MS]. */
+    private val progress = RemoteMediaClient.ProgressListener { positionMs, durationMs ->
+        val remote = client ?: return@ProgressListener
+        where.value = Playback(
+            positionSeconds = positionMs / 1000,
+            durationSeconds = (durationMs / 1000).takeIf { it > 0 },
+            paused = remote.isPaused,
+            volume = session()?.volume?.let { (it * 100).roundToInt() },
+        )
+    }
+
+    private fun session(): CastSession? = CastContext.getSharedInstance(context).sessionManager.currentCastSession
+
     private val router by lazy { MediaRouter.getInstance(context) }
 
     private val selector by lazy {
@@ -194,7 +212,11 @@ class AndroidCaster(private val context: Context) : Caster {
             return@withContext CastOutcome.Started
         }
         client?.unregisterCallback(receiver)
-        client = remote.also { it.registerCallback(receiver) }
+        client?.removeProgressListener(progress)
+        client = remote.also {
+            it.registerCallback(receiver)
+            it.addProgressListener(progress, PROGRESS_MS)
+        }
         note("loading ${item.contentType} ${item.url}")
         val mine = synchronized(trail) { loaded = true; attempt }
         remote.load(MediaLoadRequestData.Builder().setMediaInfo(media).setAutoplay(true).build())
@@ -213,7 +235,26 @@ class AndroidCaster(private val context: Context) : Caster {
         CastOutcome.Started
     }
 
+    override suspend fun pause() = withContext(Dispatchers.Main) { client?.pause(); Unit }
+    override suspend fun resume() = withContext(Dispatchers.Main) { client?.play(); Unit }
+
+    override suspend fun seek(seconds: Long) = withContext(Dispatchers.Main) {
+        client?.seek(MediaSeekOptions.Builder().setPosition(seconds * 1000).build())
+        Unit
+    }
+
+    override suspend fun volume(percent: Int) = withContext(Dispatchers.Main) {
+        try {
+            session()?.volume = percent / 100.0
+        } catch (e: Exception) {
+            // A session that went away between the slider and here.
+            note("volume refused: ${e.message}")
+        }
+    }
+
     override suspend fun stop() = withContext(Dispatchers.Main) {
+        client?.removeProgressListener(progress)
+        where.value = null
         note("stopped")
         if (synchronized(trail) { loaded }) report("stopped before an answer")
         CastContext.getSharedInstance(context).sessionManager.endCurrentSession(true)
@@ -304,5 +345,6 @@ class AndroidCaster(private val context: Context) : Caster {
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val TAG = "StratusCast"
         const val ANSWER_WAIT_MS = 30_000L
+        const val PROGRESS_MS = 1_000L
     }
 }

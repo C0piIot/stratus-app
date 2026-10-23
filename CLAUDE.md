@@ -680,6 +680,21 @@ network by a real search and watches it reach `PLAYING` on a signed link;
 reached by the `LOCATION` it announced and never by a name somebody gave it.
 iOS waits on the multicast entitlement and stratus-app#5.
 
+**While it plays, the bar is a remote control**: pause, a position bar and the
+volume, behind `Caster.playback` and four calls. The Chromecast half is the
+SDK's progress listener and the session's volume; **the renderer half is a
+poll**, `GetPositionInfo` and `GetTransportInfo` once a second. UPnP has
+eventing for exactly this, and it was passed over on purpose: it means an
+HTTP server on the phone that the renderer calls back, which is a firewall's
+business, a second socket to keep alive and a port Android may not let a
+backgrounded app hold -- against two small requests a second on the local
+network. A renderer works out a length after it has started playing, so a
+null duration is "not yet" rather than "never", and a seek is reported at once
+rather than a second later or the bar jumps back under the finger. The
+conformance renderer plays into `fakesink sync=true`: without `sync` a sink
+that discards plays twenty seconds in a moment, and the track is over before
+anything can pause it.
+
 **Open and download are not the same button.** Open hands the file to whatever
 the system uses to view it; download keeps a copy. On Android that copy has an
 obvious home, on iOS it means the share sheet or the Files app, because there is

@@ -115,6 +115,17 @@ internal fun escape(text: String): String =
     text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         .replace("\"", "&quot;").replace("'", "&apos;")
 
+/**
+ * A position as UPnP reads one -- `H:MM:SS`, sometimes with a fraction --
+ * or null for anything else, `NOT_IMPLEMENTED` included.
+ */
+internal fun seconds(hms: String?): Long? {
+    val parts = hms?.trim()?.substringBefore('.')?.split(':') ?: return null
+    if (parts.size != 3) return null
+    val (h, m, s) = parts.map { it.toLongOrNull() ?: return null }
+    return h * 3600 + m * 60 + s
+}
+
 /** A position as UPnP writes one, `H:MM:SS`. */
 internal fun hms(seconds: Long): String {
     val s = seconds.coerceAtLeast(0)

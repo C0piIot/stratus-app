@@ -13,5 +13,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 49494
+# sync=true, or a sink that discards plays twenty seconds in a moment and the
+# track is over before anybody can pause it.
 ENTRYPOINT ["gmediarender", "--friendly-name", "Conformance", "--port", "49494", \
-    "--gstout-audiosink", "fakesink", "--gstout-videosink", "fakesink", "--logfile", "/dev/stdout"]
+    "--gstout-audiosink", "fakesink sync=true", "--gstout-videosink", "fakesink sync=true", \
+    "--logfile", "/dev/stdout"]

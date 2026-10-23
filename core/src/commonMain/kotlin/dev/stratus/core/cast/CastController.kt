@@ -72,6 +72,9 @@ class CastController(
     val available: Boolean get() = caster.available
     val devices: StateFlow<List<CastDevice>> get() = caster.devices
 
+    /** Where the screen has got to, for as long as something is playing. */
+    val playback: StateFlow<Playback?> get() = caster.playback
+
     /** Whether there is any point offering this at all for a given file. */
     fun canCast(entry: DavResource): Boolean =
         caster.available && support.offered && castItemFor(entry, links, now()) != null
@@ -121,6 +124,14 @@ class CastController(
             }
         }
     }
+
+    fun pause() { if (playing()) scope.launch { caster.pause() } }
+    fun resume() { if (playing()) scope.launch { caster.resume() } }
+    fun seekTo(seconds: Long) { if (playing()) scope.launch { caster.seek(seconds.coerceAtLeast(0)) } }
+    fun setVolume(percent: Int) { if (playing()) scope.launch { caster.volume(percent.coerceIn(0, 100)) } }
+
+    /** A control pressed while nothing plays -- a stale button -- does nothing. */
+    private fun playing() = mutable.value is CastState.Playing
 
     fun stop() {
         caster.stopDiscovery()

@@ -77,6 +77,22 @@ class DlnaControl(private val http: HttpClient) {
     suspend fun transportState(renderer: Renderer): String =
         call(renderer.avTransport, AV_TRANSPORT, "GetTransportInfo", listOf(INSTANCE))["CurrentTransportState"].orEmpty()
 
+    /**
+     * Where the track is and how long it is, in seconds, each null when the
+     * renderer says `NOT_IMPLEMENTED` or nothing -- which plenty do for a
+     * stream whose length they have not worked out yet.
+     */
+    suspend fun position(renderer: Renderer): Pair<Long?, Long?> {
+        val answer = call(renderer.avTransport, AV_TRANSPORT, "GetPositionInfo", listOf(INSTANCE))
+        return seconds(answer["RelTime"]) to seconds(answer["TrackDuration"])?.takeIf { it > 0 }
+    }
+
+    /** The volume, 0 to 100, or null for a renderer that offers no control of it. */
+    suspend fun currentVolume(renderer: Renderer): Int? {
+        val url = renderer.renderingControl ?: return null
+        return call(url, RENDERING_CONTROL, "GetVolume", listOf(INSTANCE, "Channel" to "Master"))["CurrentVolume"]?.trim()?.toIntOrNull()
+    }
+
     /** Sets the volume, 0 to 100; false for a renderer that offers no control of it. */
     suspend fun volume(renderer: Renderer, percent: Int): Boolean {
         val url = renderer.renderingControl ?: return false
