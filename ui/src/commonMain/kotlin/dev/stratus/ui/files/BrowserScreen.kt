@@ -413,7 +413,8 @@ private fun BrowserFailure.isRejectedSignIn() =
  * A screen's name, with its own picture of itself in front where it has one
  * -- which is how somebody tells two televisions apart before they have read
  * either name. Fetched once per address by the caster; until it arrives, and
- * for a screen with none, the name is there on its own.
+ * for a screen with none -- every Chromecast, whose SDK hands over no icon --
+ * a television glyph holds the same square, so the names stay in a column.
  */
 @Composable
 private fun ScreenName(cast: CastController, device: CastDevice) {
@@ -421,10 +422,15 @@ private fun ScreenName(cast: CastController, device: CastDevice) {
         value = cast.iconOf(device)?.let(::decodePicture)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        picture?.let {
-            Image(it, contentDescription = null, modifier = Modifier.size(32.dp))
-            Spacer(Modifier.width(12.dp))
+        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+            val drawn = picture
+            if (drawn != null) {
+                Image(drawn, contentDescription = null, modifier = Modifier.size(32.dp))
+            } else {
+                Text(Glyph.SCREEN, style = MaterialTheme.typography.titleLarge)
+            }
         }
+        Spacer(Modifier.width(12.dp))
         Text(device.name)
     }
 }
