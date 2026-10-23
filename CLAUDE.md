@@ -687,6 +687,28 @@ nothing until signing exists (#5). The simulator test answers on the loopback,
 where nothing is asked for, so it proves the sending, the hearing and the
 giving up; the group itself is a case in stratus-app#117.
 
+**And an `https` link reaches a renderer through the phone** -- the proxy the
+Chromecast paragraph above was glad not to need, and needed here only because
+a renderer leaves no other way. The first real one, eHomeMediaCenter on an
+Android 4 box, took the link, said it was playing and never fetched a byte:
+it has no TLS 1.2 and no root that vouches for Let's Encrypt, and a renderer
+cannot be asked whether it has either. So `DlnaCaster` hands it a `Relay` URL
+instead, plain http on the wifi, which `SocketRelay` answers by fetching the
+signed link and streaming the answer back, `Range` and all, storing nothing.
+An `http` link never goes through it.
+
+**An open port on the phone is the cost, so it is guarded twice, on the
+address before a byte is read**: the connection has to come from a local
+address, and from the renderer the link was handed to -- whose address is the
+`LOCATION` it announced. The token in the path is a third key and not the
+only one, because it travels in the clear on the wifi. It listens on the wifi
+address only, never every interface, and only while something is cast; on
+Android a `mediaPlayback` foreground service holds the process up for that
+long, since the film is coming from the phone. A playlist works through it
+because its segments are written relative to it and arrive as the same path
+with their own query. The relay's client trusts what the system trusts, so a
+server reached through a pinned certificate cannot be relayed yet.
+
 **While it plays, the bar is a remote control**: pause, a position bar and the
 volume, behind `Caster.playback` and four calls. The Chromecast half is the
 SDK's progress listener and the session's volume; **the renderer half is a

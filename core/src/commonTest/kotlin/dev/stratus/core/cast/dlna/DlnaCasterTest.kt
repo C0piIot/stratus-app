@@ -4,6 +4,7 @@ import dev.stratus.core.cast.CastItem
 import dev.stratus.core.cast.CastOutcome
 import dev.stratus.core.cast.HLS_TYPE
 import dev.stratus.core.cast.Playback
+import dev.stratus.core.cast.relay.Relay
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -196,5 +197,46 @@ class DlnaCasterTest {
         assertNull(failing.icon(broken))
         assertNull(failing.icon(broken))
         assertEquals(1, asked)
+    }
+
+    private class FakeRelay : Relay {
+        var published: Pair<String, String>? = null
+        var withdrawn = false
+        override suspend fun publish(upstream: String, renderer: String): String? {
+            published = upstream to renderer
+            return "http://192.168.1.20:4000/token"
+        }
+        override suspend fun withdraw() { withdrawn = true }
+    }
+
+    @Test
+    fun anHttpsLinkGoesThroughTheRelayToThatRendererAlone() = runTest {
+        val actions = mutableListOf<String>()
+        val relay = FakeRelay()
+        val caster = DlnaCaster({ _, _, heard -> heard(answer) }, renderer("http-get:*:video/x-matroska:*", actions), backgroundScope, relay)
+        caster.startDiscovery()
+        val tv = caster.devices.first { it.isNotEmpty() }.single()
+        caster.stopDiscovery()
+
+        caster.play(tv, film)
+        assertEquals("https://s/files/f.mkv?k=t" to "tv", relay.published, "the renderer's own address, from its description")
+        assertTrue("<CurrentURI>http://192.168.1.20:4000/token</CurrentURI>" in actions[1], actions[1])
+
+        caster.stop()
+        assertTrue(relay.withdrawn)
+    }
+
+    @Test
+    fun anHttpLinkGoesStraightToTheRenderer() = runTest {
+        val actions = mutableListOf<String>()
+        val relay = FakeRelay()
+        val caster = DlnaCaster({ _, _, heard -> heard(answer) }, renderer("http-get:*:audio/mpeg:*", actions), backgroundScope, relay)
+        caster.startDiscovery()
+        val tv = caster.devices.first { it.isNotEmpty() }.single()
+        caster.stopDiscovery()
+
+        caster.play(tv, CastItem("http://nas.lan/files/a.mp3?k=t", "audio/mpeg", "a.mp3"))
+        assertNull(relay.published, "a renderer that can fetch it itself never goes through the phone")
+        assertTrue("<CurrentURI>http://nas.lan/files/a.mp3?k=t</CurrentURI>" in actions[1])
     }
 }

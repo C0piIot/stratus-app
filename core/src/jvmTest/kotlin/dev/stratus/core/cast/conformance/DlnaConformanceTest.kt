@@ -7,6 +7,7 @@ import dev.stratus.core.cast.dlna.Renderer
 import dev.stratus.core.cast.dlna.Sighting
 import dev.stratus.core.cast.dlna.Ssdp
 import dev.stratus.core.cast.dlna.pickFor
+import dev.stratus.core.cast.relay.SocketRelay
 import dev.stratus.core.dav.DavClient
 import dev.stratus.core.dav.DavError
 import dev.stratus.core.net.Credentials
@@ -15,6 +16,7 @@ import dev.stratus.core.net.stratusHttpClient
 import dev.stratus.core.share.ShareLinks
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.http.Url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
@@ -115,6 +117,50 @@ class DlnaConformanceTest {
         assertEquals("PAUSED_PLAYBACK", paused)
         control.stop(renderer)
     }
+
+    /**
+     * The same, through the relay a phone stands up for a renderer that cannot
+     * open https: what the renderer is handed is plain http on this network,
+     * and the relay answers it -- the renderer's address and nothing else.
+     */
+    @Test
+    fun aRendererPlaysThroughTheRelay() = runTest(timeout = 2.minutes) {
+        val renderer = withContext(Dispatchers.IO) { findRenderer() }
+        try {
+            dav.makeCollection(root)
+        } catch (_: DavError.AlreadyExists) {
+            // Already there.
+        }
+        dav.put("$root/relayed.wav", silence())
+        val entry = dav.stat("$root/relayed.wav")
+        val item = requireNotNull(castItemFor(entry, links, System.currentTimeMillis() / 1000))
+        val pick = requireNotNull(pickFor(control.protocolInfo(renderer), item.choices))
+
+        val relay = SocketRelay(HttpClient(CIO), backgroundScope) { thisContainer() }
+        val local = requireNotNull(relay.publish(pick.item.url, Url(renderer.avTransport.control).host)) { "no local address to serve from" }
+        control.load(renderer, pick.copy(item = pick.item.copy(url = local)))
+
+        val state = withContext(Dispatchers.IO) {
+            withTimeout(30_000) {
+                var state = control.transportState(renderer)
+                while (state != "PLAYING" && state != "STOPPED") {
+                    delay(250)
+                    state = control.transportState(renderer)
+                }
+                state
+            }
+        }
+        control.stop(renderer)
+        relay.withdraw()
+        assertEquals("PLAYING", state, "the renderer was handed $local for ${pick.item.url}")
+    }
+
+    /** This container's address on the network the renderer is on. */
+    private fun thisContainer(): String? = java.net.NetworkInterface.getNetworkInterfaces().toList()
+        .filter { it.isUp && !it.isLoopback }
+        .flatMap { it.inetAddresses.toList() }
+        .firstOrNull { it is java.net.Inet4Address && it.isSiteLocalAddress }
+        ?.hostAddress
 
     /** Searched for more than once, because a datagram is allowed to be lost. */
     private suspend fun findRenderer(): Renderer {
