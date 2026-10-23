@@ -6,6 +6,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
@@ -28,6 +29,16 @@ class DlnaControl(private val http: HttpClient) {
         val response = http.get(location)
         if (!response.status.isSuccess()) return null
         return Description.parse(response.bodyAsText(), location)
+    }
+
+    /** The bytes at [url], a renderer's icon, or null when it would not hand them over. */
+    suspend fun bytes(url: String): ByteArray? = try {
+        val response = http.get(url) { header(HttpHeaders.Connection, "close") }
+        if (response.status.isSuccess()) response.readRawBytes() else null
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 
     /**

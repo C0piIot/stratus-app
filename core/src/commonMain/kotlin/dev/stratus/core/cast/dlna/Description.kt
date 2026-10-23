@@ -28,7 +28,25 @@ data class Renderer(
     val renderingControl: Service?,
     /** Where to ask what it plays, and null for one that does not say. */
     val connectionManager: Service?,
+    /** Its own picture of itself, and null for one that has none worth drawing. */
+    val icon: String? = null,
 )
+
+/** One entry of a description's `iconList`. */
+internal data class Icon(val type: String, val width: Int, val url: String)
+
+/**
+ * The icon to draw in a list of screens: a PNG or a JPEG -- what both
+ * platforms decode without help -- as near as there is to [WANTED] pixels,
+ * since the list draws it small on a dense screen. Larger beats smaller at
+ * the same distance, because shrinking looks better than stretching.
+ */
+internal fun bestIcon(icons: List<Icon>): Icon? =
+    icons.filter { it.type.lowercase() in DRAWABLE && it.width > 0 }
+        .minWithOrNull(compareBy<Icon> { kotlin.math.abs(it.width - WANTED) }.thenByDescending { it.width })
+
+private const val WANTED = 96
+private val DRAWABLE = setOf("image/png", "image/jpeg", "image/jpg")
 
 /**
  * Reads a device description into a [Renderer].
@@ -68,11 +86,12 @@ internal object Description {
             avTransport = device.controls.getValue(AV_TRANSPORT).resolved(base),
             renderingControl = device.controls[RENDERING_CONTROL]?.resolved(base),
             connectionManager = device.controls[CONNECTION_MANAGER]?.resolved(base),
+            icon = bestIcon(device.icons)?.let { URLBuilder(base).takeFrom(it.url).buildString() },
         )
     }
 
     /** Services by their type without the version, which is how they are looked up. */
-    private class Device(val name: String, val udn: String, val controls: Map<String, Service>)
+    private class Device(val name: String, val udn: String, val controls: Map<String, Service>, val icons: List<Icon>)
 
     /** One device, appended after the ones embedded in it so the root comes first. */
     private fun XmlReader.parseDevice(into: MutableList<Device>) {
@@ -80,19 +99,21 @@ internal object Description {
         var udn = ""
         val controls = mutableMapOf<String, Service>()
         val embedded = mutableListOf<Device>()
+        val icons = mutableListOf<Icon>()
         eachChild { ns, element ->
             when {
                 ns != DEVICE -> skipElement()
                 element == "friendlyName" -> name = textOfElement().trim()
                 element == "UDN" -> udn = textOfElement().trim()
                 element == "serviceList" -> eachChild { _, _ -> parseService()?.let { controls[it.type.substringBeforeLast(':')] = it } }
+                element == "iconList" -> eachChild { _, _ -> parseIcon()?.let(icons::add) }
                 element == "deviceList" -> eachChild { innerNs, inner ->
                     if (innerNs == DEVICE && inner == "device") parseDevice(embedded) else skipElement()
                 }
                 else -> skipElement()
             }
         }
-        into += Device(name, udn, controls)
+        into += Device(name, udn, controls, icons)
         into += embedded
     }
 
@@ -108,6 +129,21 @@ internal object Description {
             }
         }
         return Service(type ?: return null, control ?: return null)
+    }
+
+    private fun XmlReader.parseIcon(): Icon? {
+        var type = ""
+        var width = 0
+        var url: String? = null
+        eachChild { ns, element ->
+            when {
+                ns == DEVICE && element == "mimetype" -> type = textOfElement().trim()
+                ns == DEVICE && element == "width" -> width = textOfElement().trim().toIntOrNull() ?: 0
+                ns == DEVICE && element == "url" -> url = textOfElement().trim()
+                else -> skipElement()
+            }
+        }
+        return Icon(type, width, url ?: return null)
     }
 
     private fun Service.resolved(base: String) = copy(control = URLBuilder(base).takeFrom(control).buildString())

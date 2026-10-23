@@ -4,8 +4,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** A screen on the network. */
-data class CastDevice(val id: String, val name: String)
+/** A screen on the network, and where its picture of itself is when it has one. */
+data class CastDevice(val id: String, val name: String, val icon: String? = null)
 
 /**
  * Where a screen has got to with what it was given, as it last said. A null
@@ -73,6 +73,9 @@ interface Caster {
      */
     suspend fun play(device: CastDevice, item: CastItem): CastOutcome
     suspend fun stop()
+
+    /** The picture [CastDevice.icon] names, as bytes, or null when there is none to be had. */
+    suspend fun icon(device: CastDevice): ByteArray? = null
 
     /** What is playing, and null when nothing is or the screen says nothing. */
     val playback: StateFlow<Playback?> get() = NOTHING_PLAYING

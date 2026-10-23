@@ -113,4 +113,38 @@ class DescriptionTest {
         assertNull(Description.parse(xml, "http://r/"))
         assertNull(Description.parse("not xml at all <", "http://r/"))
     }
+
+    @Test
+    fun theIconIsTheDrawableOneNearestTheSizeTheListDrawsAt() {
+        val xml = """
+            <root xmlns="urn:schemas-upnp-org:device-1-0">
+              <device>
+                <friendlyName>eHomeMediaCenter</friendlyName>
+                <UDN>uuid:box</UDN>
+                <iconList>
+                  <icon><mimetype>image/png</mimetype><width>48</width><height>48</height><url>/icon/48.png</url></icon>
+                  <icon><mimetype>image/png</mimetype><width>120</width><height>120</height><url>/icon/120.png</url></icon>
+                  <icon><mimetype>image/x-icon</mimetype><width>96</width><height>96</height><url>/icon/96.ico</url></icon>
+                </iconList>
+                <serviceList>
+                  <service>
+                    <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+                    <controlURL>/av</controlURL>
+                  </service>
+                </serviceList>
+              </device>
+            </root>
+        """.trimIndent()
+        // Not the .ico, which neither platform decodes, though it is the exact size.
+        assertEquals("http://box:38388/icon/120.png", Description.parse(xml, "http://box:38388/desc.xml")?.icon)
+        assertNull(Description.parse(gmrender, "http://192.168.1.40:49152/description.xml")?.icon, "one with no iconList")
+    }
+
+    @Test
+    fun atTheSameDistanceTheLargerIconWins() {
+        val small = Icon("image/png", 72, "/72.png")
+        val large = Icon("image/jpeg", 120, "/120.jpg")
+        assertEquals(large, bestIcon(listOf(small, large)))
+        assertNull(bestIcon(listOf(Icon("image/png", 0, "/unsized.png"))))
+    }
 }

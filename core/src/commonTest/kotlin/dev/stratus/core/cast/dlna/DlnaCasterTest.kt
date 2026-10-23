@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DlnaCasterTest {
@@ -155,5 +156,45 @@ class DlnaCasterTest {
         caster.stopDiscovery()
         assertEquals(CastOutcome.Failed("error 714: SetAVTransportURI: Illegal MIME-type"), caster.play(tv, film))
         assertEquals(null, caster.playback.value)
+    }
+
+    @Test
+    fun anIconIsFetchedOnceAndAFailureIsNotAskedAgain() = runTest {
+        var asked = 0
+        val control = DlnaControl(
+            HttpClient(
+                MockEngine { request ->
+                    when (request.url.encodedPath) {
+                        "/desc.xml" -> respond(
+                            "<root xmlns=\"urn:schemas-upnp-org:device-1-0\"><device><friendlyName>Box</friendlyName><UDN>uuid:box</UDN>" +
+                                "<iconList><icon><mimetype>image/png</mimetype><width>96</width><url>/i.png</url></icon></iconList><serviceList>" +
+                                "<service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType><controlURL>/av</controlURL></service>" +
+                                "</serviceList></device></root>",
+                            HttpStatusCode.OK,
+                        )
+                        else -> {
+                            asked++
+                            respond(byteArrayOf(1, 2, 3), HttpStatusCode.OK)
+                        }
+                    }
+                },
+            ),
+        )
+        val caster = DlnaCaster({ _, _, heard -> heard(answer) }, control, backgroundScope)
+        caster.startDiscovery()
+        val box = caster.devices.first { it.isNotEmpty() }.single()
+        caster.stopDiscovery()
+        assertEquals("http://tv:1/i.png", box.icon)
+
+        assertEquals(listOf<Byte>(1, 2, 3), caster.icon(box)?.toList())
+        caster.icon(box)
+        assertEquals(1, asked, "the list is redrawn every cast, and the picture does not change in between")
+
+        val broken = box.copy(icon = "http://tv:1/gone.png")
+        val failing = DlnaCaster({ _, _, heard -> heard(answer) }, DlnaControl(HttpClient(MockEngine { asked++; respond("", HttpStatusCode.NotFound) })), backgroundScope)
+        asked = 0
+        assertNull(failing.icon(broken))
+        assertNull(failing.icon(broken))
+        assertEquals(1, asked)
     }
 }
