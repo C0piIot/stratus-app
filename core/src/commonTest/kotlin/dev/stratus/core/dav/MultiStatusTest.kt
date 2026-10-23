@@ -164,4 +164,25 @@ class MultiStatusTest {
         // And what comes back is still read the same way, whoever asked.
         assertEquals(4, MultiStatus.parse(realListing, "/files/Photos").size)
     }
+
+    /**
+     * A file in a generated collection, as stratus-backend writes one
+     * (stratus-backend#431): the property in its own namespace, the href in
+     * DAV's, escaped like any other href.
+     */
+    @Test
+    fun readsWhereAGeneratedFileReallyIs() {
+        val listing = """<?xml version="1.0" encoding="UTF-8"?>
+<D:multistatus xmlns:D="DAV:"><D:response><D:href>/photos/2024/06/a%20&amp;%20b.jpg</D:href><D:propstat><D:prop><D:getcontenttype>image/jpeg</D:getcontenttype><source xmlns="https://github.com/C0piIot/stratus"><D:href xmlns:D="DAV:">/files/Camera/a%20&amp;%20b.jpg</D:href></source></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response><D:response><D:href>/files/x.jpg</D:href><D:propstat><D:prop><D:getcontenttype>image/jpeg</D:getcontenttype></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat><D:propstat><D:prop><source xmlns="https://github.com/C0piIot/stratus"/></D:prop><D:status>HTTP/1.1 404 Not Found</D:status></D:propstat></D:response></D:multistatus>"""
+
+        val (generated, plain) = MultiStatus.parse(listing, "")
+        assertEquals("/photos/2024/06/a & b.jpg", generated.path)
+        assertEquals("/files/Camera/a & b.jpg", generated.source)
+        assertNull(plain.source)
+    }
+
+    @Test
+    fun asksForIt() {
+        assertTrue(MultiStatus.propfindBody().contains("<source xmlns=\"https://github.com/C0piIot/stratus\"/>"))
+    }
 }

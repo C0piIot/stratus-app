@@ -128,6 +128,43 @@ class CastConformanceTest {
         // MPEG-TS's sync byte, because a content type is a claim.
         assertEquals(0x47, response.readRawBytes().first().toInt() and 0xff)
     }
+
+    /**
+     * The same photograph found where a person browses photographs, by date
+     * (stratus-backend#431): listed under `/photos/`, signed and fetched at its
+     * address in the tree, which the listing has to say.
+     */
+    @Test
+    fun aPhotographIsCastFromThePhotosCollection() = runTest {
+        try {
+            dav.makeCollection(root)
+        } catch (_: DavError.AlreadyExists) {
+            // Already there.
+        }
+        dav.put("$root/IMG_2.HEIC", Base64.decode(TINY_HEIC))
+
+        // With no date of its own it is filed under the month it arrived, once
+        // the indexer has read it.
+        val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+        val month = "/photos/%04d/%02d".format(now.year, now.monthValue)
+        suspend fun listed() = runCatching { dav.list(month) }.getOrDefault(emptyList())
+            .firstOrNull { it.source == "$root/IMG_2.HEIC" }
+        val entry = withContext(Dispatchers.IO) {
+            withTimeout(60_000) {
+                var found = listed()
+                while (found == null) {
+                    delay(250)
+                    found = listed()
+                }
+                found
+            }
+        }
+        val item = requireNotNull(castItemFor(entry, links, System.currentTimeMillis() / 1000))
+
+        val response = television.get(item.url)
+        assertEquals(200, response.status.value, "the television would have been given nothing")
+        assertEquals(listOf(0xFF, 0xD8), response.readRawBytes().take(2).map { it.toInt() and 0xff })
+    }
 }
 
 /** 423 bytes, the same fixture the server's own thumbnail tests use. */

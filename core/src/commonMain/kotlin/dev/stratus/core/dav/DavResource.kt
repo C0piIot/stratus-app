@@ -16,6 +16,13 @@ data class DavResource(
     val contentType: String? = null,
     val etag: String? = null,
     val lastModifiedEpochMs: Long? = null,
+    /**
+     * Where a file in one of Stratus's generated collections -- `/photos/`,
+     * `/music/` -- really is, in the same form as [path]: the only address a
+     * link can be signed for (stratus-backend#431). Null everywhere else,
+     * including on every other server.
+     */
+    val source: String? = null,
 ) {
     val name: String get() = path.trimEnd('/').substringAfterLast('/')
 }

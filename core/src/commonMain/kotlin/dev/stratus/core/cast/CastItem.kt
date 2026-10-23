@@ -48,20 +48,23 @@ data class CastItem(
  */
 fun castItemFor(entry: DavResource, links: ShareLinks, nowEpochSeconds: Long): CastItem? {
     if (entry.isDirectory) return null
+    // A file under /photos/ or /music/ is signed and fetched at its address in
+    // the tree, which is the only one the server answers a link at.
+    val path = entry.source ?: entry.path
     val kind = entry.contentType?.substringBefore('/') ?: return null
     return when (kind) {
         "image" -> CastItem(
             // Null for a path the server cannot sign for, which is anything
             // outside the files collection: a receiver fetches by URL and the
             // only credential it can carry is the signature.
-            url = links.thumbnail(entry.path, TELEVISION_WIDTH, ShareLife.ADay, nowEpochSeconds) ?: return null,
+            url = links.thumbnail(path, TELEVISION_WIDTH, ShareLife.ADay, nowEpochSeconds) ?: return null,
             contentType = "image/jpeg",
             title = entry.name,
         )
 
         "video", "audio" -> {
             val direct = CastItem(
-                url = links.link(entry.path, isDirectory = false, life = ShareLife.ADay, nowEpochSeconds = nowEpochSeconds)
+                url = links.link(path, isDirectory = false, life = ShareLife.ADay, nowEpochSeconds = nowEpochSeconds)
                     ?: return null,
                 contentType = entry.contentType,
                 title = entry.name,
