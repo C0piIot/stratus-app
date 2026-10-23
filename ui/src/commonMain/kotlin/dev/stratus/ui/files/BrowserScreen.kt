@@ -321,11 +321,7 @@ private fun CastBar(cast: CastController) {
     when (val here = state) {
         CastState.Idle -> {}
 
-        is CastState.Playing -> ListItem(
-            headlineContent = { Text("Playing on ${here.device.name}") },
-            supportingContent = { Text(here.item.title) },
-            trailingContent = { TextButton(onClick = cast::stop) { Text("Stop") } },
-        )
+        is CastState.Playing -> CastControls(cast, here)
 
         // Told rather than refused: a pin is only consulted when the system's
         // own check fails, so a server given a real certificate since would be

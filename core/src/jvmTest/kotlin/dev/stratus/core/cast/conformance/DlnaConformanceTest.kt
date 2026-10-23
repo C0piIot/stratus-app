@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -84,8 +85,35 @@ class DlnaConformanceTest {
                 state
             }
         }
-        control.stop(renderer)
         assertEquals("PLAYING", state, "the renderer was handed ${pick.item.url}")
+
+        // The controls the app shows while it plays, against the real thing.
+        // A renderer works the length out after it has started, so it is
+        // asked for until it says, which is what the app's bar does too.
+        val length = withContext(Dispatchers.IO) {
+            withTimeoutOrNull(10_000) {
+                var (_, known) = control.position(renderer)
+                while (known == null) {
+                    delay(250)
+                    known = control.position(renderer).second
+                }
+                known
+            }
+        }
+        assertEquals(20L, length, "the renderer never said how long it is")
+        control.pause(renderer)
+        val paused = withContext(Dispatchers.IO) {
+            withTimeout(10_000) {
+                var now = control.transportState(renderer)
+                while (now != "PAUSED_PLAYBACK") {
+                    delay(250)
+                    now = control.transportState(renderer)
+                }
+                now
+            }
+        }
+        assertEquals("PAUSED_PLAYBACK", paused)
+        control.stop(renderer)
     }
 
     /** Searched for more than once, because a datagram is allowed to be lost. */
@@ -98,9 +126,9 @@ class DlnaConformanceTest {
         error("no renderer answered a search on this network")
     }
 
-    /** Two seconds of 8 kHz mono silence, which every GStreamer reads without a decoder. */
+    /** Twenty seconds of 8 kHz mono silence, which every GStreamer reads without a decoder. */
     private fun silence(): ByteArray {
-        val samples = 16_000
+        val samples = 160_000
         val data = samples * 2
         val header = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN).apply {
             put("RIFF".toByteArray()); putInt(36 + data); put("WAVE".toByteArray())

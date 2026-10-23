@@ -13,6 +13,9 @@ private class Part(override val available: Boolean, vararg screens: CastDevice) 
     override val devices = MutableStateFlow(screens.toList())
     var looking = false
     var played: CastDevice? = null
+    var paused = false
+    override val playback = MutableStateFlow<Playback?>(null)
+    override suspend fun pause() { paused = true }
     override fun startDiscovery() { looking = true }
     override fun stopDiscovery() { looking = false }
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
@@ -56,5 +59,23 @@ class CastersTest {
         assertFalse(cast.looking)
 
         assertFalse(Casters(listOf(cast), backgroundScope).available)
+    }
+
+    @Test
+    fun whereItHasGotToComesFromTheSenderThatIsPlaying() = runTest {
+        val cast = Part(true, chromecast)
+        val dlna = Part(true, renderer)
+        val both = Casters(listOf(cast, dlna), backgroundScope)
+        cast.playback.value = Playback(1, 10, false, null)
+        dlna.playback.value = Playback(42, 100, false, 20)
+
+        both.play(renderer, item)
+        assertEquals(42, both.playback.first { it != null }?.positionSeconds)
+        both.pause()
+        assertTrue(dlna.paused)
+        assertFalse(cast.paused)
+
+        both.stop()
+        assertNull(both.playback.first { it == null })
     }
 }

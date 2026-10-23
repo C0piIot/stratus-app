@@ -1,9 +1,12 @@
 package dev.stratus.core.cast
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 
@@ -15,6 +18,7 @@ import kotlinx.coroutines.flow.stateIn
  * Only the available ones take part, so a phone with no Play Services still
  * lists the renderers -- which is most of what DLNA is worth on such a phone.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class Casters(parts: List<Caster>, scope: CoroutineScope) : Caster {
     private val parts = parts.filter { it.available }
     override val available = this.parts.isNotEmpty()
@@ -23,21 +27,30 @@ class Casters(parts: List<Caster>, scope: CoroutineScope) : Caster {
         (if (this.parts.isEmpty()) flowOf(emptyList()) else combine(this.parts.map { it.devices }) { it.toList().flatten() })
             .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    private var playing: Caster? = null
+    private val playing = MutableStateFlow<Caster?>(null)
+
+    /** The sender that is playing says where it has got to, and nobody else does. */
+    override val playback: StateFlow<Playback?> =
+        playing.flatMapLatest { it?.playback ?: flowOf(null) }.stateIn(scope, SharingStarted.Eagerly, null)
 
     override fun startDiscovery() = parts.forEach { it.startDiscovery() }
     override fun stopDiscovery() = parts.forEach { it.stopDiscovery() }
 
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
         val owner = parts.firstOrNull { part -> part.devices.value.any { it.id == device.id } } ?: return CastOutcome.Started
-        playing = owner
+        playing.value = owner
         return owner.play(device, item)
     }
 
     override suspend fun stop() {
-        playing?.stop()
-        playing = null
+        playing.value?.stop()
+        playing.value = null
     }
+
+    override suspend fun pause() { playing.value?.pause() }
+    override suspend fun resume() { playing.value?.resume() }
+    override suspend fun seek(seconds: Long) { playing.value?.seek(seconds) }
+    override suspend fun volume(percent: Int) { playing.value?.volume(percent) }
 
     override fun begin() = parts.forEach { it.begin() }
     override fun note(message: String) = parts.forEach { it.note(message) }

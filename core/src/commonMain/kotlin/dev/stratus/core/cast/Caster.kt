@@ -7,6 +7,26 @@ import kotlinx.coroutines.flow.asStateFlow
 /** A screen on the network. */
 data class CastDevice(val id: String, val name: String)
 
+/**
+ * Where a screen has got to with what it was given, as it last said. A null
+ * duration is a screen that does not know or will not say, and a null volume
+ * one whose volume this app cannot set.
+ */
+data class Playback(
+    val positionSeconds: Long,
+    val durationSeconds: Long?,
+    val paused: Boolean,
+    val volume: Int?,
+)
+
+/** A position or a length as a player shows one: `3:07`, or `1:02:05` past an hour. */
+fun clockOf(seconds: Long): String {
+    val s = seconds.coerceAtLeast(0)
+    val minutes = (s / 60) % 60
+    val rest = (s % 60).toString().padStart(2, '0')
+    return if (s >= 3600) "${s / 3600}:${minutes.toString().padStart(2, '0')}:$rest" else "$minutes:$rest"
+}
+
 /** What came of handing a screen something to play. */
 sealed interface CastOutcome {
     /**
@@ -48,6 +68,16 @@ interface Caster {
     suspend fun play(device: CastDevice, item: CastItem): CastOutcome
     suspend fun stop()
 
+    /** What is playing, and null when nothing is or the screen says nothing. */
+    val playback: StateFlow<Playback?> get() = NOTHING_PLAYING
+
+    suspend fun pause() = Unit
+    suspend fun resume() = Unit
+    suspend fun seek(seconds: Long) = Unit
+
+    /** 0 to 100. */
+    suspend fun volume(percent: Int) = Unit
+
     /**
      * A trail of one attempt, sent as a single crash-reports event when it
      * ends: every step of casting fails in silence otherwise, at the far end.
@@ -56,6 +86,8 @@ interface Caster {
     fun note(message: String) = Unit
     fun report(outcome: String) = Unit
 }
+
+private val NOTHING_PLAYING = MutableStateFlow<Playback?>(null).asStateFlow()
 
 /** What a phone without Play Services gets, and iOS until it has a sender. */
 class NoCaster : Caster {

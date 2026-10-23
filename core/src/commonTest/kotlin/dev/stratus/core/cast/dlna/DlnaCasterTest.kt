@@ -3,6 +3,7 @@ package dev.stratus.core.cast.dlna
 import dev.stratus.core.cast.CastItem
 import dev.stratus.core.cast.CastOutcome
 import dev.stratus.core.cast.HLS_TYPE
+import dev.stratus.core.cast.Playback
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -35,13 +36,19 @@ class DlnaCasterTest {
                 val body = when (request.url.encodedPath) {
                     "/desc.xml" -> "<root xmlns=\"urn:schemas-upnp-org:device-1-0\"><device><friendlyName>Living room</friendlyName><UDN>uuid:tv</UDN><serviceList>" +
                         "<service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType><controlURL>/av</controlURL></service>" +
+                        "<service><serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType><controlURL>/rc</controlURL></service>" +
                         "<service><serviceType>urn:schemas-upnp-org:service:ConnectionManager:1</serviceType><controlURL>/cm</controlURL></service>" +
                         "</serviceList></device></root>"
                     else -> {
-                        actions += request.headers["SOAPACTION"].orEmpty().substringAfter('#').trimEnd('"') + " " +
-                            request.body.toByteArray().decodeToString()
+                        val action = request.headers["SOAPACTION"].orEmpty().substringAfter('#').trimEnd('"')
+                        // Asking where it is happens every second, so it is not an action worth listing.
+                        if (action !in setOf("GetPositionInfo", "GetTransportInfo", "GetVolume")) {
+                            actions += action + " " + request.body.toByteArray().decodeToString()
+                        }
                         "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:R xmlns:u=\"urn:x\">" +
-                            "<Sink>$sink</Sink></u:R></s:Body></s:Envelope>"
+                            "<Sink>$sink</Sink><RelTime>0:01:05</RelTime><TrackDuration>0:03:40.000</TrackDuration>" +
+                            "<CurrentTransportState>PAUSED_PLAYBACK</CurrentTransportState><CurrentVolume>35</CurrentVolume>" +
+                            "</u:R></s:Body></s:Envelope>"
                     }
                 }
                 respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/xml"))
@@ -98,5 +105,29 @@ class DlnaCasterTest {
         caster.startDiscovery()
         caster.devices.first { it.isNotEmpty() }
         assertEquals(2, tries)
+    }
+
+    @Test
+    fun whereItHasGotToIsAskedEverySecondAndTheControlsReachIt() = runTest {
+        val actions = mutableListOf<String>()
+        val caster = DlnaCaster({ _, _, heard -> heard(answer) }, renderer("http-get:*:*:*", actions), backgroundScope)
+        caster.startDiscovery()
+        val tv = caster.devices.first { it.isNotEmpty() }.single()
+        caster.stopDiscovery()
+        caster.play(tv, film)
+
+        assertEquals(Playback(positionSeconds = 65, durationSeconds = 220, paused = true, volume = 35), caster.playback.first { it != null })
+
+        caster.resume()
+        caster.seek(90)
+        assertEquals(90, caster.playback.value?.positionSeconds, "the bar would jump back for a second")
+        caster.volume(60)
+        assertEquals(60, caster.playback.value?.volume)
+        caster.pause()
+        assertEquals(listOf("Play", "Seek", "SetVolume", "Pause"), actions.drop(3).map { it.substringBefore(' ') })
+        assertTrue("<Target>0:01:30</Target>" in actions[4])
+
+        caster.stop()
+        assertEquals(null, caster.playback.value)
     }
 }
