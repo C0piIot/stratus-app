@@ -275,9 +275,9 @@ This works on a phone without Play Services too.
 
 While something plays, the bar at the bottom of the browser pauses and resumes
 it, seeks, and turns the screen's volume up and down -- on a Chromecast and a
-renderer alike, where the renderer offers it. iOS has no DLNA yet: finding
-renderers there is multicast, which needs an entitlement Apple grants on
-request.
+renderer alike, where the renderer offers it. On iOS it is written and finds
+nothing yet: looking for renderers is multicast, which needs an entitlement
+Apple grants on request, and it waits on that.
 
 ## Crash reports
 

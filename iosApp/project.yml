@@ -42,6 +42,17 @@ targets:
           - processing
         BGTaskSchedulerPermittedIdentifiers:
           - dev.stratus.backup
+        # Asked the first time the app looks for a television (stratus-app#153).
+        NSLocalNetworkUsageDescription: >-
+          Stratus looks for televisions and speakers on your network to play
+          your photos, films and music on them.
+    # Finding DLNA renderers is a datagram to a multicast group, which iOS
+    # refuses without this. Apple grants it on request, against an App ID, so
+    # it is declared now and does nothing until signing exists (#5).
+    entitlements:
+      path: Sources/Stratus.entitlements
+      properties:
+        com.apple.developer.networking.multicast: true
     settings:
       base:
         # One 1024px square and nothing else: Xcode has downsampled every other
