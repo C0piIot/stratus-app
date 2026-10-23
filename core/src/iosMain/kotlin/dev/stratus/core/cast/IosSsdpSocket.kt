@@ -21,7 +21,6 @@ import platform.posix.SOL_SOCKET
 import platform.posix.SO_RCVTIMEO
 import platform.posix.close
 import platform.posix.errno
-import platform.posix.inet_addr
 import platform.posix.recv
 import platform.posix.sendto
 import platform.posix.setsockopt
@@ -60,7 +59,7 @@ class IosSsdpSocket(
                 to.sin_len = sizeOf<sockaddr_in>().convert()
                 to.sin_family = AF_INET.convert()
                 to.sin_port = networkOrder(port)
-                to.sin_addr.s_addr = inet_addr(host)
+                to.sin_addr.s_addr = ipv4(host)
                 val bytes = request.encodeToByteArray()
                 val sent = bytes.usePinned {
                     sendto(fd, it.addressOf(0), bytes.size.convert(), 0, to.ptr.reinterpret(), sizeOf<sockaddr_in>().convert())
@@ -97,4 +96,15 @@ class IosSsdpSocket(
         /** `htons`, which Darwin has only as a macro. Every iOS device is little-endian. */
         fun networkOrder(port: Int): UShort = (((port and 0xff) shl 8) or ((port shr 8) and 0xff)).toUShort()
     }
+}
+
+/**
+ * A dotted IPv4 address as `s_addr` holds it, in network order -- what
+ * `inet_addr` returns, which Kotlin/Native's Darwin bindings do not carry.
+ * Only ever an address this app wrote, the SSDP group or a test's loopback.
+ */
+internal fun ipv4(dotted: String): UInt {
+    val parts = dotted.split('.').map { it.toUInt() }
+    require(parts.size == 4 && parts.all { it <= 255u }) { "not an IPv4 address: $dotted" }
+    return parts[0] or (parts[1] shl 8) or (parts[2] shl 16) or (parts[3] shl 24)
 }

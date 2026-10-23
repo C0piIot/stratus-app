@@ -23,7 +23,6 @@ import platform.posix.SO_RCVTIMEO
 import platform.posix.bind
 import platform.posix.close
 import platform.posix.getsockname
-import platform.posix.inet_addr
 import platform.posix.recvfrom
 import platform.posix.sendto
 import platform.posix.setsockopt
@@ -76,6 +75,13 @@ class IosSsdpSocketTest {
         }
     }
 
+    @Test
+    fun anAddressIsInNetworkOrder() {
+        // 239.255.255.250 laid out in memory as 239, 255, 255, 250.
+        assertEquals(0xFAFFFFEFu, ipv4("239.255.255.250"))
+        assertEquals(0x0100007Fu, ipv4("127.0.0.1"))
+    }
+
     /** A UDP socket on the loopback, and the port it was given. */
     private fun responder(): Pair<Int, Int> = memScoped {
         val fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
@@ -83,7 +89,7 @@ class IosSsdpSocketTest {
         at.sin_len = sizeOf<sockaddr_in>().convert()
         at.sin_family = AF_INET.convert()
         at.sin_port = 0u
-        at.sin_addr.s_addr = inet_addr("127.0.0.1")
+        at.sin_addr.s_addr = ipv4("127.0.0.1")
         check(bind(fd, at.ptr.reinterpret(), sizeOf<sockaddr_in>().convert()) == 0) { "bind" }
         val length = alloc<socklen_tVar>().apply { value = sizeOf<sockaddr_in>().convert() }
         check(getsockname(fd, at.ptr.reinterpret(), length.ptr) == 0) { "getsockname" }
