@@ -166,16 +166,18 @@ class CastController(
 
     /**
      * Asks the server whether the link means anything before looking for a
-     * screen, and takes the fallback where the first choice is not served.
+     * screen, and drops every choice it makes of the file that it does not
+     * serve: a server that ignores the query answers the file itself, which
+     * a screen told it is something else would fail on.
      */
     private suspend fun choose(offered: CastItem) {
-        val fallback = offered.fallback
-        val item = if (fallback != null && !support.serves(offered.url, offered.contentType)) {
-            caster.note("not served as ${offered.contentType} (${support.lastAnswer}), falling back to ${fallback.contentType}")
-            fallback
-        } else {
-            offered
+        val served = offered.choices.filter { choice ->
+            !choice.derived || support.serves(choice.url, choice.contentType).also { yes ->
+                if (!yes) caster.note("not served as ${choice.contentType} (${support.lastAnswer}), dropped")
+            }
         }
+        // The file itself is never derived, so there is always one left.
+        val item = served.foldRight(null as CastItem?) { choice, next -> choice.copy(fallback = next) } ?: return
         when (support.honours(item.url)) {
             LinkAnswer.Honoured -> Unit
             LinkAnswer.Refused -> {

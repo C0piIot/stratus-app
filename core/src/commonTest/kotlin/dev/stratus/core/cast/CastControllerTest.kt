@@ -53,11 +53,17 @@ class CastControllerTest {
      * answers it as [hlsType] when HLS is asked for -- Stratus's playlist, or
      * the file itself from a server that ignores the query.
      */
-    private fun support(status: HttpStatusCode = HttpStatusCode.OK, hlsType: String = HLS_TYPE) =
+    private fun support(status: HttpStatusCode = HttpStatusCode.OK, hlsType: String = HLS_TYPE, transcodes: Boolean = true) =
         LinkSupport(
             HttpClient(
                 MockEngine { request ->
-                    val type = if (request.url.parameters.contains("hls")) hlsType else "video/mp4"
+                    val format = request.url.parameters["format"]
+                    val type = when {
+                        request.url.parameters.contains("hls") -> hlsType
+                        format != null && transcodes -> mapOf("mp3" to "audio/mpeg", "aac" to "audio/aac").getValue(format)
+                        format != null -> "audio/opus"
+                        else -> "video/mp4"
+                    }
                     respond("", status, headersOf(HttpHeaders.ContentType, type))
                 },
             ),
@@ -202,6 +208,26 @@ class CastControllerTest {
         cast.offer(file("film.mkv", "video/x-matroska"))
         val choosing = cast.state.first { it is CastState.Choosing } as CastState.Choosing
         assertEquals(listOf(HLS_TYPE, "video/x-matroska"), choosing.item.choices.map { it.contentType })
+    }
+
+    @Test
+    fun aTrackIsItselfThenItsTranscodes() = runTest {
+        // stratus-app#166: a renderer that lists no Opus is sent the MP3.
+        val cast = controller(this)
+        cast.offer(file("song.opus", "audio/opus"))
+        val choosing = cast.state.first { it is CastState.Choosing } as CastState.Choosing
+        assertEquals(listOf("audio/opus", "audio/mpeg", "audio/aac"), choosing.item.choices.map { it.contentType })
+        assertTrue(choosing.item.choices[1].url.endsWith("&format=mp3&estimateContentLength=true"))
+    }
+
+    @Test
+    fun aTranscodeTheServerDoesNotMakeIsNotOffered() = runTest {
+        // A server that ignores ?format= answers the Opus itself, which a
+        // renderer told it is an MP3 would fail on.
+        val cast = controller(this, support = support(transcodes = false))
+        cast.offer(file("song.opus", "audio/opus"))
+        val choosing = cast.state.first { it is CastState.Choosing } as CastState.Choosing
+        assertEquals(listOf("audio/opus"), choosing.item.choices.map { it.contentType })
     }
 
     @Test

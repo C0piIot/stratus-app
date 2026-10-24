@@ -675,7 +675,13 @@ fetches the media itself like a Chromecast, so it is handed the same signed
 URL; what is different is that it says what it plays, so **the choice is made
 after the screen is picked rather than before** -- `Caster.play` answers a
 `CastOutcome`, and a renderer that lists none of `CastItem.choices` is
-`ScreenCannotPlay` rather than a black screen. All of it is common code --
+`ScreenCannotPlay` rather than a black screen. **What the server makes of a
+file is a choice like any other, and is checked before it is offered**
+(#166): a `derived` choice -- the HLS playlist, and a track's MP3 and AAC
+from `?format=` (stratus-backend#433) -- is a query a server that does not
+make it ignores, answering the file itself. So every derived choice gets a
+`HEAD` and stays only if the type comes back as promised, which costs a
+track two requests and a film the one it already paid. All of it is common code --
 SSDP, the device description, the SOAP and `pickFor` -- over an `SsdpSocket`
 the platform supplies: plain `java.net` in `jvmCommon`, which is what lets the
 conformance suite run a phone's own discovery, and a `MulticastLock` around it
