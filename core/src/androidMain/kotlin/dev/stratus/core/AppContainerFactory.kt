@@ -5,7 +5,6 @@ import android.provider.DocumentsContract
 import dev.stratus.core.backup.AndroidAssetSource
 import dev.stratus.core.backup.AndroidNetwork
 import dev.stratus.core.cast.AndroidCaster
-import dev.stratus.core.cast.AndroidRelay
 import dev.stratus.core.cast.AndroidSsdpSocket
 import dev.stratus.core.cast.Caster
 import dev.stratus.core.cast.Casters
@@ -86,10 +85,6 @@ private fun build(application: Context): AppContainer {
                     AndroidSsdpSocket(application),
                     DlnaControl(HttpClient(OkHttp)),
                     castScope,
-                    // The server reached the way the system trusts it, as a
-                    // renderer would: a pinned certificate is one the phone
-                    // can check and the relay's own client cannot yet.
-                    AndroidRelay(application, HttpClient(OkHttp), castScope),
                 ),
             ),
             castScope,
