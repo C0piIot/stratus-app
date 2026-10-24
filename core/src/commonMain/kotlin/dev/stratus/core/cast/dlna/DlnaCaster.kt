@@ -85,8 +85,12 @@ class DlnaCaster(
 
     override suspend fun play(device: CastDevice, item: CastItem): CastOutcome {
         val renderer = found.value[device.id] ?: return CastOutcome.Failed("${device.name} is no longer on the network")
-        val chosen = pickFor(control.protocolInfo(renderer), item.choices)
-            ?: return CastOutcome.CannotPlay(item.choices.map { it.contentType })
+        val sink = control.protocolInfo(renderer)
+        val chosen = pickFor(sink, item.choices)
+            ?: return CastOutcome.CannotPlay(
+                item.choices.map { it.contentType },
+                sink.map { "${it.protocol} ${it.contentType}" }.distinct(),
+            )
         val pick = throughRelay(chosen, renderer)
         return try {
             control.load(renderer, pick)

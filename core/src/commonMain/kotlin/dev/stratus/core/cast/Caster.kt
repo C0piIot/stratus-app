@@ -40,8 +40,12 @@ sealed interface CastOutcome {
      * was sent. A DLNA renderer can say so and a Chromecast cannot, and a
      * renderer handed what it cannot play shows a black screen and reports
      * nothing -- which nobody can tell from the app being broken.
+     *
+     * [listed] is what it said it plays instead, the types alone, so a trail
+     * shows whether it named one of [offered] in a way the match missed
+     * (stratus-app#167).
      */
-    data class CannotPlay(val offered: List<String>) : CastOutcome
+    data class CannotPlay(val offered: List<String>, val listed: List<String> = emptyList()) : CastOutcome
 
     /**
      * The screen was asked and said no, or did not answer: [reason] is what
