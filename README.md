@@ -263,7 +263,9 @@ an iPhone appears on a screen that cannot read one. A video is sent as the HLS
 Stratus makes of it, which a Chromecast plays whatever the phone recorded --
 an iPhone's HEVC included, where the server re-encodes. Against a server that
 does not do HLS the file goes as it is, so H.264 plays and HEVC needs a 4K
-Chromecast. And a server whose certificate you
+Chromecast. Music goes as it is, and to a television that does not list its
+format — Opus and FLAC, usually — as the MP3 or AAC Stratus transcodes it
+into. And a server whose certificate you
 accepted on the phone is one the television cannot check, so the app says so
 before trying.
 

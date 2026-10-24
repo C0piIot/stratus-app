@@ -13,6 +13,12 @@ data class CastItem(
     val contentType: String,
     val title: String,
     val fallback: CastItem? = null,
+    /**
+     * Something the server makes of the file rather than the file -- a
+     * playlist, a transcode -- asked for with a query a server that does not
+     * make it ignores. It is checked before it is offered (stratus-app#166).
+     */
+    val derived: Boolean = false,
 ) {
     /**
      * This and what it falls back on, in order of preference: what a screen
@@ -44,7 +50,11 @@ data class CastItem(
  * the fallback, for a server that does not do HLS, and there a film the
  * television cannot decode is the television's to report.
  *
- * Audio goes as it is: every receiver decodes what a phone records.
+ * Audio goes as it is first, since a Chromecast decodes all of it, and then as
+ * the MP3 and the AAC the server transcodes it into (stratus-backend#433),
+ * for a DLNA renderer that lists neither Opus nor FLAC (stratus-app#166).
+ * Each asks for an estimated length, because a transcode has none and a
+ * renderer is likelier to want one than a Chromecast is.
  */
 fun castItemFor(entry: DavResource, links: ShareLinks, nowEpochSeconds: Long): CastItem? {
     if (entry.isDirectory) return null
@@ -70,15 +80,29 @@ fun castItemFor(entry: DavResource, links: ShareLinks, nowEpochSeconds: Long): C
                 title = entry.name,
             )
             if (kind == "audio") {
-                direct
+                direct.copy(fallback = transcoded(direct, "mp3", "audio/mpeg", transcoded(direct, "aac", "audio/aac", null)))
             } else {
-                CastItem(url = "${direct.url}&$HLS_PLAYLIST", contentType = HLS_TYPE, title = entry.name, fallback = direct)
+                CastItem(
+                    url = "${direct.url}&$HLS_PLAYLIST",
+                    contentType = HLS_TYPE,
+                    title = entry.name,
+                    fallback = direct,
+                    derived = true,
+                )
             }
         }
 
         else -> null
     }
 }
+
+private fun transcoded(original: CastItem, format: String, type: String, next: CastItem?) = CastItem(
+    url = "${original.url}&format=$format&estimateContentLength=true",
+    contentType = type,
+    title = original.title,
+    fallback = next,
+    derived = true,
+)
 
 /** The larger of the two sizes the server makes, and the only one worth a screen. */
 private const val TELEVISION_WIDTH = 1200

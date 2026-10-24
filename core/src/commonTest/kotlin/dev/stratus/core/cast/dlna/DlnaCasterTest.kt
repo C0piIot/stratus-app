@@ -71,6 +71,25 @@ class DlnaCasterTest {
     }
 
     @Test
+    fun aRendererThatListsNoOpusIsSentTheMp3() = runTest {
+        // stratus-app#166, and the television in STRATUS-APP-8.
+        val track = CastItem(
+            url = "https://s/files/a.opus?k=t",
+            contentType = "audio/opus",
+            title = "a.opus",
+            fallback = CastItem("https://s/files/a.opus?k=t&format=mp3", "audio/mpeg", "a.opus", derived = true),
+        )
+        val actions = mutableListOf<String>()
+        val caster = DlnaCaster({ _, _, heard -> heard(answer) }, renderer("http-get:*:audio/mpeg:*", actions), backgroundScope)
+        caster.startDiscovery()
+        val tv = caster.devices.first { it.isNotEmpty() }.single()
+
+        assertEquals(CastOutcome.Started, caster.play(tv, track))
+        assertTrue("format=mp3</CurrentURI>" in actions[1], actions[1])
+        caster.stop()
+    }
+
+    @Test
     fun theRendererIsGivenTheFirstChoiceItPlays() = runTest {
         val actions = mutableListOf<String>()
         val caster = DlnaCaster({ _, _, heard -> heard(answer) }, renderer("http-get:*:video/x-matroska:*", actions), backgroundScope)

@@ -165,6 +165,41 @@ class CastConformanceTest {
         assertEquals(200, response.status.value, "the television would have been given nothing")
         assertEquals(listOf(0xFF, 0xD8), response.readRawBytes().take(2).map { it.toInt() and 0xff })
     }
+
+    /**
+     * A track as the MP3 a renderer that lists no Opus is sent
+     * (stratus-app#166): the choice is offered, and it is fetched as MP3 by
+     * something with no account. The track is the server's own tagged Opus
+     * fixture, and has to be read before it can be transcoded.
+     */
+    @Test
+    fun anOpusIsFetchedAsMp3BySomethingWithNoAccount() = runTest {
+        try {
+            dav.makeCollection(root)
+        } catch (_: DavError.AlreadyExists) {
+            // Already there.
+        }
+        dav.put("$root/tagged.opus", requireNotNull(javaClass.getResourceAsStream("/tagged.opus")).readBytes())
+
+        val entry = dav.stat("$root/tagged.opus")
+        val item = requireNotNull(castItemFor(entry, links, System.currentTimeMillis() / 1000))
+        val mp3 = item.choices.single { it.contentType == "audio/mpeg" }
+
+        val response = withContext(Dispatchers.IO) {
+            withTimeout(60_000) {
+                var answer = television.get(mp3.url)
+                while (answer.headers[HttpHeaders.ContentType] != "audio/mpeg") {
+                    delay(250)
+                    answer = television.get(mp3.url)
+                }
+                answer
+            }
+        }
+        assertEquals(200, response.status.value)
+        // An ID3 tag or an MPEG frame's sync, because a content type is a claim.
+        val head = response.readRawBytes().take(3).map { it.toInt() and 0xff }
+        assertTrue(head == listOf(0x49, 0x44, 0x33) || head[0] == 0xff, "starts $head")
+    }
 }
 
 /** 423 bytes, the same fixture the server's own thumbnail tests use. */
