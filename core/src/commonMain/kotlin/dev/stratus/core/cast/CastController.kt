@@ -136,7 +136,7 @@ class CastController(
             if (mutable.value != CastState.Playing(device, item)) return@launch
             when (outcome) {
                 is CastOutcome.CannotPlay -> {
-                    caster.note("${device.name} plays none of ${outcome.offered}")
+                    caster.note("${device.name} plays none of ${outcome.offered}; it lists ${outcome.listed}")
                     caster.report("screen cannot play it")
                     mutable.value = CastState.ScreenCannotPlay(device, item, outcome.offered)
                 }

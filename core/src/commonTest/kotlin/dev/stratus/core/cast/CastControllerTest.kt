@@ -25,6 +25,8 @@ private class FakeCaster(override val available: Boolean = true) : Caster {
     var answer: CastOutcome = CastOutcome.Started
     var throws: Exception? = null
     val controls = mutableListOf<String>()
+    val notes = mutableListOf<String>()
+    override fun note(message: String) { notes += message }
     override suspend fun pause() { controls += "pause" }
     override suspend fun resume() { controls += "resume" }
     override suspend fun seek(seconds: Long) { controls += "seek $seconds" }
@@ -156,7 +158,7 @@ class CastControllerTest {
 
     @Test
     fun aScreenThatPlaysNoneOfItIsSaidSo() = runTest {
-        caster.answer = CastOutcome.CannotPlay(listOf(HLS_TYPE, "video/x-matroska"))
+        caster.answer = CastOutcome.CannotPlay(listOf(HLS_TYPE, "video/x-matroska"), listOf("http-get video/mp4"))
         val cast = controller(this)
         cast.offer(file("film.mkv", "video/x-matroska"))
         cast.state.first { it is CastState.Choosing }
@@ -167,6 +169,8 @@ class CastControllerTest {
         assertTrue(said is CastState.ScreenCannotPlay, "was $said")
         assertEquals(listOf(HLS_TYPE, "video/x-matroska"), said.offered)
         assertEquals("The television", said.device.name)
+        // What it listed instead goes in the trail (#167).
+        assertTrue(caster.notes.any { "it lists [http-get video/mp4]" in it }, "notes: ${caster.notes}")
     }
 
     @Test

@@ -92,7 +92,10 @@ class DlnaCasterTest {
         caster.startDiscovery()
         val tv = caster.devices.first { it.isNotEmpty() }.single()
 
-        assertEquals(CastOutcome.CannotPlay(listOf(HLS_TYPE, "video/x-matroska")), caster.play(tv, film))
+        assertEquals(
+            CastOutcome.CannotPlay(listOf(HLS_TYPE, "video/x-matroska"), listOf("http-get audio/mpeg")),
+            caster.play(tv, film),
+        )
         assertEquals(listOf("GetProtocolInfo"), actions.map { it.substringBefore(' ') })
     }
 
